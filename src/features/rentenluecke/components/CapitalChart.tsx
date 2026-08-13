@@ -13,7 +13,7 @@ import {
 import { formatCurrency, formatWholeNumber } from '../model/format'
 import type { SimulationResult } from '../model/types'
 import {
-  EUROSTAT_GERMANY_LIFE_TABLE_MAX_EXACT_AGE,
+  DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE,
   getSurvivalProbabilityForAgeEnd,
   type LifeTableSex,
 } from '../mortality/mortality'
@@ -43,7 +43,7 @@ type ChartTooltipProps = {
 }
 
 const sexOptions: { value: LifeTableSex; label: string }[] = [
-  { value: 'total', label: 'Gesamt' },
+  { value: 'conservative', label: 'Keine Angabe / konservativ' },
   { value: 'female', label: 'Weiblich' },
   { value: 'male', label: 'Männlich' },
 ]
@@ -72,7 +72,7 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
       </span>
       {typeof survivalProbability === 'number' && !Number.isNaN(survivalProbability) ? (
         <span>
-          Überlebenswahrscheinlichkeit bis Alter {Math.min(ageEnd, EUROSTAT_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)}:{' '}
+          Überlebenswahrscheinlichkeit bis Alter {Math.min(ageEnd, DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)}:{' '}
           {formatSurvivalPercent(survivalProbability)}
         </span>
       ) : null}
@@ -82,7 +82,7 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
 
 export function CapitalChart({ result }: CapitalChartProps) {
   const [showSurvivalProbability, setShowSurvivalProbability] = useState(true)
-  const [lifeTableSex, setLifeTableSex] = useState<LifeTableSex>('total')
+  const [lifeTableSex, setLifeTableSex] = useState<LifeTableSex>('conservative')
   const depletionAgeEnd = result.summary.depletionAgeEnd
   const currentAge = result.rows[0]?.ageStart ?? 0
   const chartData = result.rows.map((row) => ({
@@ -92,7 +92,7 @@ export function CapitalChart({ result }: CapitalChartProps) {
     closingCapitalToday: Math.round(row.closingCapitalToday),
     survivalProbabilityEnd: getSurvivalProbabilityForAgeEnd(currentAge, row.ageEnd, lifeTableSex),
   }))
-  const reachesEurostatAgeCap = chartData.some((row) => row.ageEnd >= EUROSTAT_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)
+  const reachesDestatisAgeLimit = chartData.some((row) => row.ageEnd >= DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)
 
   return (
     <section className="panel" aria-labelledby="chart-title">
@@ -100,8 +100,9 @@ export function CapitalChart({ result }: CapitalChartProps) {
         <div>
           <h2 id="chart-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
-            Die Überlebenswahrscheinlichkeit basiert auf Eurostat-Sterbetafeln für Deutschland 2024 und ist
-            bedingt auf das aktuelle Alter. Sie ist keine individuelle Prognose.
+            Die Überlebenswahrscheinlichkeit basiert auf der Periodensterbetafel 2023/2025 des Statistischen
+            Bundesamts (Destatis) für Deutschland und ist bedingt auf das aktuelle Alter. Sie ist keine
+            individuelle Prognose.
           </p>
         </div>
         <div className="chart-controls" aria-label="Einstellungen zur Überlebenswahrscheinlichkeit">
@@ -188,10 +189,10 @@ export function CapitalChart({ result }: CapitalChartProps) {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      {reachesEurostatAgeCap ? (
+      {reachesDestatisAgeLimit ? (
         <p className="chart-note">
-          Hinweis: Eurostat fasst Alter ab 95 als offene Altersgruppe zusammen; Werte darüber werden nicht weiter
-          aufgeschlüsselt.
+          Hinweis: Die Destatis-Sterbetafel enthält Einzelalter bis 100. Höhere Alter werden im Diagramm nicht
+          weiter aufgeschlüsselt.
         </p>
       ) : null}
     </section>

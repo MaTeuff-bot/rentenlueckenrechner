@@ -17,8 +17,9 @@ export function AssumptionsPanel() {
         Partner-/Haushaltssituation und individuelle Produktausgestaltung.
       </p>
       <p>
-        Die optionale Überlebenswahrscheinlichkeit im Diagramm nutzt eine gebündelte Eurostat-Sterbetafel für
-        Deutschland 2024. Sie dient nur als statistische Orientierung und ändert die Finanzsimulation nicht.
+        Die optionale Überlebenswahrscheinlichkeit im Diagramm nutzt die Periodensterbetafel 2023/2025 des
+        Statistischen Bundesamts (Destatis) für Deutschland. Sie dient nur als statistische Orientierung, ist keine
+        individuelle Prognose und ändert die Finanzsimulation nicht.
       </p>
     </section>
   )
