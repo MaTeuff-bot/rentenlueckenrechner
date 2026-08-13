@@ -261,6 +261,52 @@ legend {
   min-height: 300px;
 }
 
+.chart-heading {
+  align-items: center;
+}
+
+.chart-controls {
+  display: grid;
+  gap: 10px;
+  min-width: min(100%, 280px);
+}
+
+.chart-sex-field {
+  gap: 6px;
+}
+
+.chart-sex-field select {
+  min-height: 40px;
+  border: 1px solid #b9c4cf;
+  border-radius: 6px;
+  background: #fff;
+  color: #16202a;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.chart-tooltip {
+  display: grid;
+  gap: 6px;
+  max-width: 320px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(27 47 66 / 12%);
+  color: #23313f;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+}
+
+.chart-tooltip strong {
+  color: #16202a;
+}
+
+.chart-note {
+  margin-top: 12px;
+  font-size: 0.92rem;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid #dce3ea;

@@ -16,6 +16,10 @@ export function AssumptionsPanel() {
         Rentenformel, Rentenanpassungen, Renditeschwankungen, einmalige Ausgaben, Immobilien,
         Partner-/Haushaltssituation und individuelle Produktausgestaltung.
       </p>
+      <p>
+        Die optionale Überlebenswahrscheinlichkeit im Diagramm nutzt eine gebündelte Eurostat-Sterbetafel für
+        Deutschland 2024. Sie dient nur als statistische Orientierung und ändert die Finanzsimulation nicht.
+      </p>
     </section>
   )
 }
