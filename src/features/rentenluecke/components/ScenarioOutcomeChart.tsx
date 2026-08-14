@@ -30,6 +30,7 @@ type ScenarioOutcomeChartProps = {
   depletionAgeEnd: number | null
   showSurvivalProbability: boolean
   useLogCapitalScale: boolean
+  capitalDisplayCap: number
 }
 
 type ChartDisplayRow = ScenarioOutcomeChartRow & {
@@ -60,14 +61,29 @@ function toLogScaleCapital(value: number): number {
   return Math.max(1, value)
 }
 
-function buildDisplayRows(rows: ScenarioOutcomeChartRow[], useLogCapitalScale: boolean): ChartDisplayRow[] {
+function capCapital(value: number, capitalDisplayCap: number): number {
+  return Math.min(value, capitalDisplayCap)
+}
+
+function toChartCapital(value: number, useLogCapitalScale: boolean, capitalDisplayCap: number): number {
+  const cappedValue = capCapital(value, capitalDisplayCap)
+  return useLogCapitalScale ? toLogScaleCapital(cappedValue) : cappedValue
+}
+
+function buildDisplayRows(
+  rows: ScenarioOutcomeChartRow[],
+  useLogCapitalScale: boolean,
+  capitalDisplayCap: number,
+): ChartDisplayRow[] {
   return rows.map((row) => {
-    const chartP10CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p10CapitalToday) : row.p10CapitalToday
-    const chartP50CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p50CapitalToday) : row.p50CapitalToday
-    const chartP90CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p90CapitalToday) : row.p90CapitalToday
-    const chartDeterministicCapitalToday = useLogCapitalScale
-      ? toLogScaleCapital(row.deterministicCapitalToday)
-      : row.deterministicCapitalToday
+    const chartP10CapitalToday = toChartCapital(row.p10CapitalToday, useLogCapitalScale, capitalDisplayCap)
+    const chartP50CapitalToday = toChartCapital(row.p50CapitalToday, useLogCapitalScale, capitalDisplayCap)
+    const chartP90CapitalToday = toChartCapital(row.p90CapitalToday, useLogCapitalScale, capitalDisplayCap)
+    const chartDeterministicCapitalToday = toChartCapital(
+      row.deterministicCapitalToday,
+      useLogCapitalScale,
+      capitalDisplayCap,
+    )
 
     return {
       ...row,
@@ -101,7 +117,7 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
       <span>
         Deterministisch: {formatTooltipCurrency(row?.deterministicCapitalToday ?? values.get('deterministicCapitalToday'))}
       </span>
-      <span>Kapital aufgebraucht: {formatPercent(depletionProbability)}</span>
+      <span>Aufbrauchwahrscheinlichkeit: {formatPercent(depletionProbability)}</span>
       {Number.isFinite(survivalProbability) ? (
         <span>
           Überleben bis Alter {ageEnd}: {formatPercent(survivalProbability)}
@@ -117,8 +133,10 @@ export function ScenarioOutcomeChart({
   depletionAgeEnd,
   showSurvivalProbability,
   useLogCapitalScale,
+  capitalDisplayCap,
 }: ScenarioOutcomeChartProps) {
-  const displayRows = buildDisplayRows(rows, useLogCapitalScale)
+  const displayRows = buildDisplayRows(rows, useLogCapitalScale, capitalDisplayCap)
+  const showProbabilityAxis = showSurvivalProbability || rows.length > 0
 
   return (
     <div className="chart-shell outcome-chart-shell">
@@ -142,7 +160,7 @@ export function ScenarioOutcomeChart({
               position: 'insideLeft',
             }}
           />
-          {showSurvivalProbability ? (
+          {showProbabilityAxis ? (
             <YAxis
               yAxisId="survival"
               orientation="right"
@@ -200,6 +218,15 @@ export function ScenarioOutcomeChart({
               dot={false}
             />
           ) : null}
+          <Line
+            yAxisId="survival"
+            type="monotone"
+            dataKey="depletionProbability"
+            name="Aufbrauchwahrscheinlichkeit"
+            stroke="#b91c1c"
+            strokeWidth={2}
+            dot={false}
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </div>

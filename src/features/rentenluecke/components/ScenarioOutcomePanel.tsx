@@ -122,6 +122,14 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
     [lifeTableSex, result, stochasticSummary.rows],
   )
   const riskChips = useMemo(() => buildRiskChips(chartRows), [chartRows])
+  const capitalDisplayCap = Math.max(1, Math.max(...chartRows.map((row) => row.deterministicCapitalToday), 0) * 4)
+  const isCapitalDisplayCapped = chartRows.some(
+    (row) =>
+      row.p10CapitalToday > capitalDisplayCap ||
+      row.p50CapitalToday > capitalDisplayCap ||
+      row.p90CapitalToday > capitalDisplayCap ||
+      row.deterministicCapitalToday > capitalDisplayCap,
+  )
   const reachesDestatisAgeLimit = chartRows.some((row) => row.ageEnd >= DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)
 
   return (
@@ -183,6 +191,7 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         depletionAgeEnd={result.summary.depletionAgeEnd}
         showSurvivalProbability={showSurvivalProbability}
         useLogCapitalScale={useLogCapitalScale}
+        capitalDisplayCap={capitalDisplayCap}
       />
 
       <p className="chart-note">
@@ -191,6 +200,13 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         Periodensterbetafel 2023/2025 des Statistischen Bundesamts (Destatis) für Deutschland und ist bedingt auf das
         aktuelle Alter. Sie ist keine individuelle Prognose und keine Anlageberatung.
       </p>
+      {isCapitalDisplayCapped ? (
+        <p className="chart-note">
+          Hinweis: Sehr hohe Kapitalwerte werden im Diagramm bei {formatCurrency(capitalDisplayCap, 100)} gedeckelt,
+          damit die übrigen Verläufe lesbar bleiben. Tooltip und Risiko-Karten zeigen weiterhin die echten
+          Simulationswerte.
+        </p>
+      ) : null}
       {useLogCapitalScale ? (
         <p className="chart-note">
           Hinweis: Bei logarithmischer Skalierung werden Kapitalwerte von 0 € oder weniger am unteren Rand der

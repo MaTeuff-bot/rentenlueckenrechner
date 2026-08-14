@@ -11,13 +11,14 @@ import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
 vi.mock('recharts', () => {
   const Container = ({ children }: PropsWithChildren) => <div>{children}</div>
   const Empty = () => null
+  const Named = ({ name }: { name?: string }) => (name ? <span>{name}</span> : null)
 
   return {
-    Area: Empty,
+    Area: Named,
     CartesianGrid: Empty,
     ComposedChart: Container,
     Legend: Empty,
-    Line: Empty,
+    Line: Named,
     LineChart: Container,
     ReferenceLine: Empty,
     ResponsiveContainer: Container,
@@ -81,6 +82,8 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByLabelText('Kapital logarithmisch skalieren')).toBeInTheDocument()
     expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
     expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
+    expect(screen.getByText('Aufbrauchwahrscheinlichkeit')).toBeInTheDocument()
+    expect(inputById('annualReturnBeforeRetirement').value).not.toMatch(/\.\d{2,}/)
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
   })

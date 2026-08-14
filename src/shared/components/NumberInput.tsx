@@ -13,6 +13,22 @@ type NumberInputProps = {
   onChange: (value: number) => void
 }
 
+function decimalPlaces(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  const [, decimals = ''] = value.toString().split('.')
+  return decimals.length
+}
+
+function formatInputValue(value: number, step: number): string {
+  if (Number.isNaN(value)) return ''
+  if (!Number.isFinite(value)) return String(value)
+
+  const precision = decimalPlaces(step)
+  if (precision === 0) return String(Math.round(value))
+
+  return value.toFixed(precision).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
 export function NumberInput({
   id,
   label,
@@ -44,7 +60,7 @@ export function NumberInput({
           min={min}
           max={max}
           step={step}
-          value={Number.isNaN(value) ? '' : value}
+          value={formatInputValue(value, step)}
           readOnly={readOnly}
           onChange={handleChange}
           aria-invalid={error ? 'true' : 'false'}
