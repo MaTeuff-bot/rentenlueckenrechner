@@ -2,16 +2,28 @@ import { CurrencyInput } from '../../../shared/components/CurrencyInput'
 import { NumberInput } from '../../../shared/components/NumberInput'
 import { PercentInput } from '../../../shared/components/PercentInput'
 import { inputLabels, type InputFieldName } from '../model/inputSchema'
+import { ASSET_CLASS_ASSUMPTIONS, type AssetAllocation, type AssetClassKey } from '../model/stochasticReturns'
 import type { RentenlueckeInput } from '../model/types'
 
 type InputPanelProps = {
   input: RentenlueckeInput
+  allocation: AssetAllocation
   errors: Partial<Record<InputFieldName, string>>
+  allocationError: string | null
   onChange: (field: InputFieldName, value: number) => void
+  onAllocationChange: (field: AssetClassKey, value: number) => void
   onReset: () => void
 }
 
-export function InputPanel({ input, errors, onChange, onReset }: InputPanelProps) {
+export function InputPanel({
+  input,
+  allocation,
+  errors,
+  allocationError,
+  onChange,
+  onAllocationChange,
+  onReset,
+}: InputPanelProps) {
   return (
     <section className="panel input-panel" aria-labelledby="inputs-title">
       <div className="panel-heading">
@@ -93,6 +105,22 @@ export function InputPanel({ input, errors, onChange, onReset }: InputPanelProps
         </fieldset>
 
         <fieldset>
+          <legend>Aufteilung</legend>
+          {ASSET_CLASS_ASSUMPTIONS.map((assumption) => (
+            <PercentInput
+              key={assumption.key}
+              id={`allocation-${assumption.key}`}
+              label={assumption.label}
+              value={allocation[assumption.key]}
+              min={0}
+              max={100}
+              error={allocationError && assumption.key === 'fixed' ? allocationError : undefined}
+              onChange={(value) => onAllocationChange(assumption.key, value)}
+            />
+          ))}
+        </fieldset>
+
+        <fieldset>
           <legend>Annahmen</legend>
           <PercentInput
             id="annualInflationRate"
@@ -110,6 +138,7 @@ export function InputPanel({ input, errors, onChange, onReset }: InputPanelProps
             min={-50}
             max={50}
             error={errors.annualReturnBeforeRetirement}
+            readOnly
             onChange={(value) => onChange('annualReturnBeforeRetirement', value)}
           />
           <PercentInput
@@ -119,6 +148,7 @@ export function InputPanel({ input, errors, onChange, onReset }: InputPanelProps
             min={-50}
             max={50}
             error={errors.annualReturnInRetirement}
+            readOnly
             onChange={(value) => onChange('annualReturnInRetirement', value)}
           />
         </fieldset>

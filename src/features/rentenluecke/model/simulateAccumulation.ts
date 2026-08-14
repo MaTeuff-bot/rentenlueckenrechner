@@ -1,6 +1,9 @@
-import type { NormalizedScenario, YearlyPeriodRow } from './types'
+import type { AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
-export function simulateAccumulationRows(scenario: NormalizedScenario): YearlyPeriodRow[] {
+export function simulateAccumulationRows(
+  scenario: NormalizedScenario,
+  getAnnualReturn?: AnnualReturnResolver,
+): YearlyPeriodRow[] {
   let capital = scenario.currentCapital
   const rows: YearlyPeriodRow[] = []
 
@@ -9,7 +12,8 @@ export function simulateAccumulationRows(scenario: NormalizedScenario): YearlyPe
     const ageEnd = ageStart + 1
     const inflationFactor = Math.pow(1 + scenario.annualInflationRate, yearIndex)
     const contribution = scenario.annualContributionToday * inflationFactor
-    const investmentReturn = capital * scenario.annualReturnBeforeRetirement
+    const nominalReturnRate = getAnnualReturn?.(yearIndex, 'accumulation') ?? scenario.annualReturnBeforeRetirement
+    const investmentReturn = capital * nominalReturnRate
     const capitalBeforeCashflow = capital + investmentReturn
     const closingCapital = capitalBeforeCashflow + contribution
     const closingCapitalToday = closingCapital / Math.pow(1 + scenario.annualInflationRate, yearIndex + 1)
@@ -20,7 +24,7 @@ export function simulateAccumulationRows(scenario: NormalizedScenario): YearlyPe
       ageEnd,
       phase: 'accumulation',
       inflationFactor,
-      nominalReturnRate: scenario.annualReturnBeforeRetirement,
+      nominalReturnRate,
       openingCapital: capital,
       investmentReturn,
       capitalBeforeCashflow,

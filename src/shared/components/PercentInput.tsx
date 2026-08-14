@@ -7,6 +7,7 @@ type PercentInputProps = {
   error?: string
   min?: number
   max?: number
+  readOnly?: boolean
   onChange: (value: number) => void
 }
 

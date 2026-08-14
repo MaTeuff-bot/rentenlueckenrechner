@@ -64,3 +64,7 @@ export type SimulationResult = {
   retirementRows: YearlyPeriodRow[]
   summary: SimulationSummary
 }
+
+export type ReturnPhase = YearlyPeriodRow['phase']
+
+export type AnnualReturnResolver = (yearIndex: number, phase: ReturnPhase) => number

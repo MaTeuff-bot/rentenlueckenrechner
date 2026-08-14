@@ -9,11 +9,27 @@ type NumberInputProps = {
   max?: number
   step?: number
   suffix?: string
+  readOnly?: boolean
   onChange: (value: number) => void
 }
 
-export function NumberInput({ id, label, value, error, min, max, step = 1, suffix, onChange }: NumberInputProps) {
+export function NumberInput({
+  id,
+  label,
+  value,
+  error,
+  min,
+  max,
+  step = 1,
+  suffix,
+  readOnly = false,
+  onChange,
+}: NumberInputProps) {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) {
+      return
+    }
+
     onChange(event.target.value === '' ? Number.NaN : event.target.valueAsNumber)
   }
 
@@ -29,6 +45,7 @@ export function NumberInput({ id, label, value, error, min, max, step = 1, suffi
           max={max}
           step={step}
           value={Number.isNaN(value) ? '' : value}
+          readOnly={readOnly}
           onChange={handleChange}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error ? `${id}-error` : undefined}

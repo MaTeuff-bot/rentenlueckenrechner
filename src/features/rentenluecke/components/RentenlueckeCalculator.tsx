@@ -1,12 +1,24 @@
 import { AssumptionsPanel } from './AssumptionsPanel'
 import { CapitalChart } from './CapitalChart'
 import { InputPanel } from './InputPanel'
+import { StochasticSimulationPanel } from './StochasticSimulationPanel'
 import { SummaryCards } from './SummaryCards'
 import { YearlyTable } from './YearlyTable'
 import { useScenarioState } from '../hooks/useScenarioState'
 
 export function RentenlueckeCalculator() {
-  const { input, fieldErrors, isValid, result, updateField, reset } = useScenarioState()
+  const {
+    input,
+    allocation,
+    fieldErrors,
+    allocationError,
+    isValid,
+    result,
+    stochasticSummary,
+    updateField,
+    updateAllocation,
+    reset,
+  } = useScenarioState()
 
   return (
     <main>
@@ -22,16 +34,25 @@ export function RentenlueckeCalculator() {
       </header>
 
       <div className="page-shell content-stack">
-        <InputPanel input={input} errors={fieldErrors} onChange={updateField} onReset={reset} />
+        <InputPanel
+          input={input}
+          allocation={allocation}
+          errors={fieldErrors}
+          allocationError={allocationError}
+          onChange={updateField}
+          onAllocationChange={updateAllocation}
+          onReset={reset}
+        />
 
-        {!isValid || !result ? (
+        {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
-            Bitte korrigiere die markierten Eingaben. Ergebnisse, Diagramm und Tabelle werden erst mit gültigen
-            Annahmen berechnet.
+            {allocationError ??
+              'Bitte korrigiere die markierten Eingaben. Ergebnisse, Diagramm und Tabelle werden erst mit gültigen Annahmen berechnet.'}
           </section>
         ) : (
           <>
             <SummaryCards result={result} />
+            <StochasticSimulationPanel deterministicResult={result} summary={stochasticSummary} />
             <CapitalChart result={result} />
             <YearlyTable rows={result.rows} />
           </>
