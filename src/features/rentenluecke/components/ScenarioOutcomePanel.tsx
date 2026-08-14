@@ -1,103 +1,27 @@
 import { useMemo, useState } from 'react'
-import { ScenarioOutcomeChart, type ScenarioOutcomeChartRow } from './ScenarioOutcomeChart'
-import { formatCurrency, formatPercent } from '../model/format'
-import type { StochasticPercentileRow, StochasticSimulationSummary } from '../model/stochasticReturns'
-import type { SimulationResult } from '../model/types'
 import {
-  DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE,
-  getSurvivalProbabilityForAgeEnd,
-  type LifeTableSex,
-} from '../mortality/mortality'
+  buildRiskChips,
+  buildScenarioOutcomeRows,
+  calculateCapitalDisplayCap,
+  isCapitalDisplayCapped,
+  type DepletionRiskChip,
+} from '../charting/scenarioOutcomeData'
+import { ScenarioOutcomeChart } from './ScenarioOutcomeChart'
+import { formatCurrency, formatPercent } from '../model/format'
+import type { StochasticSimulationSummary } from '../model/stochasticReturns'
+import type { SimulationResult } from '../model/types'
+import { DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE, type LifeTableSex } from '../mortality/mortality'
 
 type ScenarioOutcomePanelProps = {
   result: SimulationResult
   stochasticSummary: StochasticSimulationSummary
 }
 
-type DepletionRiskChip = {
-  key: string
-  label: string
-  ageEnd: number
-  survivalProbabilityEnd: number
-  depletionProbability: number
-}
-
-const survivalThresholds = [
-  { key: 'survival-20', threshold: 0.2, label: 'Wenn noch ≤20 % leben' },
-  { key: 'survival-10', threshold: 0.1, label: 'Wenn noch ≤10 % leben' },
-  { key: 'survival-5', threshold: 0.05, label: 'Wenn noch ≤5 % leben' },
-]
-
 const sexOptions: { value: LifeTableSex; label: string }[] = [
   { value: 'conservative', label: 'Keine Angabe / konservativ' },
   { value: 'female', label: 'Weiblich' },
   { value: 'male', label: 'Männlich' },
 ]
-
-function roundCapital(value: number): number {
-  return Math.round(value)
-}
-
-function buildScenarioOutcomeRows(
-  result: SimulationResult,
-  stochasticRows: StochasticPercentileRow[],
-  lifeTableSex: LifeTableSex,
-): ScenarioOutcomeChartRow[] {
-  const currentAge = result.rows[0]?.ageStart ?? 0
-
-  return result.rows.map((deterministicRow, rowIndex) => {
-    const stochasticRow = stochasticRows[rowIndex]
-    const p10CapitalToday = roundCapital(stochasticRow?.p10CapitalToday ?? deterministicRow.closingCapitalToday)
-    const p50CapitalToday = roundCapital(stochasticRow?.p50CapitalToday ?? deterministicRow.closingCapitalToday)
-    const p90CapitalToday = roundCapital(stochasticRow?.p90CapitalToday ?? deterministicRow.closingCapitalToday)
-
-    return {
-      ageStart: deterministicRow.ageStart,
-      ageEnd: deterministicRow.ageEnd,
-      deterministicCapitalToday: roundCapital(stochasticRow?.deterministicCapitalToday ?? deterministicRow.closingCapitalToday),
-      p10CapitalToday,
-      p50CapitalToday,
-      p90CapitalToday,
-      p10ToP90CapitalToday: [p10CapitalToday, p90CapitalToday],
-      survivalProbabilityEnd: getSurvivalProbabilityForAgeEnd(currentAge, deterministicRow.ageEnd, lifeTableSex),
-      depletionProbability: stochasticRow?.depletionProbability ?? (deterministicRow.depleted ? 1 : 0),
-    }
-  })
-}
-
-function buildRiskChips(rows: ScenarioOutcomeChartRow[]): DepletionRiskChip[] {
-  const chips: DepletionRiskChip[] = []
-  const usedAges = new Set<number>()
-
-  for (const threshold of survivalThresholds) {
-    const row = rows.find((row) => row.survivalProbabilityEnd <= threshold.threshold)
-    if (!row || usedAges.has(row.ageEnd)) {
-      continue
-    }
-
-    chips.push({
-      key: threshold.key,
-      label: threshold.label,
-      ageEnd: row.ageEnd,
-      survivalProbabilityEnd: row.survivalProbabilityEnd,
-      depletionProbability: row.depletionProbability,
-    })
-    usedAges.add(row.ageEnd)
-  }
-
-  const planningHorizonRow = rows.at(-1)
-  if (planningHorizonRow && !usedAges.has(planningHorizonRow.ageEnd)) {
-    chips.push({
-      key: 'planning-horizon',
-      label: 'Bis Planungshorizont',
-      ageEnd: planningHorizonRow.ageEnd,
-      survivalProbabilityEnd: planningHorizonRow.survivalProbabilityEnd,
-      depletionProbability: planningHorizonRow.depletionProbability,
-    })
-  }
-
-  return chips
-}
 
 function RiskChip({ chip }: { chip: DepletionRiskChip }) {
   return (
@@ -122,14 +46,8 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
     [lifeTableSex, result, stochasticSummary.rows],
   )
   const riskChips = useMemo(() => buildRiskChips(chartRows), [chartRows])
-  const capitalDisplayCap = Math.max(1, Math.max(...chartRows.map((row) => row.deterministicCapitalToday), 0) * 2)
-  const isCapitalDisplayCapped = chartRows.some(
-    (row) =>
-      row.p10CapitalToday > capitalDisplayCap ||
-      row.p50CapitalToday > capitalDisplayCap ||
-      row.p90CapitalToday > capitalDisplayCap ||
-      row.deterministicCapitalToday > capitalDisplayCap,
-  )
+  const capitalDisplayCap = calculateCapitalDisplayCap(chartRows)
+  const hasCapitalDisplayCap = isCapitalDisplayCapped(chartRows, capitalDisplayCap)
   const reachesDestatisAgeLimit = chartRows.some((row) => row.ageEnd >= DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)
 
   return (
@@ -200,7 +118,7 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         Periodensterbetafel 2023/2025 des Statistischen Bundesamts (Destatis) für Deutschland und ist bedingt auf das
         aktuelle Alter. Sie ist keine individuelle Prognose und keine Anlageberatung.
       </p>
-      {isCapitalDisplayCapped ? (
+      {hasCapitalDisplayCap ? (
         <p className="chart-note">
           Hinweis: Sehr hohe Kapitalwerte werden im Diagramm bei {formatCurrency(capitalDisplayCap, 100)} gedeckelt,
           damit die übrigen Verläufe lesbar bleiben. Tooltip und Risiko-Karten zeigen weiterhin die echten
