@@ -171,6 +171,11 @@ legend {
   background: #fff8f7;
 }
 
+.field input[readonly] {
+  background: #f3f6f8;
+  color: #4b5a69;
+}
+
 .field-suffix {
   padding: 0 12px 0 6px;
   color: #5a6877;
@@ -305,6 +310,21 @@ legend {
 .chart-note {
   margin-top: 12px;
   font-size: 0.92rem;
+}
+
+.stochastic-panel .panel-heading p {
+  font-weight: 800;
+}
+
+.simulation-badge {
+  min-height: 40px;
+  border: 1px solid #b9d4cb;
+  border-radius: 6px;
+  background: #eef8f2;
+  color: #246b3d;
+  padding: 8px 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .table-wrap {

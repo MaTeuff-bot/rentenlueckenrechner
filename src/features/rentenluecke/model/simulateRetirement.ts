@@ -1,10 +1,11 @@
-import type { NormalizedScenario, YearlyPeriodRow } from './types'
+import type { AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
 export const MONEY_EPSILON = 1e-7
 
 export function simulateRetirementRows(
   scenario: NormalizedScenario,
   startingCapitalAtRetirement: number,
+  getAnnualReturn?: AnnualReturnResolver,
 ): YearlyPeriodRow[] {
   let capital = startingCapitalAtRetirement
   const rows: YearlyPeriodRow[] = []
@@ -17,7 +18,8 @@ export function simulateRetirementRows(
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
     const retirementIncome = scenario.annualRetirementIncomeToday * inflationFactor
     const gapWithdrawal = Math.max(0, desiredSpending - retirementIncome)
-    const investmentReturn = capital * scenario.annualReturnInRetirement
+    const nominalReturnRate = getAnnualReturn?.(yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
+    const investmentReturn = capital * nominalReturnRate
     const capitalBeforeCashflow = capital + investmentReturn
     const rawClosingCapital = capitalBeforeCashflow - gapWithdrawal
     const depleted = rawClosingCapital < -MONEY_EPSILON
@@ -31,7 +33,7 @@ export function simulateRetirementRows(
       ageEnd,
       phase: 'retirement',
       inflationFactor,
-      nominalReturnRate: scenario.annualReturnInRetirement,
+      nominalReturnRate,
       openingCapital: capital,
       investmentReturn,
       capitalBeforeCashflow,
