@@ -10,19 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { buildDisplayRows, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
 import { formatCurrency, formatPercent, formatWholeNumber } from '../model/format'
-
-export type ScenarioOutcomeChartRow = {
-  ageStart: number
-  ageEnd: number
-  deterministicCapitalToday: number
-  p10CapitalToday: number
-  p50CapitalToday: number
-  p90CapitalToday: number
-  p10ToP90CapitalToday: [number, number]
-  survivalProbabilityEnd: number
-  depletionProbability: number
-}
 
 type ScenarioOutcomeChartProps = {
   rows: ScenarioOutcomeChartRow[]
@@ -31,14 +20,6 @@ type ScenarioOutcomeChartProps = {
   showSurvivalProbability: boolean
   useLogCapitalScale: boolean
   capitalDisplayCap: number
-}
-
-type ChartDisplayRow = ScenarioOutcomeChartRow & {
-  chartDeterministicCapitalToday: number
-  chartP10CapitalToday: number
-  chartP50CapitalToday: number
-  chartP90CapitalToday: number
-  chartP10ToP90CapitalToday: [number, number]
 }
 
 type ChartTooltipPayload = {
@@ -55,45 +36,6 @@ type ChartTooltipProps = {
 
 function formatTooltipCurrency(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatCurrency(value, 100) : formatCurrency(0, 100)
-}
-
-function toLogScaleCapital(value: number): number {
-  return Math.max(1, value)
-}
-
-function capCapital(value: number, capitalDisplayCap: number): number {
-  return Math.min(value, capitalDisplayCap)
-}
-
-function toChartCapital(value: number, useLogCapitalScale: boolean, capitalDisplayCap: number): number {
-  const cappedValue = capCapital(value, capitalDisplayCap)
-  return useLogCapitalScale ? toLogScaleCapital(cappedValue) : cappedValue
-}
-
-function buildDisplayRows(
-  rows: ScenarioOutcomeChartRow[],
-  useLogCapitalScale: boolean,
-  capitalDisplayCap: number,
-): ChartDisplayRow[] {
-  return rows.map((row) => {
-    const chartP10CapitalToday = toChartCapital(row.p10CapitalToday, useLogCapitalScale, capitalDisplayCap)
-    const chartP50CapitalToday = toChartCapital(row.p50CapitalToday, useLogCapitalScale, capitalDisplayCap)
-    const chartP90CapitalToday = toChartCapital(row.p90CapitalToday, useLogCapitalScale, capitalDisplayCap)
-    const chartDeterministicCapitalToday = toChartCapital(
-      row.deterministicCapitalToday,
-      useLogCapitalScale,
-      capitalDisplayCap,
-    )
-
-    return {
-      ...row,
-      chartDeterministicCapitalToday,
-      chartP10CapitalToday,
-      chartP50CapitalToday,
-      chartP90CapitalToday,
-      chartP10ToP90CapitalToday: [chartP10CapitalToday, chartP90CapitalToday],
-    }
-  })
 }
 
 function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
