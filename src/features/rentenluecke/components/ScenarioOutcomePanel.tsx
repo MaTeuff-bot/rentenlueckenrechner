@@ -122,7 +122,7 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
     [lifeTableSex, result, stochasticSummary.rows],
   )
   const riskChips = useMemo(() => buildRiskChips(chartRows), [chartRows])
-  const capitalDisplayCap = Math.max(1, Math.max(...chartRows.map((row) => row.deterministicCapitalToday), 0) * 4)
+  const capitalDisplayCap = Math.max(1, Math.max(...chartRows.map((row) => row.deterministicCapitalToday), 0) * 2)
   const isCapitalDisplayCapped = chartRows.some(
     (row) =>
       row.p10CapitalToday > capitalDisplayCap ||
