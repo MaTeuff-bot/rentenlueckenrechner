@@ -113,6 +113,7 @@ function RiskChip({ chip }: { chip: DepletionRiskChip }) {
 
 export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutcomePanelProps) {
   const [showSurvivalProbability, setShowSurvivalProbability] = useState(true)
+  const [useLogCapitalScale, setUseLogCapitalScale] = useState(false)
   const [lifeTableSex, setLifeTableSex] = useState<LifeTableSex>('conservative')
   const planningAge = result.rows.at(-1)?.ageEnd ?? 0
   const successPercent = Math.round(stochasticSummary.successProbability * 100)
@@ -145,6 +146,14 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
           />
           Überlebenswahrscheinlichkeit anzeigen
         </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={useLogCapitalScale}
+            onChange={(event) => setUseLogCapitalScale(event.target.checked)}
+          />
+          Kapital logarithmisch skalieren
+        </label>
         <label className="field chart-sex-field">
           <span className="field-label">Geschlecht für Sterbetafel</span>
           <select value={lifeTableSex} onChange={(event) => setLifeTableSex(event.target.value as LifeTableSex)}>
@@ -173,6 +182,7 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         retirementAge={result.retirementRows[0]?.ageStart ?? 0}
         depletionAgeEnd={result.summary.depletionAgeEnd}
         showSurvivalProbability={showSurvivalProbability}
+        useLogCapitalScale={useLogCapitalScale}
       />
 
       <p className="chart-note">
@@ -181,6 +191,12 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         Periodensterbetafel 2023/2025 des Statistischen Bundesamts (Destatis) für Deutschland und ist bedingt auf das
         aktuelle Alter. Sie ist keine individuelle Prognose und keine Anlageberatung.
       </p>
+      {useLogCapitalScale ? (
+        <p className="chart-note">
+          Hinweis: Bei logarithmischer Skalierung werden Kapitalwerte von 0 € oder weniger am unteren Rand der
+          Kapitalachse dargestellt. Tooltip und Risiko-Karten zeigen weiterhin die echten Simulationswerte.
+        </p>
+      ) : null}
       {reachesDestatisAgeLimit ? (
         <p className="chart-note">
           Hinweis: Die Destatis-Sterbetafel enthält Einzelalter bis 100. Höhere Alter werden im Diagramm nicht weiter

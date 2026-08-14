@@ -29,6 +29,15 @@ type ScenarioOutcomeChartProps = {
   retirementAge: number
   depletionAgeEnd: number | null
   showSurvivalProbability: boolean
+  useLogCapitalScale: boolean
+}
+
+type ChartDisplayRow = ScenarioOutcomeChartRow & {
+  chartDeterministicCapitalToday: number
+  chartP10CapitalToday: number
+  chartP50CapitalToday: number
+  chartP90CapitalToday: number
+  chartP10ToP90CapitalToday: [number, number]
 }
 
 type ChartTooltipPayload = {
@@ -45,6 +54,30 @@ type ChartTooltipProps = {
 
 function formatTooltipCurrency(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatCurrency(value, 100) : formatCurrency(0, 100)
+}
+
+function toLogScaleCapital(value: number): number {
+  return Math.max(1, value)
+}
+
+function buildDisplayRows(rows: ScenarioOutcomeChartRow[], useLogCapitalScale: boolean): ChartDisplayRow[] {
+  return rows.map((row) => {
+    const chartP10CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p10CapitalToday) : row.p10CapitalToday
+    const chartP50CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p50CapitalToday) : row.p50CapitalToday
+    const chartP90CapitalToday = useLogCapitalScale ? toLogScaleCapital(row.p90CapitalToday) : row.p90CapitalToday
+    const chartDeterministicCapitalToday = useLogCapitalScale
+      ? toLogScaleCapital(row.deterministicCapitalToday)
+      : row.deterministicCapitalToday
+
+    return {
+      ...row,
+      chartDeterministicCapitalToday,
+      chartP10CapitalToday,
+      chartP50CapitalToday,
+      chartP90CapitalToday,
+      chartP10ToP90CapitalToday: [chartP10CapitalToday, chartP90CapitalToday],
+    }
+  })
 }
 
 function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
@@ -83,11 +116,14 @@ export function ScenarioOutcomeChart({
   retirementAge,
   depletionAgeEnd,
   showSurvivalProbability,
+  useLogCapitalScale,
 }: ScenarioOutcomeChartProps) {
+  const displayRows = buildDisplayRows(rows, useLogCapitalScale)
+
   return (
     <div className="chart-shell outcome-chart-shell">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 12, right: 34, bottom: 8, left: 12 }}>
+        <ComposedChart data={displayRows} margin={{ top: 12, right: 34, bottom: 8, left: 12 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#d7dde5" />
           <XAxis
             dataKey="ageEnd"
@@ -96,9 +132,15 @@ export function ScenarioOutcomeChart({
           />
           <YAxis
             yAxisId="capital"
+            scale={useLogCapitalScale ? 'log' : 'auto'}
+            domain={useLogCapitalScale ? [1, 'auto'] : ['auto', 'auto']}
             tickFormatter={(value) => formatWholeNumber(Number(value))}
             width={76}
-            label={{ value: 'Kapital heutige Kaufkraft', angle: -90, position: 'insideLeft' }}
+            label={{
+              value: useLogCapitalScale ? 'Kapital heutige Kaufkraft (log)' : 'Kapital heutige Kaufkraft',
+              angle: -90,
+              position: 'insideLeft',
+            }}
           />
           {showSurvivalProbability ? (
             <YAxis
@@ -118,7 +160,7 @@ export function ScenarioOutcomeChart({
           <Area
             yAxisId="capital"
             type="monotone"
-            dataKey="p10ToP90CapitalToday"
+            dataKey="chartP10ToP90CapitalToday"
             name="P10–P90"
             fill="#7db7c7"
             fillOpacity={0.22}
@@ -130,7 +172,7 @@ export function ScenarioOutcomeChart({
           <Line
             yAxisId="capital"
             type="monotone"
-            dataKey="p50CapitalToday"
+            dataKey="chartP50CapitalToday"
             name="P50 mittlerer Verlauf"
             stroke="#1f6f8b"
             strokeWidth={2.5}
@@ -139,7 +181,7 @@ export function ScenarioOutcomeChart({
           <Line
             yAxisId="capital"
             type="monotone"
-            dataKey="deterministicCapitalToday"
+            dataKey="chartDeterministicCapitalToday"
             name="Deterministisch"
             stroke="#6b7280"
             strokeWidth={1.8}

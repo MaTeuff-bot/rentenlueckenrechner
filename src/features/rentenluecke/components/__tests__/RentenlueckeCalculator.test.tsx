@@ -78,6 +78,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
     expect(screen.getByText(/1\.000 Verläufe/)).toBeInTheDocument()
     expect(screen.getAllByText(/heutiger Kaufkraft/).length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Kapital logarithmisch skalieren')).toBeInTheDocument()
     expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
     expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()

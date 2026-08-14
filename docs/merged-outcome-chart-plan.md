@@ -12,6 +12,7 @@ Replace the separate deterministic/mortality and stochastic capital charts with 
 - Show stochastic outcomes as a shaded P10-P90 band plus a prominent P50 line.
 - Show deterministic capital as a subtle dashed reference line.
 - Show survival probability on a right-hand Y-axis using the existing life-table selector (`conservative`, `female`, `male`).
+- Provide a chart toggle for logarithmic scaling of the capital axis so large early/late capital differences remain readable. In log mode, values at 0 € or below are pinned to the lower chart bound while tooltips and risk cards keep showing the true simulation values.
 - Do not plot depletion probability as a default line.
 - Show depletion probability in the tooltip and in compact survival-threshold risk chips above the chart.
 
