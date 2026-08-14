@@ -13,7 +13,9 @@ vi.mock('recharts', () => {
   const Empty = () => null
 
   return {
+    Area: Empty,
     CartesianGrid: Empty,
+    ComposedChart: Container,
     Legend: Empty,
     Line: Empty,
     LineChart: Container,
@@ -73,7 +75,11 @@ describe('RentenlueckeCalculator', () => {
 
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
     expect(screen.getAllByText('Benötigtes Kapital zum Rentenbeginn')).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { name: 'Simulation mit schwankenden Renditen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
+    expect(screen.getByText(/1\.000 Verläufe/)).toBeInTheDocument()
+    expect(screen.getAllByText(/heutiger Kaufkraft/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
+    expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
   })
@@ -99,7 +105,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText('Die Aufteilung muss zusammen 100 % ergeben.')).not.toHaveLength(0)
     expect(screen.getByRole('status')).toHaveTextContent('Die Aufteilung muss zusammen 100 % ergeben.')
     expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Simulation mit schwankenden Renditen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).not.toBeInTheDocument()
   })
 
   it('restores defaults after editing an input and resetting', () => {

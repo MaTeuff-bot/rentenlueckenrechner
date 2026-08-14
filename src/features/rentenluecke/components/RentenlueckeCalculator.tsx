@@ -1,7 +1,6 @@
 import { AssumptionsPanel } from './AssumptionsPanel'
-import { CapitalChart } from './CapitalChart'
 import { InputPanel } from './InputPanel'
-import { StochasticSimulationPanel } from './StochasticSimulationPanel'
+import { ScenarioOutcomePanel } from './ScenarioOutcomePanel'
 import { SummaryCards } from './SummaryCards'
 import { YearlyTable } from './YearlyTable'
 import { useScenarioState } from '../hooks/useScenarioState'
@@ -52,8 +51,7 @@ export function RentenlueckeCalculator() {
         ) : (
           <>
             <SummaryCards result={result} />
-            <StochasticSimulationPanel deterministicResult={result} summary={stochasticSummary} />
-            <CapitalChart result={result} />
+            <ScenarioOutcomePanel result={result} stochasticSummary={stochasticSummary} />
             <YearlyTable rows={result.rows} />
           </>
         )}
