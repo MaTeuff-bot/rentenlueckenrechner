@@ -5,7 +5,6 @@ import {
   findInflationSeries,
   getReturnSeriesOptionsForRole,
   HISTORICAL_MINIMUM_OBSERVATIONS,
-  type ReturnModel,
 } from '../model/historicalReturns'
 import { inputLabels, type InputFieldName } from '../model/inputSchema'
 import {
@@ -19,7 +18,6 @@ import type { RentenlueckeInput } from '../model/types'
 type InputPanelProps = {
   input: RentenlueckeInput
   allocation: AssetAllocation
-  returnModel: ReturnModel
   historical: {
     returnSeriesIds: {
       equity: string
@@ -34,7 +32,6 @@ type InputPanelProps = {
   allocationError: string | null
   onChange: (field: InputFieldName, value: number) => void
   onAllocationChange: (field: AssetClassKey, value: number) => void
-  onReturnModelChange: (returnModel: ReturnModel) => void
   onHistoricalReturnSeriesChange: (role: 'equity' | 'bond' | 'cash', seriesId: string) => void
   onManualCashRealReturnChange: (value: number) => void
   onReset: () => void
@@ -43,14 +40,12 @@ type InputPanelProps = {
 export function InputPanel({
   input,
   allocation,
-  returnModel,
   historical,
   historicalValidYears,
   errors,
   allocationError,
   onChange,
   onAllocationChange,
-  onReturnModelChange,
   onHistoricalReturnSeriesChange,
   onManualCashRealReturnChange,
   onReset,
@@ -76,44 +71,23 @@ export function InputPanel({
 
       <div className="input-grid">
         <fieldset className="wide-fieldset">
-          <legend>Renditemodell</legend>
-          <div className="segmented-control" role="radiogroup" aria-label="Renditemodell">
-            <label>
-              <input
-                type="radio"
-                name="returnModel"
-                value="synthetic"
-                checked={returnModel === 'synthetic'}
-                onChange={() => onReturnModelChange('synthetic')}
-              />
-              Synthetische Annahmen
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="returnModel"
-                value="historicalAnnualBootstrap"
-                checked={returnModel === 'historicalAnnualBootstrap'}
-                onChange={() => onReturnModelChange('historicalAnnualBootstrap')}
-              />
-              Historischer Jahres-Bootstrap
-            </label>
+          <legend>Renditequellen</legend>
+          <div className="historical-mode-note">
+            <strong>Historischer Jahres-Bootstrap:</strong> Historische Renditequellen nutzen JST R.6 als
+            gleichgewichtete lokale Realrenditen entwickelter Länder; Inflation kommt aus der
+            Bundesbank/Destatis-CPI-Reihe. Nutzbare historische Jahre für die gewählten historischen Quellen:{' '}
+            {validYearLabel}. Die Simulation zieht Jahre mit Zurücklegen aus diesem Zeitraum; sie ist kein Backtest
+            eines konkreten Kalenderzeitraums. Synthetische Quellen ziehen je Anlageklasse eigene nominale Renditen und
+            eignen sich vor allem für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe. JST-Daten sind
+            nicht für kommerzielle Nutzung freigegeben.
+            {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
+              <span>
+                {' '}
+                Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil
+                sein.
+              </span>
+            ) : null}
           </div>
-          {returnModel === 'historicalAnnualBootstrap' ? (
-            <div className="historical-mode-note">
-              <strong>Historische Datensätze:</strong> Renditen stammen aus JST R.6 als gleichgewichtete lokale
-              Realrenditen entwickelter Länder; Inflation aus der Bundesbank/Destatis-CPI-Reihe. Nutzbare historische
-              Jahre: {validYearLabel}. Die Simulation zieht Jahre mit Zurücklegen aus diesem Zeitraum; sie ist kein
-              Backtest eines konkreten Kalenderzeitraums. JST-Daten sind nicht für kommerzielle Nutzung freigegeben.
-              {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
-                <span>
-                  {' '}
-                  Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil
-                  sein.
-                </span>
-              ) : null}
-            </div>
-          ) : null}
         </fieldset>
 
         <fieldset>
@@ -199,55 +173,53 @@ export function InputPanel({
           ))}
         </fieldset>
 
-        {returnModel === 'historicalAnnualBootstrap' ? (
-          <fieldset>
-            <legend>Historische Datensätze</legend>
-            {portfolioComponents.map((component) => {
-              const role = component.role === 'bond' ? 'bond' : component.role === 'cash' ? 'cash' : 'equity'
-              const options = getReturnSeriesOptionsForRole(component.role, historical.manualCashRealReturn)
+        <fieldset>
+          <legend>Renditequellen je Anlageklasse</legend>
+          {portfolioComponents.map((component) => {
+            const role = component.role === 'bond' ? 'bond' : component.role === 'cash' ? 'cash' : 'equity'
+            const options = getReturnSeriesOptionsForRole(component.role, historical.manualCashRealReturn)
 
-              return (
-                <div className="field" key={component.id}>
-                  <label className="field-label" htmlFor={`historical-series-${role}`}>
-                    {component.label}
-                  </label>
-                  <select
-                    id={`historical-series-${role}`}
-                    value={component.returnSeriesId}
-                    onChange={(event) => onHistoricalReturnSeriesChange(role, event.target.value)}
-                  >
-                    {options.map((option) => (
-                      <option key={option.id} value={option.id} title={option.caveats.join(' ')}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )
-            })}
-            {historical.returnSeriesIds.cash === 'manual-fixed-real' ? (
-              <PercentInput
-                id="manualCashRealReturn"
-                label="Cash: manueller fester Realzins"
-                value={historical.manualCashRealReturn}
-                min={-50}
-                max={50}
-                onChange={onManualCashRealReturnChange}
-              />
-            ) : null}
-            <div className="field">
-              <label className="field-label" htmlFor="historical-inflation-series">
-                Inflationsdatensatz
-              </label>
-              <input
-                id="historical-inflation-series"
-                value={inflationSeries?.label ?? historical.inflationSeriesId}
-                readOnly
-                title={inflationSeries?.caveats.join(' ')}
-              />
-            </div>
-          </fieldset>
-        ) : null}
+            return (
+              <div className="field" key={component.id}>
+                <label className="field-label" htmlFor={`historical-series-${role}`}>
+                  {component.label}
+                </label>
+                <select
+                  id={`historical-series-${role}`}
+                  value={component.returnSeriesId}
+                  onChange={(event) => onHistoricalReturnSeriesChange(role, event.target.value)}
+                >
+                  {options.map((option) => (
+                    <option key={option.id} value={option.id} title={option.caveats.join(' ')}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+          {historical.returnSeriesIds.cash === 'manual-fixed-real' ? (
+            <PercentInput
+              id="manualCashRealReturn"
+              label="Cash: manueller fester Realzins"
+              value={historical.manualCashRealReturn}
+              min={-50}
+              max={50}
+              onChange={onManualCashRealReturnChange}
+            />
+          ) : null}
+          <div className="field">
+            <label className="field-label" htmlFor="historical-inflation-series">
+              Inflationsdatensatz
+            </label>
+            <input
+              id="historical-inflation-series"
+              value={inflationSeries?.label ?? historical.inflationSeriesId}
+              readOnly
+              title={inflationSeries?.caveats.join(' ')}
+            />
+          </div>
+        </fieldset>
 
         <fieldset>
           <legend>Annahmen</legend>

@@ -1,4 +1,10 @@
-import { simulateScenarioWithReturnPath } from './stochasticReturns'
+import {
+  ASSET_CLASS_ASSUMPTIONS,
+  sampleNormal,
+  simulateScenarioWithReturnPath,
+  type AssetClassAssumption,
+  type AssetClassKey,
+} from './stochasticReturns'
 import { simulateScenario } from './simulateScenario'
 import type { RentenlueckeInput, SimulationResult } from './types'
 import type { PortfolioComponent, PortfolioComponentRole, StochasticPercentileRow } from './stochasticReturns'
@@ -8,7 +14,6 @@ import {
   HISTORICAL_PRODUCTION_RETURN_SERIES,
 } from './returnData/historicalProductionData'
 
-export type ReturnModel = 'synthetic' | 'historicalAnnualBootstrap'
 export type DatasetRole = 'equity' | 'bond' | 'cash' | 'inflation' | 'other'
 export type DatasetGeography = 'DE' | 'EU' | 'Global'
 export type DatasetCurrency = 'EUR'
@@ -81,7 +86,21 @@ export type ManualFixedReturnSeries = {
   caveats: string[]
 }
 
-export type ReturnSeriesOption = HistoricalReturnSeries | ManualFixedReturnSeries
+export type SyntheticReturnSeries = {
+  id: string
+  kind: 'synthetic'
+  label: string
+  description: string
+  suitableFor: DatasetRole[]
+  returnBasis: 'nominal'
+  assumptionKey: AssetClassKey
+  expectedAnnualReturn: number
+  annualVolatility: number
+  sourceDatasetVersion: string
+  caveats: string[]
+}
+
+export type ReturnSeriesOption = HistoricalReturnSeries | ManualFixedReturnSeries | SyntheticReturnSeries
 
 export type InflationSeries = {
   id: string
@@ -133,6 +152,12 @@ export const DEFAULT_HISTORICAL_RETURN_SERIES_IDS = {
   equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
   bond: 'jst-r6-developed-equal-weight-bonds-real-post1950',
   cash: 'jst-r6-developed-equal-weight-bills-real-post1950',
+} as const
+export const SYNTHETIC_RETURN_ASSUMPTIONS_VERSION = 'asset-class-assumptions-v1'
+export const SYNTHETIC_RETURN_SERIES_IDS = {
+  equity: 'synthetic-equity-assumption-v1',
+  bond: 'synthetic-bonds-assumption-v1',
+  cash: 'synthetic-cash-assumption-v1',
 } as const
 
 const PROVISIONAL_RETURN_SERIES_IDS = {
@@ -315,8 +340,16 @@ export function createManualFixedRealReturnSeries(annualReturn: number): ManualF
   }
 }
 
+export const SYNTHETIC_RETURN_SERIES: SyntheticReturnSeries[] = ASSET_CLASS_ASSUMPTIONS.map((assumption) =>
+  createSyntheticReturnSeries(assumption),
+)
+
 export function findHistoricalReturnSeries(id: string): HistoricalReturnSeries | undefined {
   return HISTORICAL_RETURN_SERIES.find((series) => series.id === id)
+}
+
+export function findSyntheticReturnSeries(id: string): SyntheticReturnSeries | undefined {
+  return SYNTHETIC_RETURN_SERIES.find((series) => series.id === id)
 }
 
 export function findInflationSeries(id: string): InflationSeries | undefined {
@@ -331,6 +364,10 @@ export function getReturnSeriesOptionsForRole(
   const options: ReturnSeriesOption[] = HISTORICAL_RETURN_SERIES.filter((series) =>
     series.suitableFor.includes(datasetRole),
   )
+  const syntheticSeries = SYNTHETIC_RETURN_SERIES.find((series) => series.suitableFor.includes(datasetRole))
+  if (syntheticSeries) {
+    options.push(syntheticSeries)
+  }
 
   if (role === 'cash') {
     options.push(createManualFixedRealReturnSeries(manualCashRealReturn))
@@ -345,7 +382,7 @@ export function getValidHistoricalYears(
 ): number[] {
   const requiredYearSets = components
     .map((component) => {
-      if (!component.returnSeriesId || component.returnSeriesId === 'manual-fixed-real') {
+      if (!component.returnSeriesId || isSyntheticReturnSeriesId(component.returnSeriesId)) {
         return null
       }
 
@@ -378,6 +415,7 @@ export function generateHistoricalReturnPath(
   inflationSeries: InflationSeries,
   sampledYears: number[],
   manualCashRealReturn: number,
+  rng: () => number = createSeededRandom(0),
 ): number[] {
   return sampledYears.map((year) => {
     const inflation = inflationSeries.annualInflation[year]
@@ -387,7 +425,7 @@ export function generateHistoricalReturnPath(
         return portfolioReturn
       }
 
-      const annualReturn = resolveComponentNominalReturn(component, year, inflation, manualCashRealReturn)
+      const annualReturn = resolveComponentNominalReturn(component, year, inflation, manualCashRealReturn, rng)
       return portfolioReturn + component.weight * annualReturn
     }, 0)
   })
@@ -426,6 +464,7 @@ export function simulateHistoricalBootstrapScenario(
     inflationSeries,
     sampledYears,
     settings.manualCashRealReturn,
+    createSeededRandom(seed),
   )
 
   return {
@@ -451,12 +490,14 @@ export function runHistoricalBootstrapSimulation(
   )
   const pathResults = Array.from({ length: settings.simulations }, () => {
     const pathSeed = Math.floor(rng() * 4_294_967_296)
+    const returnSeed = Math.floor(rng() * 4_294_967_296)
     const sampledYears = sampleHistoricalYearsWithReplacement(validYears, years, pathSeed)
     const returnPath = generateHistoricalReturnPath(
       settings.portfolioComponents,
       inflationSeries,
       sampledYears,
       settings.manualCashRealReturn,
+      createSeededRandom(returnSeed),
     )
 
     return simulateScenarioWithReturnPath(input, returnPath)
@@ -503,9 +544,15 @@ function resolveComponentNominalReturn(
   year: number,
   inflation: number,
   manualCashRealReturn: number,
+  rng: () => number,
 ): number {
   if (component.returnSeriesId === 'manual-fixed-real') {
     return realToNominalReturn(manualCashRealReturn, inflation)
+  }
+
+  const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
+  if (syntheticSeries) {
+    return Math.max(-1, sampleNormal(rng, syntheticSeries.expectedAnnualReturn, syntheticSeries.annualVolatility))
   }
 
   const series = component.returnSeriesId ? findHistoricalReturnSeries(component.returnSeriesId) : undefined
@@ -519,6 +566,35 @@ function resolveComponentNominalReturn(
   }
 
   return series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn
+}
+
+function createSyntheticReturnSeries(assumption: AssetClassAssumption): SyntheticReturnSeries {
+  const role = assumption.key === 'bonds' ? 'bond' : assumption.key === 'fixed' ? 'cash' : 'equity'
+  const expectedPercent = formatAssumptionPercent(assumption.expectedAnnualReturn)
+  const volatilityPercent = formatAssumptionPercent(assumption.annualVolatility)
+
+  return {
+    id: SYNTHETIC_RETURN_SERIES_IDS[role],
+    kind: 'synthetic',
+    label: `Synthetisch: ${assumption.label} (${expectedPercent} Erwartung, ${volatilityPercent} Volatilität)`,
+    description:
+      'Nominale Renditen aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',
+    suitableFor: [role],
+    returnBasis: 'nominal',
+    assumptionKey: assumption.key,
+    expectedAnnualReturn: assumption.expectedAnnualReturn,
+    annualVolatility: assumption.annualVolatility,
+    sourceDatasetVersion: SYNTHETIC_RETURN_ASSUMPTIONS_VERSION,
+    caveats: ['Synthetic source. It does not restrict the usable historical sample years.'],
+  }
+}
+
+function isSyntheticReturnSeriesId(id: string): boolean {
+  return id === 'manual-fixed-real' || Boolean(findSyntheticReturnSeries(id))
+}
+
+function formatAssumptionPercent(value: number): string {
+  return `${Math.round(value * 100)} %`
 }
 
 function realToNominalReturn(realReturn: number, inflation: number): number {
@@ -540,6 +616,16 @@ export function getHistoricalDatasetVersion(id?: string): string {
 
   if (id === 'manual-fixed-real') {
     return id
+  }
+
+  const syntheticSeries = findSyntheticReturnSeries(id)
+  if (syntheticSeries) {
+    return stableStringify({
+      version: syntheticSeries.sourceDatasetVersion,
+      id: syntheticSeries.id,
+      expectedAnnualReturn: syntheticSeries.expectedAnnualReturn,
+      annualVolatility: syntheticSeries.annualVolatility,
+    })
   }
 
   const series = findHistoricalReturnSeries(id)

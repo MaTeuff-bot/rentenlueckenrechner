@@ -6,6 +6,7 @@ import {
   HISTORICAL_INFLATION_SERIES,
   HISTORICAL_MINIMUM_OBSERVATIONS,
   HISTORICAL_RETURN_SERIES,
+  SYNTHETIC_RETURN_SERIES_IDS,
   createHistoricalBootstrapSeed,
   findInflationSeries,
   findHistoricalReturnSeries,
@@ -121,6 +122,42 @@ describe('historical returns', () => {
     expect(getValidHistoricalYears(components, fixtureInflation!)).toEqual(Array.from({ length: 71 }, (_, index) => 1950 + index))
   })
 
+  it('does not let synthetic source selections restrict valid historical years', () => {
+    const allHistoricalComponents = createPortfolioComponents(
+      { equity: 0.5, bonds: 0.3, fixed: 0.2 },
+      {
+        equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+        bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+        cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+      },
+    )
+    const mixedComponents = createPortfolioComponents(
+      { equity: 0.5, bonds: 0.3, fixed: 0.2 },
+      {
+        equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+        bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
+        cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
+      },
+    )
+    const equityOnlyValidYears = getValidHistoricalYears(
+      createPortfolioComponents(
+        { equity: 1, bonds: 0, fixed: 0 },
+        {
+          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
+          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
+        },
+      ),
+      inflation,
+    )
+    const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
+
+    expect(getValidHistoricalYears(mixedComponents, defaultInflation)).toEqual(
+      getValidHistoricalYears(allHistoricalComponents, defaultInflation),
+    )
+    expect(equityOnlyValidYears).toEqual([2000, 2001, 2002])
+  })
+
   it('samples years with replacement using a deterministic seed', () => {
     const years = [2000, 2001]
     const sampledYears = sampleHistoricalYearsWithReplacement(years, 20, 123)
@@ -151,6 +188,39 @@ describe('historical returns', () => {
     expect(pathReturn).toBeCloseTo(0.5 * equityNominal + 0.25 * bondNominal + 0.25 * cashNominal)
   })
 
+  it('samples synthetic components independently from nominal assumptions within mixed historical paths', () => {
+    const components = createPortfolioComponents(
+      { equity: 0.5, bonds: 0.5, fixed: 0 },
+      {
+        equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+        bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
+        cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
+      },
+    )
+    const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
+    const firstPath = generateHistoricalReturnPath(
+      components,
+      defaultInflation,
+      [2020, 2020, 2020],
+      0,
+      () => 0.5,
+    )
+    const secondPath = generateHistoricalReturnPath(
+      components,
+      defaultInflation,
+      [2020, 2020, 2020],
+      0,
+      () => 0.5,
+    )
+    const inflation2020 = defaultInflation.annualInflation[2020]
+    const equityNominal = (1 + findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)!.normalizedSeries[2020]) * (1 + inflation2020) - 1
+    const sampledSyntheticBondReturn = 0.03 - Math.sqrt(-2 * Math.log(0.5)) * 0.07
+
+    expect(firstPath).toEqual(secondPath)
+    expect(firstPath[0]).toBeCloseTo(0.5 * equityNominal + 0.5 * sampledSyntheticBondReturn)
+    expect(firstPath).not.toEqual([equityNominal, equityNominal, equityNominal])
+  })
+
   it('includes dataset versions in deterministic seeds', () => {
     const defaultSettings = {
       portfolioComponents: createPortfolioComponents(
@@ -173,6 +243,38 @@ describe('historical returns', () => {
     expect(getHistoricalDatasetVersion(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)).toContain('sha256:')
     expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, defaultSettings)).not.toBe(
       createHistoricalBootstrapSeed(DEFAULT_INPUT, alternateSettings),
+    )
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, defaultSettings)).not.toBe(
+      createHistoricalBootstrapSeed(DEFAULT_INPUT, {
+        ...defaultSettings,
+        portfolioComponents: createPortfolioComponents(
+          { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+          { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS, bond: SYNTHETIC_RETURN_SERIES_IDS.bond },
+        ),
+      }),
+    )
+  })
+
+  it('keeps mixed historical and synthetic bootstrap summaries deterministic for identical settings', () => {
+    const settings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        {
+          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
+          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
+        },
+      ),
+      inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+      manualCashRealReturn: 0,
+      simulations: 25,
+    }
+
+    expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings)).toEqual(
+      simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    )
+    expect(runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)).toEqual(
+      runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings),
     )
   })
 
