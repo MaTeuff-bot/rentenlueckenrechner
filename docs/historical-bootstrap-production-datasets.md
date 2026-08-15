@@ -92,13 +92,35 @@ In this path, Phase 2 may need either:
 2. a generated series from a redistributable academic/public dataset after deeper license review,
 3. or a product decision to keep equity provisional/blocked until licensed data is available.
 
+## Updated product/licensing context
+
+Max's stated intent: the app is not intended for commercial use; anyone may reuse and fork it from the public GitHub repository. A future commercial version should remain possible if the non-commercial dataset can be removed/replaced.
+
+Working interpretation for Phase 2:
+
+- JST-derived data is acceptable as a non-commercial default dataset if clearly marked as such.
+- Keep code and data licensing separated; do not imply the whole repository is unrestricted MIT if bundled datasets are not.
+- Treat JST as one dataset provider, not as a hardwired model assumption, so a future commercial/permissive provider can replace it without changing the sampler.
+- Add a future research item for long-running broad ETF proxies, but treat them as a second option / validation benchmark rather than a replacement for the long-running equity database.
+
+Recommended repository shape if JST is used:
+
+```text
+LICENSE                 # app/code license
+DATA_LICENSES.md        # dataset-specific terms
+src/.../returnData/     # generated/derived dataset snapshots with per-source metadata
+scripts/                # generic generation scripts where possible
+```
+
+Dataset metadata should explicitly include fields such as `license`, `commercialUseAllowed`, `derivedData`, `sourceName`, `sourceUrl`, `retrievedAt`, `transformVersion`, and `checksum`.
+
 ## Decisions to grill/lock before deep implementation
 
 ### 1. Can this public app use CC BY-NC-SA data?
 
-Recommendation: **Allow JST only if you are comfortable marking the app/data as non-commercial and preserving attribution/share-alike implications for derived data.**
+Status: **Provisionally locked to A** based on Max's non-commercial/public-forking intent, with the guardrail that code/data licenses are separated and future commercial replacement remains possible.
 
-Decision needed:
+Decision options retained for final confirmation:
 
 - A. Yes, JST is acceptable for this public, non-commercial calculator.
 - B. No, avoid NC/share-alike data in bundled app assets.
