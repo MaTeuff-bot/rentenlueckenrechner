@@ -4,10 +4,10 @@ import { DEFAULT_INPUT } from '../model/defaults'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+  SYNTHETIC_RETURN_SERIES_IDS,
   findInflationSeries,
   getValidHistoricalYears,
   runHistoricalBootstrapSimulation,
-  type ReturnModel,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
 import { simulateScenario } from '../model/simulateScenario'
@@ -17,14 +17,14 @@ import {
   DEFAULT_ASSET_ALLOCATION,
   DEFAULT_STOCHASTIC_SETTINGS,
   getAllocationValidationError,
-  runStochasticSimulation,
   type AssetAllocation,
   type AssetClassKey,
 } from '../model/stochasticReturns'
 import type { RentenlueckeInput } from '../model/types'
 
-const STORAGE_KEY = 'rentenlueckenrechner.scenario.v3'
-const PREVIOUS_STORAGE_KEY = 'rentenlueckenrechner.scenario.v2'
+const STORAGE_KEY = 'rentenlueckenrechner.scenario.v4'
+const PREVIOUS_STORAGE_KEY = 'rentenlueckenrechner.scenario.v3'
+const V2_STORAGE_KEY = 'rentenlueckenrechner.scenario.v2'
 const LEGACY_STORAGE_KEY = 'rentenlueckenrechner.scenario.v1'
 
 const assetAllocationSchema = z.object({
@@ -34,10 +34,9 @@ const assetAllocationSchema = z.object({
 })
 
 const persistedScenarioSchema = z.object({
-  version: z.literal(3),
+  version: z.literal(4),
   input: rentenlueckeInputSchema,
   allocation: assetAllocationSchema,
-  returnModel: z.enum(['synthetic', 'historicalAnnualBootstrap']),
   historical: z.object({
     returnSeriesIds: z.object({
       equity: z.string(),
@@ -50,6 +49,24 @@ const persistedScenarioSchema = z.object({
 })
 
 const previousPersistedScenarioSchema = z.object({
+  version: z.literal(3),
+  input: rentenlueckeInputSchema,
+  allocation: assetAllocationSchema,
+  returnModel: z.enum(['synthetic', 'historicalAnnualBootstrap']).optional(),
+  historical: z
+    .object({
+      returnSeriesIds: z.object({
+        equity: z.string(),
+        bond: z.string(),
+        cash: z.string(),
+      }),
+      inflationSeriesId: z.string(),
+      manualCashRealReturn: z.number().finite().min(-0.5).max(0.5),
+    })
+    .optional(),
+})
+
+const v2PersistedScenarioSchema = z.object({
   version: z.literal(2),
   input: rentenlueckeInputSchema,
   allocation: assetAllocationSchema,
@@ -62,7 +79,7 @@ const legacyPersistedScenarioSchema = z.object({
 
 export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
-  const { input, allocation, returnModel, historical } = state
+  const { input, allocation, historical } = state
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const allocationError = useMemo(() => getAllocationValidationError(allocation), [allocation])
@@ -95,13 +112,8 @@ export function useScenarioState() {
       return null
     }
 
-    return returnModel === 'historicalAnnualBootstrap'
-      ? runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings)
-      : runStochasticSimulation(parsedInput.data, {
-          ...DEFAULT_STOCHASTIC_SETTINGS,
-          allocation,
-        })
-  }, [allocation, historicalSettings, isValid, parsedInput, returnModel])
+    return runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings)
+  }, [historicalSettings, isValid, parsedInput])
 
   useEffect(() => {
     if (!isValid || !parsedInput.success) {
@@ -110,9 +122,9 @@ export function useScenarioState() {
 
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ version: 3, input: parsedInput.data, allocation, returnModel, historical }),
+      JSON.stringify({ version: 4, input: parsedInput.data, allocation, historical }),
     )
-  }, [allocation, historical, isValid, parsedInput, returnModel])
+  }, [allocation, historical, isValid, parsedInput])
 
   const updateField = (field: InputFieldName, value: number) => {
     setState((current) => ({ ...current, input: { ...current.input, [field]: value } }))
@@ -129,10 +141,6 @@ export function useScenarioState() {
         input: withDeterministicPortfolioReturn(current.input, derivedReturn),
       }
     })
-  }
-
-  const updateReturnModel = (nextReturnModel: ReturnModel) => {
-    setState((current) => ({ ...current, returnModel: nextReturnModel }))
   }
 
   const updateHistoricalReturnSeries = (role: 'equity' | 'bond' | 'cash', seriesId: string) => {
@@ -155,13 +163,12 @@ export function useScenarioState() {
   const reset = () => {
     const nextState = createDefaultState()
     setState(nextState)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 3, ...nextState }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 4, ...nextState }))
   }
 
   return {
     input,
     allocation,
-    returnModel,
     historical,
     historicalSettings,
     historicalValidYears,
@@ -172,7 +179,6 @@ export function useScenarioState() {
     stochasticSummary,
     updateField,
     updateAllocation,
-    updateReturnModel,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
     reset,
@@ -182,7 +188,6 @@ export function useScenarioState() {
 type ScenarioState = {
   input: RentenlueckeInput
   allocation: AssetAllocation
-  returnModel: ReturnModel
   historical: {
     returnSeriesIds: {
       equity: string
@@ -202,6 +207,7 @@ function loadInitialState(): ScenarioState {
   const stored =
     localStorage.getItem(STORAGE_KEY) ??
     localStorage.getItem(PREVIOUS_STORAGE_KEY) ??
+    localStorage.getItem(V2_STORAGE_KEY) ??
     localStorage.getItem(LEGACY_STORAGE_KEY)
   if (!stored) {
     return createDefaultState()
@@ -215,7 +221,6 @@ function loadInitialState(): ScenarioState {
       return {
         input: withDeterministicPortfolioReturn(persisted.data.input, derivedReturn),
         allocation: persisted.data.allocation,
-        returnModel: persisted.data.returnModel,
         historical: persisted.data.historical,
       }
     }
@@ -226,8 +231,20 @@ function loadInitialState(): ScenarioState {
       return {
         input: withDeterministicPortfolioReturn(previousPersisted.data.input, derivedReturn),
         allocation: previousPersisted.data.allocation,
-        returnModel: 'synthetic',
-        historical: createDefaultHistoricalState(),
+        historical:
+          previousPersisted.data.returnModel === 'synthetic'
+            ? createSyntheticHistoricalState()
+            : normalizeHistoricalState(previousPersisted.data.historical),
+      }
+    }
+
+    const v2Persisted = v2PersistedScenarioSchema.safeParse(parsed)
+    if (v2Persisted.success) {
+      const derivedReturn = calculatePortfolioExpectedReturn(v2Persisted.data.allocation)
+      return {
+        input: withDeterministicPortfolioReturn(v2Persisted.data.input, derivedReturn),
+        allocation: v2Persisted.data.allocation,
+        historical: createSyntheticHistoricalState(),
       }
     }
 
@@ -239,8 +256,7 @@ function loadInitialState(): ScenarioState {
           calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION),
         ),
         allocation: DEFAULT_ASSET_ALLOCATION,
-        returnModel: 'synthetic',
-        historical: createDefaultHistoricalState(),
+        historical: createSyntheticHistoricalState(),
       }
     }
 
@@ -254,7 +270,6 @@ function createDefaultState(): ScenarioState {
   return {
     input: withDeterministicPortfolioReturn(DEFAULT_INPUT, calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION)),
     allocation: DEFAULT_ASSET_ALLOCATION,
-    returnModel: 'synthetic',
     historical: createDefaultHistoricalState(),
   }
 }
@@ -264,6 +279,29 @@ function createDefaultHistoricalState(): ScenarioState['historical'] {
     returnSeriesIds: DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
     inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
     manualCashRealReturn: 0,
+  }
+}
+
+function createSyntheticHistoricalState(): ScenarioState['historical'] {
+  return {
+    returnSeriesIds: SYNTHETIC_RETURN_SERIES_IDS,
+    inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    manualCashRealReturn: 0,
+  }
+}
+
+function normalizeHistoricalState(historical: ScenarioState['historical'] | undefined): ScenarioState['historical'] {
+  if (!historical) {
+    return createDefaultHistoricalState()
+  }
+
+  return {
+    ...historical,
+    returnSeriesIds: {
+      equity: historical.returnSeriesIds.equity,
+      bond: historical.returnSeriesIds.bond,
+      cash: historical.returnSeriesIds.cash,
+    },
   }
 }
 

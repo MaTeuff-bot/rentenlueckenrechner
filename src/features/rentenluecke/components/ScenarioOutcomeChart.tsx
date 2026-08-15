@@ -12,7 +12,6 @@ import {
 } from 'recharts'
 import { buildDisplayRows, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
 import { formatCurrency, formatPercent, formatWholeNumber } from '../model/format'
-import type { ReturnModel } from '../model/historicalReturns'
 
 type ScenarioOutcomeChartProps = {
   rows: ScenarioOutcomeChartRow[]
@@ -21,7 +20,6 @@ type ScenarioOutcomeChartProps = {
   showSurvivalProbability: boolean
   useLogCapitalScale: boolean
   capitalDisplayCap: number
-  returnModel: ReturnModel
 }
 
 type ChartTooltipPayload = {
@@ -40,7 +38,7 @@ function formatTooltipCurrency(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatCurrency(value, 100) : formatCurrency(0, 100)
 }
 
-function ChartTooltip({ active, label, payload, returnModel }: ChartTooltipProps & { returnModel: ReturnModel }) {
+function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
   if (!active || !payload || payload.length === 0) return null
 
   const row = payload[0]?.payload
@@ -50,8 +48,7 @@ function ChartTooltip({ active, label, payload, returnModel }: ChartTooltipProps
   const survivalProbability = row?.survivalProbabilityEnd ?? Number(values.get('survivalProbabilityEnd'))
   const depletionProbability = row?.depletionProbability ?? 0
 
-  const percentileLabel =
-    returnModel === 'historicalAnnualBootstrap' ? 'Historischer Bootstrap' : 'Simulierte Verläufe'
+  const percentileLabel = 'Bootstrap'
 
   return (
     <div className="chart-tooltip">
@@ -81,7 +78,6 @@ export function ScenarioOutcomeChart({
   showSurvivalProbability,
   useLogCapitalScale,
   capitalDisplayCap,
-  returnModel,
 }: ScenarioOutcomeChartProps) {
   const displayRows = buildDisplayRows(rows, useLogCapitalScale, capitalDisplayCap)
   const showProbabilityAxis = showSurvivalProbability || rows.length > 0
@@ -117,7 +113,7 @@ export function ScenarioOutcomeChart({
               width={62}
             />
           ) : null}
-          <Tooltip content={<ChartTooltip returnModel={returnModel} />} />
+          <Tooltip content={<ChartTooltip />} />
           <Legend verticalAlign="top" height={36} />
           <ReferenceLine x={retirementAge} stroke="#6b7280" strokeDasharray="4 4" label="Rentenbeginn" />
           {depletionAgeEnd ? (

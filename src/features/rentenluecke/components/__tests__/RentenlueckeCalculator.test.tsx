@@ -4,8 +4,12 @@ import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StochasticSettings } from '../../model/stochasticReturns'
-import type { RentenlueckeInput } from '../../model/types'
+import {
+  DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+  DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+} from '../../model/historicalReturns'
+import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
+import { DEFAULT_INPUT } from '../../model/defaults'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
 
 vi.mock('recharts', () => {
@@ -25,32 +29,6 @@ vi.mock('recharts', () => {
     Tooltip: Empty,
     XAxis: Empty,
     YAxis: Empty,
-  }
-})
-
-vi.mock('../../model/stochasticReturns', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../model/stochasticReturns')>()
-  const { simulateScenario } = await import('../../model/simulateScenario')
-
-  return {
-    ...actual,
-    runStochasticSimulation: (input: RentenlueckeInput, settings: StochasticSettings) => {
-      const result = simulateScenario(input)
-
-      return {
-        simulations: settings.simulations,
-        successProbability: 1,
-        rows: result.rows.map((row) => ({
-          ageStart: row.ageStart,
-          ageEnd: row.ageEnd,
-          planCapitalToday: row.closingCapitalToday,
-          p10CapitalToday: row.closingCapitalToday,
-          p50CapitalToday: row.closingCapitalToday,
-          p90CapitalToday: row.closingCapitalToday,
-          depletionProbability: row.depleted ? 1 : 0,
-        })),
-      }
-    },
   }
 })
 
@@ -88,18 +66,98 @@ describe('RentenlueckeCalculator', () => {
     expect(inputById('annualReturnBeforeRetirement').value).not.toMatch(/\.\d{2,}/)
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
+    expect(screen.queryByText('Synthetische Annahmen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Historischer Jahres-Bootstrap')).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Renditequellen je Anlageklasse' })).toBeInTheDocument()
+    expect(screen.getByText(/Synthetische Quellen ziehen je Anlageklasse eigene nominale Renditen/)).toBeInTheDocument()
   })
 
-  it('labels historical bootstrap results as percentiles instead of a deterministic draw', () => {
+  it('labels bootstrap results as percentiles instead of a deterministic draw', () => {
     render(<RentenlueckeCalculator />)
 
-    fireEvent.click(screen.getByLabelText('Historischer Jahres-Bootstrap'))
-
     expect(screen.getByText(/Median-Kapital zum Rentenbeginn \(P50\)/)).toBeInTheDocument()
-    expect(screen.getByText(/Jahre werden mit Zurücklegen aus 1950-2020 gezogen/)).toBeInTheDocument()
+    expect(screen.getByText(/Historische Quellen ziehen Jahre mit Zurücklegen aus 1950-2020/)).toBeInTheDocument()
     expect(screen.getAllByText(/kein Backtest eines konkreten Kalenderzeitraums/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Planwert-Ledger bei fester Rendite/)).toBeInTheDocument()
     expect(screen.queryByText('Deterministisch')).not.toBeInTheDocument()
+  })
+
+  it('shows synthetic return sources as per-asset options', () => {
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByRole('option', { name: 'Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)' })).toBeInTheDocument()
+  })
+
+  it('migrates v3 synthetic mode to synthetic asset return sources', () => {
+    localStorage.setItem(
+      'rentenlueckenrechner.scenario.v3',
+      JSON.stringify({
+        version: 3,
+        input: DEFAULT_INPUT,
+        allocation: DEFAULT_ASSET_ALLOCATION,
+        returnModel: 'synthetic',
+        historical: {
+          returnSeriesIds: {
+            equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
+            bond: 'jst-r6-developed-equal-weight-bonds-real-post1950',
+            cash: 'jst-r6-developed-equal-weight-bills-real-post1950',
+          },
+          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+          manualCashRealReturn: 0,
+        },
+      }),
+    )
+
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByDisplayValue('Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)')).toBeInTheDocument()
+  })
+
+  it('preserves v3 historical manual Cash selections during migration', () => {
+    localStorage.setItem(
+      'rentenlueckenrechner.scenario.v3',
+      JSON.stringify({
+        version: 3,
+        input: DEFAULT_INPUT,
+        allocation: DEFAULT_ASSET_ALLOCATION,
+        returnModel: 'historicalAnnualBootstrap',
+        historical: {
+          returnSeriesIds: {
+            equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+            bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+            cash: 'manual-fixed-real',
+          },
+          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+          manualCashRealReturn: 0.01,
+        },
+      }),
+    )
+
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByDisplayValue('Manuell: fester Realzins')).toBeInTheDocument()
+    expect(inputById('manualCashRealReturn')).toHaveValue(1)
+  })
+
+  it('migrates v2 synthetic scenarios to synthetic asset return sources', () => {
+    localStorage.setItem(
+      'rentenlueckenrechner.scenario.v2',
+      JSON.stringify({
+        version: 2,
+        input: DEFAULT_INPUT,
+        allocation: DEFAULT_ASSET_ALLOCATION,
+      }),
+    )
+
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByDisplayValue('Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)')).toBeInTheDocument()
   })
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {

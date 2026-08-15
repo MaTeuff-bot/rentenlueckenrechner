@@ -9,7 +9,6 @@ export function RentenlueckeCalculator() {
   const {
     input,
     allocation,
-    returnModel,
     historical,
     historicalValidYears,
     fieldErrors,
@@ -19,7 +18,6 @@ export function RentenlueckeCalculator() {
     stochasticSummary,
     updateField,
     updateAllocation,
-    updateReturnModel,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
     reset,
@@ -42,14 +40,12 @@ export function RentenlueckeCalculator() {
         <InputPanel
           input={input}
           allocation={allocation}
-          returnModel={returnModel}
           historical={historical}
           historicalValidYears={historicalValidYears}
           errors={fieldErrors}
           allocationError={allocationError}
           onChange={updateField}
           onAllocationChange={updateAllocation}
-          onReturnModelChange={updateReturnModel}
           onHistoricalReturnSeriesChange={updateHistoricalReturnSeries}
           onManualCashRealReturnChange={updateManualCashRealReturn}
           onReset={reset}
@@ -62,14 +58,13 @@ export function RentenlueckeCalculator() {
           </section>
         ) : (
           <>
-            <SummaryCards result={result} stochasticSummary={stochasticSummary} returnModel={returnModel} />
+            <SummaryCards result={result} stochasticSummary={stochasticSummary} />
             <ScenarioOutcomePanel
               result={result}
               stochasticSummary={stochasticSummary}
-              returnModel={returnModel}
               historicalValidYears={historicalValidYears}
             />
-            <YearlyTable rows={result.rows} returnModel={returnModel} />
+            <YearlyTable rows={result.rows} />
           </>
         )}
 
