@@ -184,6 +184,20 @@ Additional future research item:
 
 - Long-running broad ETF proxies remain worth researching as a second option / validation benchmark, but not as a replacement for the long-running equity database backbone.
 
+## Follow-up TODOs
+
+### Research long-running broad ETF proxies
+
+Create a later research pass for broad, long-running ETF or fund proxies as optional/validation datasets. This should not block the JST-backed Phase 2 default, but should answer:
+
+- Which broad equity ETFs/funds have the longest usable history for a Germany/EUR investor?
+- Are there UCITS options with enough annual observations, or do only US ETFs/funds have meaningful length?
+- Can provider-published NAV/total-return histories be redistributed or transformed into a public GitHub Pages bundle?
+- How should distributing vs accumulating share classes, dividends, TER, tracking difference, withholding tax, and EUR/USD conversion be handled?
+- Should ETF-derived data be an optional modern dataset, a validation benchmark for JST overlap years, or only documentation context?
+
+Acceptance output for that future task: a short matrix of candidate ETFs/funds, inception dates, return basis, currency/share class, licensing/reuse status, annual observation count, and recommendation.
+
 ## Proposed next step
 
 Run the deeper targeted research pass for the locked source strategy:
