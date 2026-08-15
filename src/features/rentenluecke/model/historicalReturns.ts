@@ -1,4 +1,5 @@
 import { simulateScenarioWithReturnPath } from './stochasticReturns'
+import { simulateScenario } from './simulateScenario'
 import type { RentenlueckeInput, SimulationResult } from './types'
 import type { PortfolioComponent, PortfolioComponentRole, StochasticPercentileRow } from './stochasticReturns'
 import { createSeededRandom } from './stochasticReturns'
@@ -438,11 +439,16 @@ export function runHistoricalBootstrapSimulation(
   settings: HistoricalBootstrapSettings,
 ): HistoricalBootstrapSimulationSummary {
   const inflationSeries = getRequiredInflationSeries(settings.inflationSeriesId)
-  const deterministicResult = simulateHistoricalBootstrapScenario(input, settings)
-  const validYears = deterministicResult.metadata.validYears
-  const years = deterministicResult.rows.length
+  const referenceResult = simulateScenario(input)
+  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSeries)
+  const years = referenceResult.rows.length
   const seed = createHistoricalBootstrapSeed(input, settings)
   const rng = createSeededRandom(seed)
+  const referenceSampledYears = sampleHistoricalYearsWithReplacement(
+    validYears,
+    years,
+    createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 }),
+  )
   const pathResults = Array.from({ length: settings.simulations }, () => {
     const pathSeed = Math.floor(rng() * 4_294_967_296)
     const sampledYears = sampleHistoricalYearsWithReplacement(validYears, years, pathSeed)
@@ -456,14 +462,14 @@ export function runHistoricalBootstrapSimulation(
     return simulateScenarioWithReturnPath(input, returnPath)
   })
   const successfulPaths = pathResults.filter((result) => result.summary.survivesUntilPlanningAge).length
-  const rows = deterministicResult.rows.map((deterministicRow, rowIndex) => {
+  const rows = referenceResult.rows.map((referenceRow, rowIndex) => {
     const capitalValues = pathResults.map((result) => result.rows[rowIndex]?.closingCapitalToday ?? 0).sort((a, b) => a - b)
     const depletedCount = capitalValues.filter((value) => value <= 0).length
 
     return {
-      ageStart: deterministicRow.ageStart,
-      ageEnd: deterministicRow.ageEnd,
-      deterministicCapitalToday: deterministicRow.closingCapitalToday,
+      ageStart: referenceRow.ageStart,
+      ageEnd: referenceRow.ageEnd,
+      planCapitalToday: referenceRow.closingCapitalToday,
       p10CapitalToday: percentile(capitalValues, 0.1),
       p50CapitalToday: percentile(capitalValues, 0.5),
       p90CapitalToday: percentile(capitalValues, 0.9),
@@ -475,7 +481,11 @@ export function runHistoricalBootstrapSimulation(
     simulations: settings.simulations,
     successProbability: successfulPaths / settings.simulations,
     rows,
-    metadata: { validYears, sampledYears: deterministicResult.metadata.sampledYears, seed },
+    metadata: {
+      validYears,
+      sampledYears: referenceSampledYears,
+      seed,
+    },
   }
 }
 

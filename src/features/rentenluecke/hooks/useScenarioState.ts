@@ -7,7 +7,6 @@ import {
   findInflationSeries,
   getValidHistoricalYears,
   runHistoricalBootstrapSimulation,
-  simulateHistoricalBootstrapScenario,
   type ReturnModel,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
@@ -89,10 +88,8 @@ export function useScenarioState() {
       return null
     }
 
-    return returnModel === 'historicalAnnualBootstrap'
-      ? simulateHistoricalBootstrapScenario(parsedInput.data, historicalSettings)
-      : simulateScenario(parsedInput.data)
-  }, [historicalSettings, isValid, parsedInput, returnModel])
+    return simulateScenario(parsedInput.data)
+  }, [isValid, parsedInput])
   const stochasticSummary = useMemo(() => {
     if (!isValid || !parsedInput.success) {
       return null

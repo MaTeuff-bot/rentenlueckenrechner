@@ -62,9 +62,14 @@ export function RentenlueckeCalculator() {
           </section>
         ) : (
           <>
-            <SummaryCards result={result} />
-            <ScenarioOutcomePanel result={result} stochasticSummary={stochasticSummary} />
-            <YearlyTable rows={result.rows} />
+            <SummaryCards result={result} stochasticSummary={stochasticSummary} returnModel={returnModel} />
+            <ScenarioOutcomePanel
+              result={result}
+              stochasticSummary={stochasticSummary}
+              returnModel={returnModel}
+              historicalValidYears={historicalValidYears}
+            />
+            <YearlyTable rows={result.rows} returnModel={returnModel} />
           </>
         )}
 

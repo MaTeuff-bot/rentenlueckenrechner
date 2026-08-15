@@ -14,7 +14,7 @@ function chartRow(overrides: Partial<ScenarioOutcomeChartRow> = {}): ScenarioOut
   return {
     ageStart: 64,
     ageEnd: 65,
-    deterministicCapitalToday: 100_000,
+    planCapitalToday: 100_000,
     p10CapitalToday: 80_000,
     p50CapitalToday: 100_000,
     p90CapitalToday: 120_000,
@@ -113,7 +113,7 @@ describe('scenario outcome chart data', () => {
     ])
   })
 
-  it('falls back to deterministic rows when stochastic rows are absent or short', () => {
+  it('falls back to plan rows when stochastic rows are absent or short', () => {
     const rows = [
       yearlyRow({ ageStart: 64, ageEnd: 65, closingCapitalToday: 100_000 }),
       yearlyRow({ ageStart: 65, ageEnd: 66, closingCapitalToday: 90_000, depleted: true }),
@@ -122,7 +122,7 @@ describe('scenario outcome chart data', () => {
       {
         ageStart: 64,
         ageEnd: 65,
-        deterministicCapitalToday: 101_100.4,
+        planCapitalToday: 101_100.4,
         p10CapitalToday: 70_200.2,
         p50CapitalToday: 99_999.6,
         p90CapitalToday: 130_400.5,
@@ -134,14 +134,14 @@ describe('scenario outcome chart data', () => {
     const [absentFallbackRow] = buildScenarioOutcomeRows(result([rows[0]]), [], 'conservative')
 
     expect(stochasticRow).toMatchObject({
-      deterministicCapitalToday: 101_100,
+      planCapitalToday: 101_100,
       p10CapitalToday: 70_200,
       p50CapitalToday: 100_000,
       p90CapitalToday: 130_401,
       depletionProbability: 0.25,
     })
     expect(fallbackRow).toMatchObject({
-      deterministicCapitalToday: 90_000,
+      planCapitalToday: 90_000,
       p10CapitalToday: 90_000,
       p50CapitalToday: 90_000,
       p90CapitalToday: 90_000,
@@ -155,7 +155,7 @@ describe('scenario outcome chart data', () => {
     const [row] = buildDisplayRows(
       [
         chartRow({
-          deterministicCapitalToday: -10,
+          planCapitalToday: -10,
           p10CapitalToday: -5,
           p50CapitalToday: 0,
           p90CapitalToday: 2,
@@ -167,11 +167,11 @@ describe('scenario outcome chart data', () => {
     )
 
     expect(row).toMatchObject({
-      deterministicCapitalToday: -10,
+      planCapitalToday: -10,
       p10CapitalToday: -5,
       p50CapitalToday: 0,
       p90CapitalToday: 2,
-      chartDeterministicCapitalToday: 1,
+      chartPlanCapitalToday: 1,
       chartP10CapitalToday: 1,
       chartP50CapitalToday: 1,
       chartP90CapitalToday: 2,
@@ -181,7 +181,7 @@ describe('scenario outcome chart data', () => {
 
   it('caps only chart-rendered capital values at the capital display cap', () => {
     const sourceRow = chartRow({
-      deterministicCapitalToday: 200,
+      planCapitalToday: 200,
       p10CapitalToday: 50,
       p50CapitalToday: 150,
       p90CapitalToday: 500,
@@ -195,9 +195,9 @@ describe('scenario outcome chart data', () => {
     expect(sourceRow.p90CapitalToday).toBe(500)
   })
 
-  it('derives cap state from deterministic capital while detecting capped chart values', () => {
+  it('derives cap state from plan capital while detecting capped chart values', () => {
     const rows = [
-      chartRow({ deterministicCapitalToday: 100, p10CapitalToday: 50, p50CapitalToday: 100, p90CapitalToday: 250 }),
+      chartRow({ planCapitalToday: 100, p10CapitalToday: 50, p50CapitalToday: 100, p90CapitalToday: 250 }),
     ]
     const cap = calculateCapitalDisplayCap(rows)
 

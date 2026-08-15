@@ -103,7 +103,8 @@ export function InputPanel({
             <div className="historical-mode-note">
               <strong>Historische Datensätze:</strong> Renditen stammen aus JST R.6 als gleichgewichtete lokale
               Realrenditen entwickelter Länder; Inflation aus der Bundesbank/Destatis-CPI-Reihe. Nutzbare historische
-              Jahre: {validYearLabel}. JST-Daten sind nicht für kommerzielle Nutzung freigegeben.
+              Jahre: {validYearLabel}. Die Simulation zieht Jahre mit Zurücklegen aus diesem Zeitraum; sie ist kein
+              Backtest eines konkreten Kalenderzeitraums. JST-Daten sind nicht für kommerzielle Nutzung freigegeben.
               {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
                 <span>
                   {' '}

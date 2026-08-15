@@ -17,6 +17,7 @@ import {
   runHistoricalBootstrapSimulation,
   type InflationSeries,
 } from '../historicalReturns'
+import { simulateScenario } from '../simulateScenario'
 import { createPortfolioComponents } from '../stochasticReturns'
 
 const inflation: InflationSeries = {
@@ -175,7 +176,7 @@ describe('historical returns', () => {
     )
   })
 
-  it('produces deterministic historical scenario and stochastic summaries for identical inputs', () => {
+  it('produces stable sampled scenarios and bootstrap summaries for identical inputs', () => {
     const settings = {
       portfolioComponents: createPortfolioComponents(
         { equity: 0.7, bonds: 0.2, fixed: 0.1 },
@@ -195,6 +196,33 @@ describe('historical returns', () => {
     )
     expect(runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)).toEqual(
       runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings),
+    )
+  })
+
+  it('uses the fixed-return plan as historical bootstrap reference capital', () => {
+    const settings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        {
+          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+          bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+          cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+        },
+      ),
+      inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+      manualCashRealReturn: 0,
+      simulations: 25,
+    }
+
+    const fixedPlan = simulateScenario(DEFAULT_INPUT)
+    const sampledPath = simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings)
+    const bootstrapSummary = runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)
+
+    expect(bootstrapSummary.rows.map((row) => row.planCapitalToday)).toEqual(
+      fixedPlan.rows.map((row) => row.closingCapitalToday),
+    )
+    expect(bootstrapSummary.rows.map((row) => row.planCapitalToday)).not.toEqual(
+      sampledPath.rows.map((row) => row.closingCapitalToday),
     )
   })
 
