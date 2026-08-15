@@ -166,8 +166,31 @@ Decision needed:
 - B. 30+ valid years is acceptable if sources are clean.
 - C. Accept shorter official modern data and show a stronger warning.
 
+## Locked Phase 2 decisions after first grilling
+
+Max accepted the proposed coherent Phase 2 path with the following defaults:
+
+1. **JST accepted with data-license guardrails**: JST-derived data may ship as the default non-commercial dataset if code/data licenses are separated and future commercial replacement remains possible.
+2. **Equity default**: broad developed/global equity proxy, not Germany-only.
+3. **Equity return basis**: local-real equal-weight developed proxy for Phase 2, with caveat that it is not an exact EUR-hedged or EUR-converted ETF return.
+4. **Bonds default**: JST broad developed long-term government bond real returns.
+5. **Cash default**: JST bills / short-term safe-asset real returns.
+6. **Inflation default**: Destatis German CPI as default; Eurostat Germany HICP can be kept as later cross-check/alternate.
+7. **JST aggregation**: equal-weight countries with valid observations per year.
+8. **Missing/incomplete years**: use only years where all selected series have finite values; no interpolation and no asset-specific fill.
+9. **History window**: post-war/post-1950 default. Full-history datasets may be added later as optional variants.
+
+Additional future research item:
+
+- Long-running broad ETF proxies remain worth researching as a second option / validation benchmark, but not as a replacement for the long-running equity database backbone.
+
 ## Proposed next step
 
-Run a deeper targeted research pass only after decisions 1–5 are answered. The next pass should retrieve exact datasets/files/API queries, inspect columns, produce transformation formulas, and decide final IDs/checksums.
+Run the deeper targeted research pass for the locked source strategy:
 
-If decisions are still pending, do not implement production data yet; implementation before these answers risks building around a source we later reject.
+- retrieve exact JST R.6 dataset/documentation and identify equity, bond, bill/cash, CPI/inflation columns;
+- verify country coverage and post-1950 finite observation intersections;
+- define exact equal-weight aggregation formulas;
+- retrieve exact Destatis CPI table/API query or generated file path;
+- design dataset IDs, metadata, checksums, and `DATA_LICENSES.md` text;
+- produce a PR 2B implementation plan before coding the generator and registry replacement.
