@@ -3,8 +3,14 @@ import { DEFAULT_INPUT } from '../defaults'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+  HISTORICAL_INFLATION_SERIES,
+  HISTORICAL_MINIMUM_OBSERVATIONS,
+  HISTORICAL_RETURN_SERIES,
+  createHistoricalBootstrapSeed,
   findInflationSeries,
+  findHistoricalReturnSeries,
   generateHistoricalReturnPath,
+  getHistoricalDatasetVersion,
   getValidHistoricalYears,
   sampleHistoricalYearsWithReplacement,
   simulateHistoricalBootstrapScenario,
@@ -28,6 +34,11 @@ const inflation: InflationSeries = {
   },
   license: 'test',
   licenseAllowsBundling: true,
+  commercialUseAllowed: true,
+  derivedData: false,
+  sourceDatasetVersion: 'test',
+  sourceChecksum: 'test',
+  transformDescription: 'test',
   startYear: 2000,
   endYear: 2002,
   caveats: [],
@@ -36,6 +47,64 @@ const inflation: InflationSeries = {
 }
 
 describe('historical returns', () => {
+  it('uses production datasets as defaults without fixture or provisional IDs', () => {
+    const defaultIds = [
+      DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+      DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+      DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+      DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    ]
+
+    expect(defaultIds.every((id) => !/fixture|provisional/i.test(id))).toBe(true)
+    expect(defaultIds).toEqual([
+      'jst-r6-developed-equal-weight-equity-real-post1950',
+      'jst-r6-developed-equal-weight-bonds-real-post1950',
+      'jst-r6-developed-equal-weight-bills-real-post1950',
+      'bundesbank-destatis-germany-cpi-yoy-annual-mean-post1950',
+    ])
+  })
+
+  it('has 1950-2020 synchronized default valid years with 71 observations', () => {
+    const components = createPortfolioComponents(
+      { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+      DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+    )
+    const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
+    const validYears = getValidHistoricalYears(components, defaultInflation)
+
+    expect(validYears).toHaveLength(71)
+    expect(validYears[0]).toBe(1950)
+    expect(validYears.at(-1)).toBe(2020)
+    expect(validYears.length).toBeGreaterThan(HISTORICAL_MINIMUM_OBSERVATIONS)
+  })
+
+  it('includes complete production metadata and marks JST as non-commercial', () => {
+    const defaultReturnSeries = [
+      findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity),
+      findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond),
+      findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash),
+    ]
+    const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
+
+    for (const series of defaultReturnSeries) {
+      expect(series).toBeDefined()
+      expect(series?.commercialUseAllowed).toBe(false)
+      expect(series?.derivedData).toBe(true)
+      expect(series?.sourceDatasetVersion).toContain('JST')
+      expect(series?.sourceChecksum).toMatch(/^sha256:/)
+      expect(series?.checksum).toMatch(/^sha256:/)
+      expect(series?.transformDescription).toContain('realReturn')
+      expect(series?.countryCoverage?.minCountriesPerYear).toBe(15)
+      expect(series?.countryCoverage?.maxCountriesPerYear).toBe(16)
+    }
+
+    expect(defaultInflation?.commercialUseAllowed).toBe(true)
+    expect(defaultInflation?.derivedData).toBe(true)
+    expect(defaultInflation?.sourceDatasetVersion).toBe('BBDP1.M.DE.N.VPI.C.A00000.VGJ.LV')
+    expect(defaultInflation?.sourceChecksum).toMatch(/^sha256:/)
+    expect(defaultInflation?.checksum).toMatch(/^sha256:/)
+  })
+
   it('computes valid years from observed intersections and ignores manual series coverage', () => {
     const components = createPortfolioComponents(
       { equity: 0.5, bonds: 0.3, fixed: 0.2 },
@@ -48,9 +117,7 @@ describe('historical returns', () => {
     const fixtureInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
 
     expect(fixtureInflation).toBeDefined()
-    expect(getValidHistoricalYears(components, fixtureInflation!)).toEqual([
-      2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024,
-    ])
+    expect(getValidHistoricalYears(components, fixtureInflation!)).toEqual(Array.from({ length: 71 }, (_, index) => 1950 + index))
   })
 
   it('samples years with replacement using a deterministic seed', () => {
@@ -72,14 +139,40 @@ describe('historical returns', () => {
         cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
       },
     )
-    const fixtureInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
-    const [pathReturn] = generateHistoricalReturnPath(components, fixtureInflation, [2022], 0)
+    const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
+    const [pathReturn] = generateHistoricalReturnPath(components, defaultInflation, [2020], 0)
 
-    const equityNominal = (1 - 0.17) * (1 + 0.069) - 1
-    const bondNominal = (1 - 0.12) * (1 + 0.069) - 1
-    const cashNominal = (1 - 0.07) * (1 + 0.069) - 1
+    const inflation2020 = defaultInflation.annualInflation[2020]
+    const equityNominal = (1 + findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)!.normalizedSeries[2020]) * (1 + inflation2020) - 1
+    const bondNominal = (1 + findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond)!.normalizedSeries[2020]) * (1 + inflation2020) - 1
+    const cashNominal = (1 + findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash)!.normalizedSeries[2020]) * (1 + inflation2020) - 1
 
     expect(pathReturn).toBeCloseTo(0.5 * equityNominal + 0.25 * bondNominal + 0.25 * cashNominal)
+  })
+
+  it('includes dataset versions in deterministic seeds', () => {
+    const defaultSettings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+      ),
+      inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+      manualCashRealReturn: 0,
+      simulations: 25,
+    }
+    const provisionalEquityId = HISTORICAL_RETURN_SERIES.find((series) => series.role === 'equity' && series.id.includes('fixture'))!.id
+    const alternateSettings = {
+      ...defaultSettings,
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS, equity: provisionalEquityId },
+      ),
+    }
+
+    expect(getHistoricalDatasetVersion(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)).toContain('sha256:')
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, defaultSettings)).not.toBe(
+      createHistoricalBootstrapSeed(DEFAULT_INPUT, alternateSettings),
+    )
   })
 
   it('produces deterministic historical scenario and stochastic summaries for identical inputs', () => {
@@ -116,5 +209,10 @@ describe('historical returns', () => {
     )
 
     expect(generateHistoricalReturnPath(components, inflation, [2001], 0.01)).toEqual([0.0403])
+  })
+
+  it('keeps production series registered before provisional options', () => {
+    expect(HISTORICAL_RETURN_SERIES[0]?.id).toBe(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)
+    expect(HISTORICAL_INFLATION_SERIES[0]?.id).toBe(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
   })
 })

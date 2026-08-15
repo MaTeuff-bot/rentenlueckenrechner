@@ -101,8 +101,9 @@ export function InputPanel({
           </div>
           {returnModel === 'historicalAnnualBootstrap' ? (
             <div className="historical-mode-note">
-              <strong>Phase-1-Provisorium:</strong> Die gebündelten Reihen sind kleine Fixture-Daten, keine
-              recherchierten historischen Marktdaten. Nutzbare historische Jahre: {validYearLabel}.
+              <strong>Historische Datensätze:</strong> Renditen stammen aus JST R.6 als gleichgewichtete lokale
+              Realrenditen entwickelter Länder; Inflation aus der Bundesbank/Destatis-CPI-Reihe. Nutzbare historische
+              Jahre: {validYearLabel}. JST-Daten sind nicht für kommerzielle Nutzung freigegeben.
               {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
                 <span>
                   {' '}

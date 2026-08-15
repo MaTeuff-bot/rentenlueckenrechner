@@ -2,6 +2,10 @@ import { simulateScenarioWithReturnPath } from './stochasticReturns'
 import type { RentenlueckeInput, SimulationResult } from './types'
 import type { PortfolioComponent, PortfolioComponentRole, StochasticPercentileRow } from './stochasticReturns'
 import { createSeededRandom } from './stochasticReturns'
+import {
+  HISTORICAL_PRODUCTION_INFLATION_SERIES,
+  HISTORICAL_PRODUCTION_RETURN_SERIES,
+} from './returnData/historicalProductionData'
 
 export type ReturnModel = 'synthetic' | 'historicalAnnualBootstrap'
 export type DatasetRole = 'equity' | 'bond' | 'cash' | 'inflation' | 'other'
@@ -10,6 +14,14 @@ export type DatasetCurrency = 'EUR'
 export type ReturnBasis = 'nominal' | 'real'
 export type ReturnType = 'price' | 'grossTotal' | 'netTotal' | 'yieldBased' | 'unknown'
 export type DatasetConfidence = 'high' | 'medium' | 'low'
+
+export type DatasetCountryCoverage = {
+  includedCountries: readonly string[]
+  excludedCountries: readonly string[]
+  minCountriesPerYear: number
+  maxCountriesPerYear: number
+  byRole?: Readonly<Record<string, { min: number; max: number }>>
+}
 
 export type DatasetSource =
   | {
@@ -40,6 +52,13 @@ export type HistoricalReturnSeries = {
   source: DatasetSource
   license: string
   licenseAllowsBundling: boolean
+  commercialUseAllowed: boolean
+  derivedData: boolean
+  sourceDatasetVersion: string
+  sourceChecksum: string
+  transformDescription: string
+  generatedAt?: string
+  countryCoverage?: DatasetCountryCoverage
   rawSeries?: Record<number, number>
   normalizedSeries: Record<number, number>
   startYear: number
@@ -73,6 +92,12 @@ export type InflationSeries = {
   source: DatasetSource
   license: string
   licenseAllowsBundling: boolean
+  commercialUseAllowed: boolean
+  derivedData: boolean
+  sourceDatasetVersion: string
+  sourceChecksum: string
+  transformDescription: string
+  generatedAt?: string
   startYear: number
   endYear: number
   caveats: string[]
@@ -102,12 +127,20 @@ export type HistoricalBootstrapSimulationSummary = {
 }
 
 export const HISTORICAL_MINIMUM_OBSERVATIONS = 30
-export const DEFAULT_HISTORICAL_INFLATION_SERIES_ID = 'fixture-de-eur-inflation-provisional'
+export const DEFAULT_HISTORICAL_INFLATION_SERIES_ID = 'bundesbank-destatis-germany-cpi-yoy-annual-mean-post1950'
 export const DEFAULT_HISTORICAL_RETURN_SERIES_IDS = {
+  equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
+  bond: 'jst-r6-developed-equal-weight-bonds-real-post1950',
+  cash: 'jst-r6-developed-equal-weight-bills-real-post1950',
+} as const
+
+const PROVISIONAL_RETURN_SERIES_IDS = {
   equity: 'fixture-global-equity-eur-provisional',
   bond: 'fixture-eur-bonds-provisional',
   cash: 'fixture-eur-cash-provisional',
 } as const
+
+const PROVISIONAL_INFLATION_SERIES_ID = 'fixture-de-eur-inflation-provisional'
 
 const provisionalSource: DatasetSource = {
   kind: 'bundled',
@@ -117,8 +150,9 @@ const provisionalSource: DatasetSource = {
 }
 
 export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
+  ...HISTORICAL_PRODUCTION_RETURN_SERIES,
   {
-    id: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+    id: PROVISIONAL_RETURN_SERIES_IDS.equity,
     label: 'Provisorisch: Aktien Welt/EUR',
     description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
     role: 'equity',
@@ -130,6 +164,10 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     source: provisionalSource,
     license: provisionalSource.license,
     licenseAllowsBundling: true,
+    commercialUseAllowed: true,
+    derivedData: false,
+    sourceDatasetVersion: 'phase1-fixture-v1',
+    sourceChecksum: 'phase1-equity-fixture-v1',
     normalizedSeries: {
       2015: 0.08,
       2016: 0.04,
@@ -147,10 +185,11 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
     confidence: 'low',
     transformVersion: 'phase1-fixture-v1',
+    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
     checksum: 'phase1-equity-fixture-v1',
   },
   {
-    id: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+    id: PROVISIONAL_RETURN_SERIES_IDS.bond,
     label: 'Provisorisch: EUR-Anleihen',
     description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
     role: 'bond',
@@ -162,6 +201,10 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     source: provisionalSource,
     license: provisionalSource.license,
     licenseAllowsBundling: true,
+    commercialUseAllowed: true,
+    derivedData: false,
+    sourceDatasetVersion: 'phase1-fixture-v1',
+    sourceChecksum: 'phase1-bond-fixture-v1',
     normalizedSeries: {
       2015: 0.02,
       2016: 0.03,
@@ -179,10 +222,11 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
     confidence: 'low',
     transformVersion: 'phase1-fixture-v1',
+    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
     checksum: 'phase1-bond-fixture-v1',
   },
   {
-    id: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+    id: PROVISIONAL_RETURN_SERIES_IDS.cash,
     label: 'Provisorisch: EUR-Cash',
     description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
     role: 'cash',
@@ -194,6 +238,10 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     source: provisionalSource,
     license: provisionalSource.license,
     licenseAllowsBundling: true,
+    commercialUseAllowed: true,
+    derivedData: false,
+    sourceDatasetVersion: 'phase1-fixture-v1',
+    sourceChecksum: 'phase1-cash-fixture-v1',
     normalizedSeries: {
       2015: -0.01,
       2016: -0.01,
@@ -211,13 +259,15 @@ export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
     caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
     confidence: 'low',
     transformVersion: 'phase1-fixture-v1',
+    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
     checksum: 'phase1-cash-fixture-v1',
   },
 ]
 
 export const HISTORICAL_INFLATION_SERIES: InflationSeries[] = [
+  ...HISTORICAL_PRODUCTION_INFLATION_SERIES,
   {
-    id: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    id: PROVISIONAL_INFLATION_SERIES_ID,
     label: 'Provisorisch: Deutschland/EUR Inflation',
     description: 'Small Phase 1 fixture inflation series used read-only by historical bootstrap mode.',
     geography: 'DE',
@@ -237,11 +287,16 @@ export const HISTORICAL_INFLATION_SERIES: InflationSeries[] = [
     source: provisionalSource,
     license: provisionalSource.license,
     licenseAllowsBundling: true,
+    commercialUseAllowed: true,
+    derivedData: false,
+    sourceDatasetVersion: 'phase1-fixture-v1',
+    sourceChecksum: 'phase1-inflation-fixture-v1',
     startYear: 2015,
     endYear: 2024,
     caveats: ['Provisional fixture data, not researched historical inflation data.', 'Replace in Phase 2.'],
     confidence: 'low',
     transformVersion: 'phase1-fixture-v1',
+    transformDescription: 'Hand-authored small fixture inflation series for Phase 1 wiring tests.',
     checksum: 'phase1-inflation-fixture-v1',
   },
 ]
@@ -349,9 +404,9 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
         role: component.role,
         weight: component.weight,
         returnSeriesId: component.returnSeriesId,
-        datasetVersion: getDatasetVersion(component.returnSeriesId),
+        datasetVersion: getHistoricalDatasetVersion(component.returnSeriesId),
       })),
-      inflationVersion: getInflationVersion(settings.inflationSeriesId),
+      inflationVersion: getHistoricalInflationVersion(settings.inflationSeriesId),
     }),
   )
 }
@@ -468,7 +523,7 @@ function yearsWithFiniteValues(series: Record<number, number>): Set<number> {
   )
 }
 
-function getDatasetVersion(id?: string): string {
+export function getHistoricalDatasetVersion(id?: string): string {
   if (!id) {
     return 'missing'
   }
@@ -481,7 +536,7 @@ function getDatasetVersion(id?: string): string {
   return series ? `${series.transformVersion}:${series.checksum ?? ''}` : id
 }
 
-function getInflationVersion(id: string): string {
+export function getHistoricalInflationVersion(id: string): string {
   const series = findInflationSeries(id)
   return series ? `${series.transformVersion}:${series.checksum ?? ''}` : id
 }
