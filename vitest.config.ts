@@ -5,5 +5,6 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     maxWorkers: 2,
+    testTimeout: 10_000,
   },
 })

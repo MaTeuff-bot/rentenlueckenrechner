@@ -8,6 +8,15 @@ import { simulateScenario } from './simulateScenario'
 import type { RentenlueckeInput, SimulationResult } from './types'
 
 export type AssetClassKey = 'equity' | 'bonds' | 'fixed'
+export type PortfolioComponentRole = 'equity' | 'bond' | 'cash' | 'other'
+
+export type PortfolioComponent = {
+  id: AssetClassKey
+  label: string
+  role: PortfolioComponentRole
+  weight: number
+  returnSeriesId?: string
+}
 
 export type AssetClassAssumption = {
   key: AssetClassKey
@@ -43,7 +52,7 @@ export type StochasticSimulationSummary = {
 export const ASSET_CLASS_ASSUMPTIONS: AssetClassAssumption[] = [
   { key: 'equity', label: 'Aktien', expectedAnnualReturn: 0.07, annualVolatility: 0.18 },
   { key: 'bonds', label: 'Anleihen', expectedAnnualReturn: 0.03, annualVolatility: 0.07 },
-  { key: 'fixed', label: 'Festgeld / Cash', expectedAnnualReturn: 0.02, annualVolatility: 0.01 },
+  { key: 'fixed', label: 'Cash', expectedAnnualReturn: 0.02, annualVolatility: 0.01 },
 ]
 
 export const DEFAULT_ASSET_ALLOCATION: AssetAllocation = {
@@ -56,6 +65,35 @@ export const DEFAULT_STOCHASTIC_SETTINGS: StochasticSettings = {
   allocation: DEFAULT_ASSET_ALLOCATION,
   simulations: 1_000,
   seed: 24_681_357,
+}
+
+export function createPortfolioComponents(
+  allocation: AssetAllocation,
+  returnSeriesIds: Partial<Record<PortfolioComponentRole, string>> = {},
+): PortfolioComponent[] {
+  return [
+    {
+      id: 'equity',
+      label: 'Aktien',
+      role: 'equity',
+      weight: allocation.equity,
+      returnSeriesId: returnSeriesIds.equity,
+    },
+    {
+      id: 'bonds',
+      label: 'Anleihen',
+      role: 'bond',
+      weight: allocation.bonds,
+      returnSeriesId: returnSeriesIds.bond,
+    },
+    {
+      id: 'fixed',
+      label: 'Cash',
+      role: 'cash',
+      weight: allocation.fixed,
+      returnSeriesId: returnSeriesIds.cash,
+    },
+  ]
 }
 
 export const ALLOCATION_RANGE_ERROR = 'Die Aufteilung muss je Anlageklasse zwischen 0 % und 100 % liegen.'
