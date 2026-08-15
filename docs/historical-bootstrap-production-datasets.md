@@ -198,13 +198,165 @@ Create a later research pass for broad, long-running ETF or fund proxies as opti
 
 Acceptance output for that future task: a short matrix of candidate ETFs/funds, inception dates, return basis, currency/share class, licensing/reuse status, annual observation count, and recommendation.
 
-## Proposed next step
+## Targeted source inspection results
 
-Run the deeper targeted research pass for the locked source strategy:
+### JST R.6 exact dataset
 
-- retrieve exact JST R.6 dataset/documentation and identify equity, bond, bill/cash, CPI/inflation columns;
-- verify country coverage and post-1950 finite observation intersections;
-- define exact equal-weight aggregation formulas;
-- retrieve exact Destatis CPI table/API query or generated file path;
-- design dataset IDs, metadata, checksums, and `DATA_LICENSES.md` text;
-- produce a PR 2B implementation plan before coding the generator and registry replacement.
+Downloaded and inspected the JST R.6 Stata dataset from Macrohistory:
+
+- Dataset URL: `https://www.macrohistory.net/app/download/9834512469/JSTdatasetR6.dta?t=1763503850`
+- XLSX companion URL: `https://www.macrohistory.net/app/download/9834512569/JSTdatasetR6.xlsx?t=1763503850`
+- Local inspection checksum for downloaded `.dta`: `sha256:b0ebb74a8d1b5b1bc9033fc46a6dcc578736afff8ce1e1086b7840f2649e79b3`
+- Shape: 2,718 rows × 59 columns
+- Countries in dataset: Australia, Belgium, Canada, Denmark, Finland, France, Germany, Ireland, Italy, Japan, Netherlands, Norway, Portugal, Spain, Sweden, Switzerland, UK, USA
+
+Relevant JST columns for Phase 2:
+
+| Role | JST column | Meaning in JST docs / inspection | Phase 2 use |
+|---|---|---|---|
+| Equity | `eq_tr` | Equity total return, nominal, local currency | Convert to real return with country CPI inflation, then equal-weight aggregate |
+| Bonds | `bond_tr` | Government bond total return, nominal, local currency | Convert to real return with country CPI inflation, then equal-weight aggregate |
+| Cash | `bill_rate` | Government bill / short-term rate, nominal | Convert to real return with country CPI inflation, then equal-weight aggregate |
+| CPI | `cpi` | Consumer price index | Compute country inflation as `cpi[t] / cpi[t-1] - 1` |
+| Interpolation flags | `eq_tr_interp`, `eq_capgain_interp`, `eq_dp_interp` | Equity interpolation flags | Keep as metadata / QA caveat; do not silently discard unless later review says so |
+
+Nominal-to-real transformation for each country-year:
+
+```ts
+countryInflation = cpi[year] / cpi[previousYear] - 1
+realReturn = (1 + nominalReturn) / (1 + countryInflation) - 1
+```
+
+### JST post-1950 coverage
+
+Using `year >= 1950`, finite `eq_tr`, `bond_tr`, `bill_rate`, and computable `cpi` inflation:
+
+- Usable aggregate years: **1950–2020**, **71 annual observations**.
+- Countries with full 1950–2020 coverage for all three return roles: Australia, Belgium, Switzerland, Germany, Denmark, Finland, France, UK, Italy, Japan, Netherlands, Norway, Portugal, Sweden, USA.
+- Spain has 70 usable years for cash/bills, so aggregate year 2018 has 15 countries instead of 16.
+- Canada and Ireland are in JST R.6 but have no post-1950 observations for these return columns in the inspected dataset.
+- Equal-weight aggregate country count by year: min 15, max 16.
+
+Prototype equal-weight aggregate real returns from the inspected data:
+
+| Year | Country count | Equity real | Bond real | Cash real |
+|---:|---:|---:|---:|---:|
+| 1950 | 16 | 9.78% | -1.19% | -0.20% |
+| 1951 | 16 | 11.96% | -9.32% | -7.77% |
+| 1952 | 16 | 5.76% | 1.22% | -1.26% |
+| 1953 | 16 | 15.63% | 4.21% | 1.80% |
+| 1954 | 16 | 37.46% | 3.34% | 1.32% |
+| 2016 | 16 | 4.34% | 3.44% | -0.69% |
+| 2017 | 16 | 12.68% | 1.09% | -1.57% |
+| 2018 | 15 | -8.53% | -0.34% | -1.59% |
+| 2019 | 16 | 20.47% | 6.45% | -1.19% |
+| 2020 | 16 | 5.02% | 3.22% | -0.60% |
+
+There were 3 post-1950 rows with `eq_tr_interp` and `eq_capgain_interp` set, spanning 1975–1977, and 2 with `eq_dp_interp`, spanning 1975–1976. Phase 2 should surface this in metadata/caveats; deeper source-doc review can decide whether to exclude interpolated country rows or keep them. Current recommendation: keep them for the default aggregate unless the return documentation indicates they are unsuitable, because the locked policy is no app-side interpolation, not necessarily excluding source-supplied reconstructed observations.
+
+### Destatis / Bundesbank German CPI inflation source
+
+Two relevant official-source paths were identified:
+
+1. **Bundesbank-hosted Federal Statistical Office CPI long time series**, monthly year-on-year percent change:
+   - API: `https://api.statistiken.bundesbank.de/rest/data/BBDP1/M.DE.N.VPI.C.A00000.VGJ.LV?format=csv&lang=en`
+   - Time series label: `Consumer price index / Germany / Unadjusted figure / Overall index`
+   - Source in CSV metadata: `Federal Statistical Office, Wiesbaden.`
+   - Coverage from API inspection: 1949-06 onward; complete annual 12-month coverage for 1950–2020.
+   - Unit: percent, one decimal.
+   - Proposed Phase 2 use: annual inflation = arithmetic mean of the 12 monthly year-on-year percent changes, divided by 100.
+   - One post-1950 flag observed in the inspected 1950–2020 window: April 1952 marked `Estimated value`.
+
+2. **Destatis publication: Verbraucherpreisindex für Deutschland — Lange Reihen ab 1948 — Dezember 2022**, XLSX:
+   - Page: `https://www.destatis.de/DE/Themen/Wirtschaft/Preise/Verbraucherpreisindex/Publikationen/Downloads-Verbraucherpreise/verbraucherpreisindex-lange-reihen-pdf-5611103.html`
+   - XLSX: `https://www.destatis.de/DE/Themen/Wirtschaft/Preise/Verbraucherpreisindex/Publikationen/Downloads-Verbraucherpreise/verbraucherpreisindex-lange-reihen-xlsx-5611103.xlsx?__blob=publicationFile&v=99`
+   - Contains annual averages and annual changes for several linked German/federal-territory price indices.
+   - Caveat: discontinued after December 2022; the unified German CPI column starts in 1991, while pre-1991 rows rely on earlier former-federal-territory household price-index concepts. This is useful documentation/background but less clean as the default generator source than the Bundesbank-hosted long CPI time series.
+
+Recommendation after targeted inspection: use the **Bundesbank API series backed by the Federal Statistical Office** as the default sampled Germany CPI inflation source for Phase 2, because it gives complete 1950–2020 coverage aligned with the JST post-war default. Keep the Destatis long-series XLSX as a documented cross-check/source note, not the first generator path.
+
+Prototype annual sampled inflation values from the Bundesbank long CPI series:
+
+| Year | Annual inflation proxy |
+|---:|---:|
+| 1950 | -6.32% |
+| 1951 | 7.69% |
+| 1952 | 2.27% |
+| 1953 | -1.77% |
+| 1954 | 0.23% |
+| 2016 | 0.45% |
+| 2017 | 1.53% |
+| 2018 | 1.79% |
+| 2019 | 1.39% |
+| 2020 | 0.53% |
+
+### Proposed Phase 2B production dataset IDs
+
+Default registry entries:
+
+| Role | Dataset ID | Label | Basis |
+|---|---|---|---|
+| Equity | `jst-r6-developed-equal-weight-equity-real-post1950` | `JST developed equities, equal-weight real, post-1950` | real annual return |
+| Bonds | `jst-r6-developed-equal-weight-bonds-real-post1950` | `JST developed government bonds, equal-weight real, post-1950` | real annual return |
+| Cash | `jst-r6-developed-equal-weight-bills-real-post1950` | `JST developed bills/cash, equal-weight real, post-1950` | real annual return |
+| Inflation | `bundesbank-destatis-germany-cpi-yoy-annual-mean-post1950` | `Germany CPI inflation, Bundesbank/Destatis annualized monthly YoY, post-1950` | annual inflation |
+
+All four defaults should cover 1950–2020, giving **71 valid synchronized sample years**.
+
+### Proposed aggregation formula
+
+For each JST return role and each year from 1950 through 2020:
+
+1. For each country with finite `nominalReturn`, finite `cpi[year]`, and finite `cpi[previousYear]`, compute country real return.
+2. For each role/year, average the real returns across available countries.
+3. For the default synchronized year set, require finite aggregate equity, aggregate bonds, aggregate cash, and Germany CPI inflation.
+4. Store annual country counts per role/year in source metadata or generated QA output; at minimum store the min/max country count and caveat that Spain cash is missing in one year and Canada/Ireland are absent from return aggregates.
+
+Implementation sketch:
+
+```ts
+const countryInflation = cpiThisYear / cpiPreviousYear - 1
+const countryRealReturn = (1 + countryNominalReturn) / (1 + countryInflation) - 1
+const aggregateRealReturn = mean(countryRealReturnsForYear)
+```
+
+### License and metadata implementation notes
+
+Add `DATA_LICENSES.md` with separate sections for:
+
+- app code license;
+- JST-derived return snapshots: CC BY-NC-SA 4.0, source URL, release R.6, non-commercial caveat, commercial replacement note;
+- Bundesbank/Destatis CPI series: ESCB/Bundesbank/Destatis attribution and reuse notes.
+
+Add dataset metadata fields beyond the current Phase 1 shape where useful:
+
+```ts
+commercialUseAllowed: boolean
+derivedData: boolean
+retrievedAt: string
+sourceDatasetVersion: string
+sourceChecksum: string
+transformVersion: string
+transformDescription: string
+countryCoverage?: {
+  includedCountries: string[]
+  excludedCountries: string[]
+  minCountriesPerYear: number
+  maxCountriesPerYear: number
+}
+```
+
+### Phase 2B implementation plan
+
+1. Add `DATA_LICENSES.md`.
+2. Add a generator script, e.g. `scripts/generateHistoricalReturnData.mjs` or `.py`, that downloads/reads JST R.6 and Bundesbank CPI, computes the post-1950 snapshots, and writes a TypeScript data module.
+3. Add generated data under `src/features/rentenluecke/model/returnData/`, keeping raw downloaded data out of the repo unless explicitly chosen.
+4. Replace Phase 1 fixture default IDs with the generated production IDs.
+5. Keep the Phase 1 provisional fixtures only as test fixtures or remove them from user-facing defaults.
+6. Add tests for:
+   - 1950–2020 synchronized valid-year coverage;
+   - metadata/license completeness;
+   - no Phase 1 provisional dataset selected by default;
+   - deterministic seed changes when generated dataset checksum changes;
+   - sampled historical mode still produces stable rows and warnings do not trigger for 71 observations.
+7. Run full gate: `npm test -- --run`, `npm run lint`, `npm run build`.
