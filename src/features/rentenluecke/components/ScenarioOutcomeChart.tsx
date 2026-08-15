@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { buildDisplayRows, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
 import { formatCurrency, formatPercent, formatWholeNumber } from '../model/format'
+import type { ReturnModel } from '../model/historicalReturns'
 
 type ScenarioOutcomeChartProps = {
   rows: ScenarioOutcomeChartRow[]
@@ -20,6 +21,7 @@ type ScenarioOutcomeChartProps = {
   showSurvivalProbability: boolean
   useLogCapitalScale: boolean
   capitalDisplayCap: number
+  returnModel: ReturnModel
 }
 
 type ChartTooltipPayload = {
@@ -38,7 +40,7 @@ function formatTooltipCurrency(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatCurrency(value, 100) : formatCurrency(0, 100)
 }
 
-function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
+function ChartTooltip({ active, label, payload, returnModel }: ChartTooltipProps & { returnModel: ReturnModel }) {
   if (!active || !payload || payload.length === 0) return null
 
   const row = payload[0]?.payload
@@ -48,16 +50,19 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
   const survivalProbability = row?.survivalProbabilityEnd ?? Number(values.get('survivalProbabilityEnd'))
   const depletionProbability = row?.depletionProbability ?? 0
 
+  const percentileLabel =
+    returnModel === 'historicalAnnualBootstrap' ? 'Historischer Bootstrap' : 'Simulierte Verläufe'
+
   return (
     <div className="chart-tooltip">
       <strong>
         Alter {ageStart}-{ageEnd}
       </strong>
-      <span>P10: {formatTooltipCurrency(row?.p10CapitalToday)}</span>
-      <span>P50: {formatTooltipCurrency(row?.p50CapitalToday ?? values.get('p50CapitalToday'))}</span>
-      <span>P90: {formatTooltipCurrency(row?.p90CapitalToday)}</span>
+      <span>{percentileLabel} P10: {formatTooltipCurrency(row?.p10CapitalToday)}</span>
+      <span>{percentileLabel} P50: {formatTooltipCurrency(row?.p50CapitalToday ?? values.get('p50CapitalToday'))}</span>
+      <span>{percentileLabel} P90: {formatTooltipCurrency(row?.p90CapitalToday)}</span>
       <span>
-        Deterministisch: {formatTooltipCurrency(row?.deterministicCapitalToday ?? values.get('deterministicCapitalToday'))}
+        Planwert bei fester Rendite: {formatTooltipCurrency(row?.planCapitalToday ?? values.get('planCapitalToday'))}
       </span>
       <span>Aufbrauchwahrscheinlichkeit: {formatPercent(depletionProbability)}</span>
       {Number.isFinite(survivalProbability) ? (
@@ -76,6 +81,7 @@ export function ScenarioOutcomeChart({
   showSurvivalProbability,
   useLogCapitalScale,
   capitalDisplayCap,
+  returnModel,
 }: ScenarioOutcomeChartProps) {
   const displayRows = buildDisplayRows(rows, useLogCapitalScale, capitalDisplayCap)
   const showProbabilityAxis = showSurvivalProbability || rows.length > 0
@@ -111,7 +117,7 @@ export function ScenarioOutcomeChart({
               width={62}
             />
           ) : null}
-          <Tooltip content={<ChartTooltip />} />
+          <Tooltip content={<ChartTooltip returnModel={returnModel} />} />
           <Legend verticalAlign="top" height={36} />
           <ReferenceLine x={retirementAge} stroke="#6b7280" strokeDasharray="4 4" label="Rentenbeginn" />
           {depletionAgeEnd ? (
@@ -141,8 +147,8 @@ export function ScenarioOutcomeChart({
           <Line
             yAxisId="capital"
             type="monotone"
-            dataKey="chartDeterministicCapitalToday"
-            name="Deterministisch"
+            dataKey="chartPlanCapitalToday"
+            name="Planwert bei fester Rendite"
             stroke="#6b7280"
             strokeWidth={1.8}
             strokeDasharray="5 5"

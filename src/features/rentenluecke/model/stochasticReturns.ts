@@ -36,7 +36,7 @@ export type StochasticSettings = {
 export type StochasticPercentileRow = {
   ageStart: number
   ageEnd: number
-  deterministicCapitalToday: number
+  planCapitalToday: number
   p10CapitalToday: number
   p50CapitalToday: number
   p90CapitalToday: number
@@ -211,7 +211,7 @@ export function runStochasticSimulation(
     return {
       ageStart: deterministicRow.ageStart,
       ageEnd: deterministicRow.ageEnd,
-      deterministicCapitalToday: deterministicRow.closingCapitalToday,
+      planCapitalToday: deterministicRow.closingCapitalToday,
       p10CapitalToday: percentile(capitalValues, 0.1),
       p50CapitalToday: percentile(capitalValues, 0.5),
       p90CapitalToday: percentile(capitalValues, 0.9),

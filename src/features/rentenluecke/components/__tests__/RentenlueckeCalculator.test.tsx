@@ -43,7 +43,7 @@ vi.mock('../../model/stochasticReturns', async (importOriginal) => {
         rows: result.rows.map((row) => ({
           ageStart: row.ageStart,
           ageEnd: row.ageEnd,
-          deterministicCapitalToday: row.closingCapitalToday,
+          planCapitalToday: row.closingCapitalToday,
           p10CapitalToday: row.closingCapitalToday,
           p50CapitalToday: row.closingCapitalToday,
           p90CapitalToday: row.closingCapitalToday,
@@ -75,17 +75,31 @@ describe('RentenlueckeCalculator', () => {
     render(<RentenlueckeCalculator />)
 
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
-    expect(screen.getAllByText('Benötigtes Kapital zum Rentenbeginn')).not.toHaveLength(0)
+    expect(screen.getAllByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toHaveLength(0)
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
     expect(screen.getByText(/1\.000 Verläufe/)).toBeInTheDocument()
     expect(screen.getAllByText(/heutiger Kaufkraft/).length).toBeGreaterThan(0)
     expect(screen.getByLabelText('Kapital logarithmisch skalieren')).toBeInTheDocument()
+    expect(screen.getByText('P50 mittlerer Verlauf')).toBeInTheDocument()
+    expect(screen.getByText('Planwert bei fester Rendite')).toBeInTheDocument()
     expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
     expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
     expect(screen.getByText('Aufbrauchwahrscheinlichkeit')).toBeInTheDocument()
     expect(inputById('annualReturnBeforeRetirement').value).not.toMatch(/\.\d{2,}/)
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
+  })
+
+  it('labels historical bootstrap results as percentiles instead of a deterministic draw', () => {
+    render(<RentenlueckeCalculator />)
+
+    fireEvent.click(screen.getByLabelText('Historischer Jahres-Bootstrap'))
+
+    expect(screen.getByText(/Median-Kapital zum Rentenbeginn \(P50\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Jahre werden mit Zurücklegen aus 1950-2020 gezogen/)).toBeInTheDocument()
+    expect(screen.getAllByText(/kein Backtest eines konkreten Kalenderzeitraums/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Planwert-Ledger bei fester Rendite/)).toBeInTheDocument()
+    expect(screen.queryByText('Deterministisch')).not.toBeInTheDocument()
   })
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {

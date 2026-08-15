@@ -1,20 +1,27 @@
 import { useState } from 'react'
 import { formatCurrency, formatNumber, formatPercent } from '../model/format'
+import type { ReturnModel } from '../model/historicalReturns'
 import type { YearlyPeriodRow } from '../model/types'
 
 type YearlyTableProps = {
   rows: YearlyPeriodRow[]
+  returnModel: ReturnModel
 }
 
-export function YearlyTable({ rows }: YearlyTableProps) {
+export function YearlyTable({ rows, returnModel }: YearlyTableProps) {
   const [showDetails, setShowDetails] = useState(false)
+  const isHistoricalBootstrap = returnModel === 'historicalAnnualBootstrap'
 
   return (
     <section className="panel" aria-labelledby="table-title">
       <div className="panel-heading">
         <div>
           <h2 id="table-title">Jahrestabelle</h2>
-          <p>Die Tabelle ist das maßgebliche Simulationsergebnis.</p>
+          <p>
+            {isHistoricalBootstrap
+              ? 'Planwert-Ledger bei fester Rendite; das Diagramm zeigt die historische Bootstrap-Verteilung.'
+              : 'Planwert-Ledger bei fester Rendite.'}
+          </p>
         </div>
         <label className="toggle">
           <input type="checkbox" checked={showDetails} onChange={(event) => setShowDetails(event.target.checked)} />

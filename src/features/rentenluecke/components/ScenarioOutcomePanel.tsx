@@ -8,6 +8,7 @@ import {
 } from '../charting/scenarioOutcomeData'
 import { ScenarioOutcomeChart } from './ScenarioOutcomeChart'
 import { formatCurrency, formatPercent } from '../model/format'
+import type { ReturnModel } from '../model/historicalReturns'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
 import { DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE, type LifeTableSex } from '../mortality/mortality'
@@ -15,6 +16,8 @@ import { DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE, type LifeTableSex } from '..
 type ScenarioOutcomePanelProps = {
   result: SimulationResult
   stochasticSummary: StochasticSimulationSummary
+  returnModel: ReturnModel
+  historicalValidYears: number[]
 }
 
 const sexOptions: { value: LifeTableSex; label: string }[] = [
@@ -35,7 +38,12 @@ function RiskChip({ chip }: { chip: DepletionRiskChip }) {
   )
 }
 
-export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutcomePanelProps) {
+export function ScenarioOutcomePanel({
+  result,
+  stochasticSummary,
+  returnModel,
+  historicalValidYears,
+}: ScenarioOutcomePanelProps) {
   const [showSurvivalProbability, setShowSurvivalProbability] = useState(true)
   const [useLogCapitalScale, setUseLogCapitalScale] = useState(false)
   const [lifeTableSex, setLifeTableSex] = useState<LifeTableSex>('conservative')
@@ -49,6 +57,11 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
   const capitalDisplayCap = calculateCapitalDisplayCap(chartRows)
   const hasCapitalDisplayCap = isCapitalDisplayCapped(chartRows, capitalDisplayCap)
   const reachesDestatisAgeLimit = chartRows.some((row) => row.ageEnd >= DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE)
+  const isHistoricalBootstrap = returnModel === 'historicalAnnualBootstrap'
+  const historicalYearLabel =
+    historicalValidYears.length > 0
+      ? `${historicalValidYears[0]}-${historicalValidYears[historicalValidYears.length - 1]}`
+      : 'den verfügbaren historischen Jahren'
 
   return (
     <section className="panel outcome-panel" aria-labelledby="outcome-title">
@@ -56,8 +69,9 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         <div>
           <h2 id="outcome-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
-            In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Alle
-            Kapitalwerte sind in heutiger Kaufkraft dargestellt.
+            In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Die zentrale
+            Linie zeigt P50, die gestrichelte Linie den Planwert bei fester Rendite. Alle Kapitalwerte sind in heutiger
+            Kaufkraft dargestellt.
           </p>
         </div>
         <div className="simulation-badge">{stochasticSummary.simulations.toLocaleString('de-DE')} Verläufe</div>
@@ -110,13 +124,20 @@ export function ScenarioOutcomePanel({ result, stochasticSummary }: ScenarioOutc
         showSurvivalProbability={showSurvivalProbability}
         useLogCapitalScale={useLogCapitalScale}
         capitalDisplayCap={capitalDisplayCap}
+        returnModel={returnModel}
       />
 
       <p className="chart-note">
-        Die Simulation nutzt {stochasticSummary.simulations.toLocaleString('de-DE')} zufällige Renditeverläufe auf Basis
-        vereinfachter Annahmen für Aktien, Anleihen und Festgeld/Cash. Die Überlebenswahrscheinlichkeit basiert auf der
-        Periodensterbetafel 2023/2025 des Statistischen Bundesamts (Destatis) für Deutschland und ist bedingt auf das
-        aktuelle Alter. Sie ist keine individuelle Prognose und keine Anlageberatung.
+        {isHistoricalBootstrap
+          ? `P10, P50 und P90 sind Perzentile aus ${stochasticSummary.simulations.toLocaleString(
+              'de-DE',
+            )} historischen Bootstrap-Verläufen. Die Jahre werden mit Zurücklegen aus ${historicalYearLabel} gezogen; das ist kein Backtest eines konkreten Kalenderzeitraums.`
+          : `P10, P50 und P90 sind Perzentile aus ${stochasticSummary.simulations.toLocaleString(
+              'de-DE',
+            )} synthetischen Renditeverläufen auf Basis vereinfachter Annahmen für Aktien, Anleihen und Cash.`}{' '}
+        Die Überlebenswahrscheinlichkeit basiert auf der Periodensterbetafel 2023/2025 des Statistischen Bundesamts
+        (Destatis) für Deutschland und ist bedingt auf das aktuelle Alter. Sie ist keine individuelle Prognose und keine
+        Anlageberatung.
       </p>
       {hasCapitalDisplayCap ? (
         <p className="chart-note">

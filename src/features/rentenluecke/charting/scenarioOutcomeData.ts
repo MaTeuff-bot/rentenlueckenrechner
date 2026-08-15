@@ -5,7 +5,7 @@ import { getSurvivalProbabilityForAgeEnd, type LifeTableSex } from '../mortality
 export type ScenarioOutcomeChartRow = {
   ageStart: number
   ageEnd: number
-  deterministicCapitalToday: number
+  planCapitalToday: number
   p10CapitalToday: number
   p50CapitalToday: number
   p90CapitalToday: number
@@ -23,7 +23,7 @@ export type DepletionRiskChip = {
 }
 
 export type ChartDisplayRow = ScenarioOutcomeChartRow & {
-  chartDeterministicCapitalToday: number
+  chartPlanCapitalToday: number
   chartP10CapitalToday: number
   chartP50CapitalToday: number
   chartP90CapitalToday: number
@@ -54,7 +54,7 @@ export function toChartCapital(value: number, useLogCapitalScale: boolean, capit
 }
 
 export function calculateCapitalDisplayCap(rows: ScenarioOutcomeChartRow[]): number {
-  return Math.max(1, Math.max(...rows.map((row) => row.deterministicCapitalToday), 0) * 2)
+  return Math.max(1, Math.max(...rows.map((row) => row.planCapitalToday), 0) * 2)
 }
 
 export function isCapitalDisplayCapped(rows: ScenarioOutcomeChartRow[], capitalDisplayCap: number): boolean {
@@ -63,7 +63,7 @@ export function isCapitalDisplayCapped(rows: ScenarioOutcomeChartRow[], capitalD
       row.p10CapitalToday > capitalDisplayCap ||
       row.p50CapitalToday > capitalDisplayCap ||
       row.p90CapitalToday > capitalDisplayCap ||
-      row.deterministicCapitalToday > capitalDisplayCap,
+      row.planCapitalToday > capitalDisplayCap,
   )
 }
 
@@ -76,15 +76,11 @@ export function buildDisplayRows(
     const chartP10CapitalToday = toChartCapital(row.p10CapitalToday, useLogCapitalScale, capitalDisplayCap)
     const chartP50CapitalToday = toChartCapital(row.p50CapitalToday, useLogCapitalScale, capitalDisplayCap)
     const chartP90CapitalToday = toChartCapital(row.p90CapitalToday, useLogCapitalScale, capitalDisplayCap)
-    const chartDeterministicCapitalToday = toChartCapital(
-      row.deterministicCapitalToday,
-      useLogCapitalScale,
-      capitalDisplayCap,
-    )
+    const chartPlanCapitalToday = toChartCapital(row.planCapitalToday, useLogCapitalScale, capitalDisplayCap)
 
     return {
       ...row,
-      chartDeterministicCapitalToday,
+      chartPlanCapitalToday,
       chartP10CapitalToday,
       chartP50CapitalToday,
       chartP90CapitalToday,
@@ -109,8 +105,8 @@ export function buildScenarioOutcomeRows(
     return {
       ageStart: deterministicRow.ageStart,
       ageEnd: deterministicRow.ageEnd,
-      deterministicCapitalToday: roundCapital(
-        stochasticRow?.deterministicCapitalToday ?? deterministicRow.closingCapitalToday,
+      planCapitalToday: roundCapital(
+        stochasticRow?.planCapitalToday ?? deterministicRow.closingCapitalToday,
       ),
       p10CapitalToday,
       p50CapitalToday,
