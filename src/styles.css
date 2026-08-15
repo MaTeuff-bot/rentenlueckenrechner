@@ -21,7 +21,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -116,6 +117,10 @@ h2 {
   gap: 18px;
 }
 
+.wide-fieldset {
+  grid-column: 1 / -1;
+}
+
 fieldset {
   display: grid;
   gap: 14px;
@@ -167,6 +172,23 @@ legend {
   outline: 0;
 }
 
+.field select,
+.field > input[readonly] {
+  width: 100%;
+  min-height: 41px;
+  min-width: 0;
+  border: 1px solid #b9c4cf;
+  border-radius: 6px;
+  background: #fff;
+  color: #16202a;
+  padding: 9px 10px;
+}
+
+.field > input[readonly] {
+  background: #f3f6f8;
+  color: #4b5a69;
+}
+
 .field input[aria-invalid="true"] {
   background: #fff8f7;
 }
@@ -201,6 +223,40 @@ legend {
 
 .secondary-button:hover {
   background: #eef5f7;
+}
+
+.segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.segmented-control label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #b9c4cf;
+  border-radius: 6px;
+  background: #fff;
+  color: #23313f;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+
+.segmented-control input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1f6f8b;
+}
+
+.historical-mode-note {
+  border: 1px solid #d08a70;
+  border-radius: 6px;
+  background: #fff8f2;
+  color: #7a321a;
+  padding: 10px 12px;
+  line-height: 1.45;
 }
 
 .summary-grid {
