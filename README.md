@@ -33,6 +33,16 @@ The depletion probability line is the share of simulated paths with capital at o
 
 When logarithmic scaling is enabled, zero or negative capital is pinned to the bottom of the chart for display only. Very high capital paths may also be capped in the chart to keep the main range readable; tooltips and risk cards continue to use the underlying simulation values.
 
+## Historical Bootstrap Returns
+
+The return-source section can use historical annual bootstrap data instead of only synthetic assumptions. Historical asset sources sample usable calendar years with replacement: the same year may appear more than once in one simulated path.
+
+When several historical sources are selected, they share the sampled calendar year, so equity, bond, cash, and inflation observations from that year stay synchronized. Synthetic sources are different: they draw their own nominal returns per asset class and do not reduce the historical overlap used for the remaining historical sources.
+
+The bundled historical default uses JST Macrohistory R.6 derived real-return proxies for developed-market equities, bonds, and bills/cash, plus a Bundesbank/Destatis German CPI inflation proxy. JST-derived data is licensed CC BY-NC-SA 4.0 and is not cleared for commercial use.
+
+Bootstrap results are proxies, not forecasts and not exact backtests. They do not represent the precise realized return of a specific ETF, fund, tax situation, currency conversion, or EUR investor account.
+
 ## Data And Deploy Notes
 
 The mortality data is generated into `src/features/rentenluecke/mortality/destatisGermanyPeriodLifeTable2023_2025.ts` from Destatis GENESIS dataset `12621-0001` for period `2023/2025`.

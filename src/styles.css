@@ -251,12 +251,125 @@ legend {
 }
 
 .historical-mode-note {
-  border: 1px solid #d08a70;
+  border: 1px solid #cdd8e2;
   border-radius: 6px;
-  background: #fff8f2;
-  color: #7a321a;
+  background: #f8fbfc;
+  color: #243544;
   padding: 10px 12px;
   line-height: 1.45;
+}
+
+.source-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-chip-list span,
+.source-caveats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #b9c4cf;
+  border-radius: 999px;
+  background: #fff;
+  color: #344355;
+  padding: 4px 9px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.source-warning,
+.source-mixed-note {
+  margin: 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  line-height: 1.45;
+}
+
+.source-warning {
+  border: 1px solid #d08a70;
+  background: #fff8f2;
+  color: #7a321a;
+}
+
+.source-mixed-note {
+  border: 1px solid #8bb9c8;
+  background: #f0f8fa;
+  color: #1d5366;
+}
+
+.source-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.source-detail-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.source-detail-card h3 {
+  margin: 0;
+  color: #16202a;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.source-detail-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.source-detail-card dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.source-detail-card dt {
+  color: #5a6877;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.source-detail-card dd {
+  min-width: 0;
+  margin: 0;
+  color: #23313f;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.source-caveats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.method-details {
+  border-top: 1px solid #dce3ea;
+  padding-top: 12px;
+}
+
+.method-details summary {
+  color: #23313f;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.method-details p {
+  margin: 10px 0 0;
 }
 
 .summary-grid {
@@ -506,6 +619,7 @@ tr:last-child td {
 
 @media (max-width: 900px) {
   .input-grid,
+  .source-detail-grid,
   .summary-grid {
     grid-template-columns: 1fr;
   }

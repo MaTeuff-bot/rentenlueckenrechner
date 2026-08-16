@@ -4,6 +4,13 @@
 
 Locked design plan for the historical-data return model. This plan assumes the app stays Germany/EUR-first and keeps the existing simple portfolio UI while introducing a historical annual bootstrap simulation mode.
 
+Current implementation status:
+
+- Phase 1 is implemented: the app has deterministic synchronized annual sampling, valid-year overlap handling, selected return sources, read-only inflation, and model tests.
+- Phase 2 is implemented for the shipped defaults: JST R.6 derived developed-market real-return proxies are bundled for equities, bonds, and bills/cash; Bundesbank/Destatis German CPI is bundled for inflation; metadata includes source, license, transform, checksum, coverage, and caveats.
+- Combined source selection is implemented: historical and synthetic per-asset sources can be mixed, and synthetic sources do not restrict the historical valid-year set.
+- Phase 3 is the current UX/docs/test pass: source details, method caveats, visible chips, mixed-source note, README explanation, and component coverage for user-visible behavior.
+
 ## Phase philosophy
 
 Each implementation phase should leave the app in a working, reviewable state:
