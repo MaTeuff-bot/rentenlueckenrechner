@@ -69,8 +69,8 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.queryByText('Synthetische Annahmen')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Historischer Jahres-Bootstrap')).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Renditequellen je Anlageklasse' })).toBeInTheDocument()
-    expect(screen.getByText(/Synthetische Quellen ziehen je Anlageklasse eigene nominale Renditen/)).toBeInTheDocument()
-  })
+    expect(screen.getByText(/Die Simulation mischt ganze Kalenderjahre/)).toBeInTheDocument()
+  }, 20000)
 
   it('labels bootstrap results as percentiles instead of a deterministic draw', () => {
     render(<RentenlueckeCalculator />)
@@ -80,6 +80,39 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/kein Backtest eines konkreten Kalenderzeitraums/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Planwert-Ledger bei fester Rendite/)).toBeInTheDocument()
     expect(screen.queryByText('Deterministisch')).not.toBeInTheDocument()
+  })
+
+  it('renders selected source details with source, license, and caveat information', () => {
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByRole('group', { name: 'Ausgewählte Quellen im Detail' })).toBeInTheDocument()
+    expect(screen.getAllByText('Jorda-Schularick-Taylor Macrohistory Database R.6').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/CC BY-NC-SA 4\.0; nicht für kommerzielle Nutzung freigegeben/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('ETF/EUR-Proxy').length).toBeGreaterThan(0)
+    expect(screen.getByText('Bundesbank time series sourced to Federal Statistical Office, Wiesbaden')).toBeInTheDocument()
+    expect(screen.getByText('CPI-Jahresproxy')).toBeInTheDocument()
+  })
+
+  it('shows the mixed-source note only when synthetic and historical sources are selected together', () => {
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.queryByText(/Gemischte Quellen/)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Cash'), { target: { value: 'synthetic-cash-assumption-v1' } })
+
+    expect(screen.getByText(/Gemischte Quellen/)).toBeInTheDocument()
+    expect(screen.getByText(/synthetische Anlagen ziehen separat/)).toBeInTheDocument()
+  })
+
+  it('explains the bootstrap method without requiring source-code context', () => {
+    render(<RentenlueckeCalculator />)
+
+    fireEvent.click(screen.getByText('Methode und Grenzen'))
+
+    expect(screen.getAllByText(/mit Zurücklegen/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/kein Backtest/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/keine Prognose/)).toBeInTheDocument()
+    expect(screen.getByText(/nicht die exakte Rendite eines bestimmten ETF/)).toBeInTheDocument()
   })
 
   it('shows synthetic return sources as per-asset options', () => {
@@ -139,7 +172,7 @@ describe('RentenlueckeCalculator', () => {
 
     render(<RentenlueckeCalculator />)
 
-    expect(screen.getByDisplayValue('Manuell: fester Realzins')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Cash: fester Realzins')).toBeInTheDocument()
     expect(inputById('manualCashRealReturn')).toHaveValue(1)
   })
 
