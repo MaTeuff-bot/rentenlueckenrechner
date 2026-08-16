@@ -20,6 +20,7 @@ export function RentenlueckeCalculator() {
     updateAllocation,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
+    updateInflationSource,
     reset,
   } = useScenarioState()
 
@@ -48,6 +49,7 @@ export function RentenlueckeCalculator() {
           onAllocationChange={updateAllocation}
           onHistoricalReturnSeriesChange={updateHistoricalReturnSeries}
           onManualCashRealReturnChange={updateManualCashRealReturn}
+          onInflationSourceChange={updateInflationSource}
           onReset={reset}
         />
 

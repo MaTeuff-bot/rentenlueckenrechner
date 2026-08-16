@@ -4,13 +4,15 @@ import { DEFAULT_INPUT } from '../model/defaults'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+  FIXED_INFLATION_SOURCE_ID,
   SYNTHETIC_RETURN_SERIES_IDS,
   findInflationSeries,
+  findInflationSourceOption,
   getValidHistoricalYears,
   runHistoricalBootstrapSimulation,
+  simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
-import { simulateScenario } from '../model/simulateScenario'
 import {
   calculatePortfolioExpectedReturn,
   createPortfolioComponents,
@@ -22,10 +24,21 @@ import {
 } from '../model/stochasticReturns'
 import type { RentenlueckeInput } from '../model/types'
 
-const STORAGE_KEY = 'rentenlueckenrechner.scenario.v4'
-const PREVIOUS_STORAGE_KEY = 'rentenlueckenrechner.scenario.v3'
+const STORAGE_KEY = 'rentenlueckenrechner.scenario.v5'
+const PREVIOUS_STORAGE_KEY = 'rentenlueckenrechner.scenario.v4'
+const V3_STORAGE_KEY = 'rentenlueckenrechner.scenario.v3'
 const V2_STORAGE_KEY = 'rentenlueckenrechner.scenario.v2'
 const LEGACY_STORAGE_KEY = 'rentenlueckenrechner.scenario.v1'
+
+const PROVISIONAL_RETURN_SERIES_ID_MIGRATIONS = {
+  'fixture-global-equity-eur-provisional': DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+  'fixture-eur-bonds-provisional': DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+  'fixture-eur-cash-provisional': DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+} as const
+
+const PROVISIONAL_INFLATION_SERIES_ID_MIGRATIONS = {
+  'fixture-de-eur-inflation-provisional': DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+} as const
 
 const assetAllocationSchema = z.object({
   equity: z.number().finite().min(0).max(1),
@@ -34,6 +47,21 @@ const assetAllocationSchema = z.object({
 })
 
 const persistedScenarioSchema = z.object({
+  version: z.literal(5),
+  input: rentenlueckeInputSchema,
+  allocation: assetAllocationSchema,
+  historical: z.object({
+    returnSeriesIds: z.object({
+      equity: z.string(),
+      bond: z.string(),
+      cash: z.string(),
+    }),
+    inflationSourceId: z.string(),
+    manualCashRealReturn: z.number().finite().min(-0.5).max(0.5),
+  }),
+})
+
+const v4PersistedScenarioSchema = z.object({
   version: z.literal(4),
   input: rentenlueckeInputSchema,
   allocation: assetAllocationSchema,
@@ -48,7 +76,7 @@ const persistedScenarioSchema = z.object({
   }),
 })
 
-const previousPersistedScenarioSchema = z.object({
+const v3PersistedScenarioSchema = z.object({
   version: z.literal(3),
   input: rentenlueckeInputSchema,
   allocation: assetAllocationSchema,
@@ -90,23 +118,23 @@ export function useScenarioState() {
   const historicalSettings = useMemo(
     () => ({
       portfolioComponents: createPortfolioComponents(allocation, historical.returnSeriesIds),
-      inflationSeriesId: historical.inflationSeriesId,
+      inflationSourceId: historical.inflationSourceId,
       manualCashRealReturn: historical.manualCashRealReturn,
       simulations: DEFAULT_STOCHASTIC_SETTINGS.simulations,
     }),
     [allocation, historical],
   )
   const historicalValidYears = useMemo(() => {
-    const inflationSeries = findInflationSeries(historical.inflationSeriesId)
-    return inflationSeries ? getValidHistoricalYears(historicalSettings.portfolioComponents, inflationSeries) : []
-  }, [historical.inflationSeriesId, historicalSettings.portfolioComponents])
+    const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
+    return inflationSource ? getValidHistoricalYears(historicalSettings.portfolioComponents, inflationSource) : []
+  }, [historical.inflationSourceId, historicalSettings.portfolioComponents, input.annualInflationRate])
   const result = useMemo(() => {
     if (!isValid || !parsedInput.success) {
       return null
     }
 
-    return simulateScenario(parsedInput.data)
-  }, [isValid, parsedInput])
+    return simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
+  }, [historicalSettings, isValid, parsedInput])
   const stochasticSummary = useMemo(() => {
     if (!isValid || !parsedInput.success) {
       return null
@@ -122,7 +150,7 @@ export function useScenarioState() {
 
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ version: 4, input: parsedInput.data, allocation, historical }),
+      JSON.stringify({ version: 5, input: parsedInput.data, allocation, historical }),
     )
   }, [allocation, historical, isValid, parsedInput])
 
@@ -160,10 +188,17 @@ export function useScenarioState() {
     }))
   }
 
+  const updateInflationSource = (sourceId: string) => {
+    setState((current) => ({
+      ...current,
+      historical: { ...current.historical, inflationSourceId: sourceId },
+    }))
+  }
+
   const reset = () => {
     const nextState = createDefaultState()
     setState(nextState)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 4, ...nextState }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 5, ...nextState }))
   }
 
   return {
@@ -181,6 +216,7 @@ export function useScenarioState() {
     updateAllocation,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
+    updateInflationSource,
     reset,
   }
 }
@@ -194,9 +230,20 @@ type ScenarioState = {
       bond: string
       cash: string
     }
-    inflationSeriesId: string
+    inflationSourceId: string
     manualCashRealReturn: number
   }
+}
+
+type PersistedHistoricalState = {
+  returnSeriesIds: {
+    equity: string
+    bond: string
+    cash: string
+  }
+  inflationSourceId?: string
+  inflationSeriesId?: string
+  manualCashRealReturn: number
 }
 
 function loadInitialState(): ScenarioState {
@@ -207,6 +254,7 @@ function loadInitialState(): ScenarioState {
   const stored =
     localStorage.getItem(STORAGE_KEY) ??
     localStorage.getItem(PREVIOUS_STORAGE_KEY) ??
+    localStorage.getItem(V3_STORAGE_KEY) ??
     localStorage.getItem(V2_STORAGE_KEY) ??
     localStorage.getItem(LEGACY_STORAGE_KEY)
   if (!stored) {
@@ -221,20 +269,30 @@ function loadInitialState(): ScenarioState {
       return {
         input: withDeterministicPortfolioReturn(persisted.data.input, derivedReturn),
         allocation: persisted.data.allocation,
-        historical: persisted.data.historical,
+        historical: normalizeHistoricalState(persisted.data.historical),
       }
     }
 
-    const previousPersisted = previousPersistedScenarioSchema.safeParse(parsed)
-    if (previousPersisted.success) {
-      const derivedReturn = calculatePortfolioExpectedReturn(previousPersisted.data.allocation)
+    const v4Persisted = v4PersistedScenarioSchema.safeParse(parsed)
+    if (v4Persisted.success) {
+      const derivedReturn = calculatePortfolioExpectedReturn(v4Persisted.data.allocation)
       return {
-        input: withDeterministicPortfolioReturn(previousPersisted.data.input, derivedReturn),
-        allocation: previousPersisted.data.allocation,
+        input: withDeterministicPortfolioReturn(v4Persisted.data.input, derivedReturn),
+        allocation: v4Persisted.data.allocation,
+        historical: normalizeHistoricalState(v4Persisted.data.historical),
+      }
+    }
+
+    const v3Persisted = v3PersistedScenarioSchema.safeParse(parsed)
+    if (v3Persisted.success) {
+      const derivedReturn = calculatePortfolioExpectedReturn(v3Persisted.data.allocation)
+      return {
+        input: withDeterministicPortfolioReturn(v3Persisted.data.input, derivedReturn),
+        allocation: v3Persisted.data.allocation,
         historical:
-          previousPersisted.data.returnModel === 'synthetic'
+          v3Persisted.data.returnModel === 'synthetic'
             ? createSyntheticHistoricalState()
-            : normalizeHistoricalState(previousPersisted.data.historical),
+            : normalizeHistoricalState(v3Persisted.data.historical),
       }
     }
 
@@ -277,7 +335,7 @@ function createDefaultState(): ScenarioState {
 function createDefaultHistoricalState(): ScenarioState['historical'] {
   return {
     returnSeriesIds: DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
-    inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
     manualCashRealReturn: 0,
   }
 }
@@ -285,12 +343,12 @@ function createDefaultHistoricalState(): ScenarioState['historical'] {
 function createSyntheticHistoricalState(): ScenarioState['historical'] {
   return {
     returnSeriesIds: SYNTHETIC_RETURN_SERIES_IDS,
-    inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    inflationSourceId: FIXED_INFLATION_SOURCE_ID,
     manualCashRealReturn: 0,
   }
 }
 
-function normalizeHistoricalState(historical: ScenarioState['historical'] | undefined): ScenarioState['historical'] {
+function normalizeHistoricalState(historical: PersistedHistoricalState | undefined): ScenarioState['historical'] {
   if (!historical) {
     return createDefaultHistoricalState()
   }
@@ -298,11 +356,30 @@ function normalizeHistoricalState(historical: ScenarioState['historical'] | unde
   return {
     ...historical,
     returnSeriesIds: {
-      equity: historical.returnSeriesIds.equity,
-      bond: historical.returnSeriesIds.bond,
-      cash: historical.returnSeriesIds.cash,
+      equity: migrateProvisionalReturnSeriesId('equity', historical.returnSeriesIds.equity),
+      bond: migrateProvisionalReturnSeriesId('bond', historical.returnSeriesIds.bond),
+      cash: migrateProvisionalReturnSeriesId('cash', historical.returnSeriesIds.cash),
     },
+    inflationSourceId: normalizeInflationSourceId(
+      historical.inflationSourceId ?? historical.inflationSeriesId ?? DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+    ),
   }
+}
+
+function migrateProvisionalReturnSeriesId(role: 'equity' | 'bond' | 'cash', id: string): string {
+  return id in PROVISIONAL_RETURN_SERIES_ID_MIGRATIONS ? DEFAULT_HISTORICAL_RETURN_SERIES_IDS[role] : id
+}
+
+function migrateProvisionalInflationSeriesId(id: string): string {
+  return PROVISIONAL_INFLATION_SERIES_ID_MIGRATIONS[id as keyof typeof PROVISIONAL_INFLATION_SERIES_ID_MIGRATIONS] ?? id
+}
+
+function normalizeInflationSourceId(id: string): string {
+  const migratedId = migrateProvisionalInflationSeriesId(id)
+
+  return migratedId === FIXED_INFLATION_SOURCE_ID || findInflationSeries(migratedId)
+    ? migratedId
+    : DEFAULT_HISTORICAL_INFLATION_SERIES_ID
 }
 
 function withDeterministicPortfolioReturn(input: RentenlueckeInput, annualReturn: number): RentenlueckeInput {

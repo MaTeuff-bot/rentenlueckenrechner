@@ -68,3 +68,4 @@ export type SimulationResult = {
 export type ReturnPhase = YearlyPeriodRow['phase']
 
 export type AnnualReturnResolver = (yearIndex: number, phase: ReturnPhase) => number
+export type AnnualInflationResolver = (yearIndex: number) => number
