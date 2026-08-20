@@ -54,17 +54,24 @@ export function toChartCapital(value: number, useLogCapitalScale: boolean, capit
 }
 
 export function calculateCapitalDisplayCap(rows: ScenarioOutcomeChartRow[]): number {
-  return Math.max(1, Math.max(...rows.map((row) => row.planCapitalToday), 0) * 2)
+  const coreCapitalMax = Math.max(
+    ...rows.flatMap((row) => [row.planCapitalToday, row.p10CapitalToday, row.p50CapitalToday]),
+    0,
+  )
+  const allCapitalMax = Math.max(
+    ...rows.flatMap((row) => [row.planCapitalToday, row.p10CapitalToday, row.p50CapitalToday, row.p90CapitalToday]),
+    0,
+  )
+
+  if (coreCapitalMax <= 0) {
+    return Math.max(1, allCapitalMax)
+  }
+
+  return Math.max(1, coreCapitalMax * 2)
 }
 
 export function isCapitalDisplayCapped(rows: ScenarioOutcomeChartRow[], capitalDisplayCap: number): boolean {
-  return rows.some(
-    (row) =>
-      row.p10CapitalToday > capitalDisplayCap ||
-      row.p50CapitalToday > capitalDisplayCap ||
-      row.p90CapitalToday > capitalDisplayCap ||
-      row.planCapitalToday > capitalDisplayCap,
-  )
+  return rows.some((row) => row.p90CapitalToday > capitalDisplayCap)
 }
 
 export function buildDisplayRows(

@@ -195,7 +195,7 @@ describe('scenario outcome chart data', () => {
     expect(sourceRow.p90CapitalToday).toBe(500)
   })
 
-  it('derives cap state from plan capital while detecting capped chart values', () => {
+  it('derives cap state from core capital values while detecting only capped P90 outliers', () => {
     const rows = [
       chartRow({ planCapitalToday: 100, p10CapitalToday: 50, p50CapitalToday: 100, p90CapitalToday: 250 }),
     ]
@@ -203,5 +203,25 @@ describe('scenario outcome chart data', () => {
 
     expect(cap).toBe(200)
     expect(isCapitalDisplayCapped(rows, cap)).toBe(true)
+  })
+
+  it('does not collapse the chart cap when the plan value depletes but the median path survives', () => {
+    const rows = [
+      chartRow({ planCapitalToday: 0, p10CapitalToday: 0, p50CapitalToday: 1_000, p90CapitalToday: 1_800 }),
+    ]
+    const cap = calculateCapitalDisplayCap(rows)
+
+    expect(cap).toBe(2_000)
+    expect(isCapitalDisplayCapped(rows, cap)).toBe(false)
+  })
+
+  it('falls back to the actual maximum when every core capital path is depleted', () => {
+    const rows = [
+      chartRow({ planCapitalToday: 0, p10CapitalToday: 0, p50CapitalToday: 0, p90CapitalToday: 2 }),
+    ]
+    const cap = calculateCapitalDisplayCap(rows)
+
+    expect(cap).toBe(2)
+    expect(isCapitalDisplayCapped(rows, cap)).toBe(false)
   })
 })

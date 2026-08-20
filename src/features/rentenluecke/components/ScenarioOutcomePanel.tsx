@@ -66,7 +66,7 @@ export function ScenarioOutcomePanel({
           <h2 id="outcome-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
             In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Die zentrale
-            Linie zeigt P50, die gestrichelte Linie den Planwert bei fester Rendite. Alle Kapitalwerte sind in heutiger
+            Linie zeigt P50, die gestrichelte Linie den Planwert mit erwarteter Rendite. Alle Kapitalwerte sind in heutiger
             Kaufkraft dargestellt.
           </p>
         </div>
@@ -132,8 +132,8 @@ export function ScenarioOutcomePanel({
       </p>
       {hasCapitalDisplayCap ? (
         <p className="chart-note">
-          Hinweis: Sehr hohe Kapitalwerte werden im Diagramm bei {formatCurrency(capitalDisplayCap, 100)} gedeckelt,
-          damit die übrigen Verläufe lesbar bleiben. Tooltip und Risiko-Karten zeigen weiterhin die echten
+          Hinweis: Einzelne hohe P90-Ausreißer werden im Diagramm bei {formatCurrency(capitalDisplayCap, 100)} begrenzt,
+          damit P10, P50 und Planwert lesbar bleiben. Tooltip und Risiko-Karten zeigen weiterhin die echten
           Simulationswerte.
         </p>
       ) : null}
