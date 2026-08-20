@@ -59,7 +59,7 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
       <span>{percentileLabel} P50: {formatTooltipCurrency(row?.p50CapitalToday ?? values.get('p50CapitalToday'))}</span>
       <span>{percentileLabel} P90: {formatTooltipCurrency(row?.p90CapitalToday)}</span>
       <span>
-        Planwert bei fester Rendite: {formatTooltipCurrency(row?.planCapitalToday ?? values.get('planCapitalToday'))}
+        Planwert mit Erwartungswert der Auswahl: {formatTooltipCurrency(row?.planCapitalToday ?? values.get('planCapitalToday'))}
       </span>
       <span>Aufbrauchwahrscheinlichkeit: {formatPercent(depletionProbability)}</span>
       {Number.isFinite(survivalProbability) ? (
@@ -144,7 +144,7 @@ export function ScenarioOutcomeChart({
             yAxisId="capital"
             type="monotone"
             dataKey="chartPlanCapitalToday"
-            name="Planwert bei fester Rendite"
+            name="Planwert mit Erwartungswert der Auswahl"
             stroke="#6b7280"
             strokeWidth={1.8}
             strokeDasharray="5 5"

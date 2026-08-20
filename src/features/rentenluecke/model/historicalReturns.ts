@@ -351,6 +351,35 @@ export function simulateHistoricalBootstrapScenario(
   }
 }
 
+
+export function calculateExpectedAnnualReturnForSelection(
+  input: RentenlueckeInput,
+  settings: HistoricalBootstrapSettings,
+): number {
+  const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
+  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
+  const expectedYears = validYears.length > 0 ? validYears : [0]
+  const expectedReturns = expectedYears.map((year) => {
+    const inflation = resolveInflationForSampledYear(inflationSource, year)
+
+    return settings.portfolioComponents.reduce((portfolioReturn, component) => {
+      if (component.weight === 0) {
+        return portfolioReturn
+      }
+
+      const annualReturn = resolveComponentExpectedNominalReturn(
+        component,
+        year,
+        inflation,
+        settings.manualCashRealReturn,
+      )
+      return portfolioReturn + component.weight * annualReturn
+    }, 0)
+  })
+
+  return expectedReturns.reduce((sum, value) => sum + value, 0) / expectedReturns.length
+}
+
 export function simulateHistoricalBootstrapReferenceScenario(
   input: RentenlueckeInput,
   settings: HistoricalBootstrapSettings,
@@ -367,8 +396,11 @@ export function simulateHistoricalBootstrapReferenceScenario(
     seed,
   )
 
+  const expectedAnnualReturn = calculateExpectedAnnualReturnForSelection(input, settings)
+  const expectedReturnPath = Array.from({ length: baseline.rows.length }, () => expectedAnnualReturn)
+
   return {
-    ...simulateScenarioWithReturnPath(input, [], generateHistoricalInflationPath(inflationSource, sampledYears)),
+    ...simulateScenarioWithReturnPath(input, expectedReturnPath, generateHistoricalInflationPath(inflationSource, sampledYears)),
     metadata: { validYears, sampledYears, seed },
   }
 }
@@ -494,6 +526,35 @@ function resolveComponentNominalReturn(
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
     return Math.max(-1, sampleNormal(rng, syntheticSeries.expectedAnnualReturn, syntheticSeries.annualVolatility))
+  }
+
+  const series = component.returnSeriesId ? findHistoricalReturnSeries(component.returnSeriesId) : undefined
+  if (!series) {
+    throw new Error(`Unknown return series for ${component.label}: ${component.returnSeriesId ?? 'missing'}`)
+  }
+
+  const annualReturn = series.normalizedSeries[year]
+  if (!Number.isFinite(annualReturn)) {
+    throw new Error(`Missing ${series.label} return for ${year}`)
+  }
+
+  return series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn
+}
+
+
+function resolveComponentExpectedNominalReturn(
+  component: PortfolioComponent,
+  year: number,
+  inflation: number,
+  manualCashRealReturn: number,
+): number {
+  if (component.returnSeriesId === 'manual-fixed-real') {
+    return realToNominalReturn(manualCashRealReturn, inflation)
+  }
+
+  const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
+  if (syntheticSeries) {
+    return syntheticSeries.expectedAnnualReturn
   }
 
   const series = component.returnSeriesId ? findHistoricalReturnSeries(component.returnSeriesId) : undefined

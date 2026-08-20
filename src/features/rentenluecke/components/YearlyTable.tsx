@@ -14,7 +14,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
       <div className="panel-heading">
         <div>
           <h2 id="table-title">Jahrestabelle</h2>
-          <p>Planwert-Ledger bei fester Rendite; das Diagramm zeigt die Bootstrap-Verteilung.</p>
+          <p>Planwert-Ledger mit Erwartungswert der ausgewählten Quellen; das Diagramm zeigt die Bootstrap-Verteilung.</p>
         </div>
         <label className="toggle">
           <input type="checkbox" checked={showDetails} onChange={(event) => setShowDetails(event.target.checked)} />

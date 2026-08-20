@@ -59,7 +59,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/heutiger Kaufkraft/).length).toBeGreaterThan(0)
     expect(screen.getByLabelText('Kapital logarithmisch skalieren')).toBeInTheDocument()
     expect(screen.getByText('P50 mittlerer Verlauf')).toBeInTheDocument()
-    expect(screen.getByText('Planwert bei fester Rendite')).toBeInTheDocument()
+    expect(screen.getByText('Planwert mit Erwartungswert der Auswahl')).toBeInTheDocument()
     expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
     expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
     expect(screen.getByText('Aufbrauchwahrscheinlichkeit')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByText(/Median-Kapital zum Rentenbeginn \(P50\)/)).toBeInTheDocument()
     expect(screen.getByText(/Historische Quellen ziehen Jahre mit Zurücklegen aus 1950-2020/)).toBeInTheDocument()
     expect(screen.getAllByText(/kein Backtest eines konkreten Kalenderzeitraums/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Planwert-Ledger bei fester Rendite/)).toBeInTheDocument()
+    expect(screen.getByText(/Planwert-Ledger mit Erwartungswert der ausgewählten Quellen/)).toBeInTheDocument()
     expect(screen.queryByText('Deterministisch')).not.toBeInTheDocument()
   })
 
