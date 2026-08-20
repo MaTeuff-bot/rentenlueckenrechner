@@ -48,16 +48,16 @@ function ChartTooltip({ active, label, payload }: ChartTooltipProps) {
   const survivalProbability = row?.survivalProbabilityEnd ?? Number(values.get('survivalProbabilityEnd'))
   const depletionProbability = row?.depletionProbability ?? 0
 
-  const percentileLabel = 'Bootstrap'
-
   return (
     <div className="chart-tooltip">
       <strong>
         Alter {ageStart}-{ageEnd}
       </strong>
-      <span>{percentileLabel} P10: {formatTooltipCurrency(row?.p10CapitalToday)}</span>
-      <span>{percentileLabel} P50: {formatTooltipCurrency(row?.p50CapitalToday ?? values.get('p50CapitalToday'))}</span>
-      <span>{percentileLabel} P90: {formatTooltipCurrency(row?.p90CapitalToday)}</span>
+      <span>P10, 10 % der Pfade liegen darunter: {formatTooltipCurrency(row?.p10CapitalToday)}</span>
+      <span>
+        P50, Median der Simulationen: {formatTooltipCurrency(row?.p50CapitalToday ?? values.get('p50CapitalToday'))}
+      </span>
+      <span>P90, 10 % der Pfade liegen darüber: {formatTooltipCurrency(row?.p90CapitalToday)}</span>
       <span>
         Planwert mit Erwartungswert der Auswahl: {formatTooltipCurrency(row?.planCapitalToday ?? values.get('planCapitalToday'))}
       </span>
@@ -135,7 +135,7 @@ export function ScenarioOutcomeChart({
             yAxisId="capital"
             type="monotone"
             dataKey="chartP50CapitalToday"
-            name="P50 mittlerer Verlauf"
+            name="P50"
             stroke="#1f6f8b"
             strokeWidth={2.5}
             dot={false}
@@ -144,7 +144,7 @@ export function ScenarioOutcomeChart({
             yAxisId="capital"
             type="monotone"
             dataKey="chartPlanCapitalToday"
-            name="Planwert mit Erwartungswert der Auswahl"
+            name="Planwert"
             stroke="#6b7280"
             strokeWidth={1.8}
             strokeDasharray="5 5"

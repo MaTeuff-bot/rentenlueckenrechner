@@ -487,6 +487,27 @@ legend {
   font-size: 0.92rem;
 }
 
+.chart-interpretation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chart-interpretation-row span {
+  border: 1px solid #dce3ea;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #23313f;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.outcome-method-details {
+  margin-top: 12px;
+}
+
 .outcome-controls {
   grid-template-columns: repeat(3, minmax(0, max-content));
   align-items: end;

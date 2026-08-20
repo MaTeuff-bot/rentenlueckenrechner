@@ -4,12 +4,6 @@ import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-  DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
-} from '../../model/historicalReturns'
-import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
-import { DEFAULT_INPUT } from '../../model/defaults'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
 
 vi.mock('recharts', () => {
@@ -58,8 +52,14 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByText(/1\.000 Verläufe/)).toBeInTheDocument()
     expect(screen.getAllByText(/heutiger Kaufkraft/).length).toBeGreaterThan(0)
     expect(screen.getByLabelText('Kapital logarithmisch skalieren')).toBeInTheDocument()
-    expect(screen.getByText('P50 mittlerer Verlauf')).toBeInTheDocument()
-    expect(screen.getByText('Planwert mit Erwartungswert der Auswahl')).toBeInTheDocument()
+    expect(screen.getByText('P50')).toBeInTheDocument()
+    expect(screen.getByText('Planwert')).toBeInTheDocument()
+    expect(screen.getByText('Band: P10–P90')).toBeInTheDocument()
+    expect(screen.getByText('Linie: P50')).toBeInTheDocument()
+    expect(screen.getByText('Gestrichelt: Planwert')).toBeInTheDocument()
+    expect(screen.getByText('Risiko: Kapital aufgebraucht')).toBeInTheDocument()
+    expect(screen.getByText('Simulationen sind Näherungen, keine Prognosen.')).toBeInTheDocument()
+    expect(screen.getByText('Methodik & Grenzen')).toBeInTheDocument()
     expect(screen.getByText(/höchstens\s*20 %/)).toBeInTheDocument()
     expect(screen.getByText('Bis Planungshorizont')).toBeInTheDocument()
     expect(screen.getByText('Aufbrauchwahrscheinlichkeit')).toBeInTheDocument()
@@ -85,135 +85,6 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/kein Backtest eines konkreten Kalenderzeitraums/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Planwert-Ledger mit Erwartungswert der ausgewählten Quellen/)).toBeInTheDocument()
     expect(screen.queryByText('Deterministisch')).not.toBeInTheDocument()
-  })
-
-  it('shows synthetic return sources as per-asset options', () => {
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByRole('option', { name: 'Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)' })).toBeInTheDocument()
-  })
-
-  it('migrates v3 synthetic mode to synthetic asset return sources', () => {
-    localStorage.setItem(
-      'rentenlueckenrechner.scenario.v3',
-      JSON.stringify({
-        version: 3,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        returnModel: 'synthetic',
-        historical: {
-          returnSeriesIds: {
-            equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
-            bond: 'jst-r6-developed-equal-weight-bonds-real-post1950',
-            cash: 'jst-r6-developed-equal-weight-bills-real-post1950',
-          },
-          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
-
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByDisplayValue('Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')
-    expect(inputById('annualInflationRate')).toBeInTheDocument()
-  })
-
-  it('migrates old provisional fixture ids to production defaults', () => {
-    localStorage.setItem(
-      'rentenlueckenrechner.scenario.v4',
-      JSON.stringify({
-        version: 4,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        historical: {
-          returnSeriesIds: {
-            equity: 'fixture-global-equity-eur-provisional',
-            bond: 'fixture-eur-bonds-provisional',
-            cash: 'fixture-eur-cash-provisional',
-          },
-          inflationSeriesId: 'fixture-de-eur-inflation-provisional',
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
-
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByDisplayValue('Historisch: Aktien, entwickelte Märkte')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Historisch: Staatsanleihen, entwickelte Märkte')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Historisch: Bills/Cash, entwickelte Märkte')).toBeInTheDocument()
-    expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Historisch: Deutschland CPI Inflation, 1950-2020')
-    expect(screen.queryByText(/Provisorisch|fixture|provisional/i)).not.toBeInTheDocument()
-  })
-
-  it('falls back to the production CPI default for unknown persisted inflation sources', () => {
-    localStorage.setItem(
-      'rentenlueckenrechner.scenario.v5',
-      JSON.stringify({
-        version: 5,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        historical: {
-          returnSeriesIds: { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS },
-          inflationSourceId: 'missing-inflation-source',
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
-
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Historisch: Deutschland CPI Inflation, 1950-2020')
-  })
-
-  it('preserves v3 historical manual Cash selections during migration', () => {
-    localStorage.setItem(
-      'rentenlueckenrechner.scenario.v3',
-      JSON.stringify({
-        version: 3,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        returnModel: 'historicalAnnualBootstrap',
-        historical: {
-          returnSeriesIds: {
-            equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-            bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-            cash: 'manual-fixed-real',
-          },
-          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-          manualCashRealReturn: 0.01,
-        },
-      }),
-    )
-
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByDisplayValue('Cash: fester Realzins')).toBeInTheDocument()
-    expect(inputById('manualCashRealReturn')).toHaveValue(1)
-  })
-
-  it('migrates v2 synthetic scenarios to synthetic asset return sources', () => {
-    localStorage.setItem(
-      'rentenlueckenrechner.scenario.v2',
-      JSON.stringify({
-        version: 2,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-      }),
-    )
-
-    render(<RentenlueckeCalculator />)
-
-    expect(screen.getByDisplayValue('Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')
   })
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {

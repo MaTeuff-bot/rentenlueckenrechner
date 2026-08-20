@@ -257,10 +257,13 @@ function loadInitialState(): ScenarioState {
     localStorage.getItem(V3_STORAGE_KEY) ??
     localStorage.getItem(V2_STORAGE_KEY) ??
     localStorage.getItem(LEGACY_STORAGE_KEY)
+  return parsePersistedScenarioState(stored)
+}
+
+export function parsePersistedScenarioState(stored: string | null): ScenarioState {
   if (!stored) {
     return createDefaultState()
   }
-
   try {
     const parsed = JSON.parse(stored)
     const persisted = persistedScenarioSchema.safeParse(parsed)

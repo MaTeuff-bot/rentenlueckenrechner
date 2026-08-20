@@ -108,6 +108,14 @@ describe('InputPanel return source UX', () => {
     }
   })
 
+  it('shows synthetic return sources as per-asset options', () => {
+    renderInputPanel()
+
+    expect(screen.getByRole('option', { name: 'Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)' })).toBeInTheDocument()
+  })
+
   it('shows one inflation source selector without nominal return inputs', () => {
     renderInputPanel()
 

@@ -65,9 +65,8 @@ export function ScenarioOutcomePanel({
         <div>
           <h2 id="outcome-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
-            In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Die zentrale
-            Linie zeigt P50, die gestrichelte Linie den Planwert mit Erwartungswert der Auswahl. Alle Kapitalwerte sind in heutiger
-            Kaufkraft dargestellt.
+            In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Alle
+            Kapitalwerte sind in heutiger Kaufkraft dargestellt.
           </p>
         </div>
         <div className="simulation-badge">{stochasticSummary.simulations.toLocaleString('de-DE')} Verläufe</div>
@@ -122,14 +121,31 @@ export function ScenarioOutcomePanel({
         capitalDisplayCap={capitalDisplayCap}
       />
 
-      <p className="chart-note">
-        {`P10, P50 und P90 sind Perzentile aus ${stochasticSummary.simulations.toLocaleString(
-          'de-DE',
-        )} Bootstrap-Verläufen. Historische Quellen ziehen Jahre mit Zurücklegen aus ${historicalYearLabel}; synthetische Quellen ziehen eigene Renditepfade je Anlageklasse. Das ist kein Backtest eines konkreten Kalenderzeitraums.`}{' '}
-        Die Überlebenswahrscheinlichkeit basiert auf der Periodensterbetafel 2023/2025 des Statistischen Bundesamts
-        (Destatis) für Deutschland und ist bedingt auf das aktuelle Alter. Sie ist keine individuelle Prognose und keine
-        Anlageberatung.
-      </p>
+      <div className="chart-interpretation-row" aria-label="Diagramm lesen">
+        <span>Band: P10–P90</span>
+        <span>Linie: P50</span>
+        <span>Gestrichelt: Planwert</span>
+        <span>Risiko: Kapital aufgebraucht</span>
+      </div>
+      <p className="chart-note">Simulationen sind Näherungen, keine Prognosen.</p>
+      <details className="method-details outcome-method-details">
+        <summary>Methodik & Grenzen</summary>
+        <p>
+          P50 ist der Median der Simulationen. Bei P10 liegen 10 % der Pfade darunter; bei P90 liegen 10 % der Pfade
+          darüber. Die gestrichelte Linie ist der Planwert mit Erwartungswert der Auswahl.
+        </p>
+        <p>
+          Historische Quellen ziehen Jahre mit Zurücklegen aus {historicalYearLabel}. Historische Aktien, Anleihen,
+          Cash und Inflation teilen sich dasselbe gezogene Kalenderjahr; synthetische Quellen verwenden separate
+          parametrische Pfade.
+        </p>
+        <p>
+          Die Bandbreite ist kein Backtest eines konkreten Kalenderzeitraums und keine Prognose für einen bestimmten ETF,
+          eine Steuerlogik, ein Depot oder ein Konto. Kapitalwerte sind heutige Kaufkraft. Die
+          Überlebenswahrscheinlichkeit basiert auf der Destatis-Periodensterbetafel 2023/2025 für Deutschland und ist
+          keine individuelle Prognose.
+        </p>
+      </details>
       {hasCapitalDisplayCap ? (
         <p className="chart-note">
           Hinweis: Einzelne hohe P90-Ausreißer werden im Diagramm bei {formatCurrency(capitalDisplayCap, 100)} begrenzt,
