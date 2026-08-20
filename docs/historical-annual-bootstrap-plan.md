@@ -431,9 +431,11 @@ Dataset caveats should be present, but not dominate the normal UI.
 
 ## Working implementation phases
 
-### Phase 1 — minimal working historical-bootstrap architecture
+### Phase 1 — minimal working historical-bootstrap architecture (superseded)
 
-Goal: produce a working app version with historical mode wired end-to-end, even if the initial datasets are deliberately small/provisional.
+Status: completed as an implementation phase and superseded by the production dataset registry. Runtime/user-facing options must use the production registry, not non-production sample data.
+
+Goal: produce a working app version with historical mode wired end-to-end; any early non-production datasets were temporary implementation scaffolding only.
 
 Deliverables:
 
@@ -442,7 +444,7 @@ Deliverables:
 - Rename visible Fixed bucket to Cash.
 - Introduce internal generic portfolio components while preserving the three-row UI.
 - Add dataset registry types and source metadata fields.
-- Add at least one bundled/provisional valid Germany/EUR dataset set for Equity, Bonds, Cash, and Inflation, or small fixture-like app data clearly marked as provisional if final licensing/data selection is not complete.
+- Historical note: early scaffolding could use temporary non-production data, but the shipped runtime must use the researched production registry or keep incomplete sources out of user-facing options.
 - Add manual fixed-real-return option for Cash.
 - Implement valid-year intersection.
 - Implement synchronized annual sampling with replacement.
@@ -462,7 +464,9 @@ Acceptance checks:
 
 ### Phase 2 — researched production dataset registry
 
-Goal: replace provisional/default data with researched Germany/EUR-suitable datasets, or adapters where bundling is not legally safe.
+Status: implemented for the shipped runtime defaults.
+
+Goal: replace temporary/default data with researched Germany/EUR-suitable datasets, or adapters where bundling is not legally safe.
 
 Deliverables:
 
@@ -525,7 +529,7 @@ If handing off only Phase 1, the implementer should focus on a narrow vertical s
 1. Preserve current synthetic behavior.
 2. Add historical mode as a selectable alternative.
 3. Add the data abstractions and sampler.
-4. Use a small/provisional bundled Germany/EUR dataset set if final dataset research is not ready.
+4. If final dataset research is not ready, keep non-production data test-only and do not expose it in runtime selectors.
 5. Prove the mode works with tests and build output.
 
 Do not spend Phase 1 trying to solve perfect dataset selection. That belongs in Phase 2, unless a safe obvious public source is immediately available.

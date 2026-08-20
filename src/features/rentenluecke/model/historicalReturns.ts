@@ -126,9 +126,20 @@ export type InflationSeries = {
   checksum?: string
 }
 
+export type FixedInflationSource = {
+  id: typeof FIXED_INFLATION_SOURCE_ID
+  kind: 'fixed'
+  label: string
+  description: string
+  annualInflationRate: number
+  caveats: string[]
+}
+
+export type InflationSourceOption = FixedInflationSource | InflationSeries
+
 export type HistoricalBootstrapSettings = {
   portfolioComponents: PortfolioComponent[]
-  inflationSeriesId: string
+  inflationSourceId: string
   manualCashRealReturn: number
   simulations: number
 }
@@ -147,6 +158,7 @@ export type HistoricalBootstrapSimulationSummary = {
 }
 
 export const HISTORICAL_MINIMUM_OBSERVATIONS = 30
+export const FIXED_INFLATION_SOURCE_ID = 'fixed-manual'
 export const DEFAULT_HISTORICAL_INFLATION_SERIES_ID = 'bundesbank-destatis-germany-cpi-yoy-annual-mean-post1950'
 export const DEFAULT_HISTORICAL_RETURN_SERIES_IDS = {
   equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
@@ -160,171 +172,12 @@ export const SYNTHETIC_RETURN_SERIES_IDS = {
   cash: 'synthetic-cash-assumption-v1',
 } as const
 
-const PROVISIONAL_RETURN_SERIES_IDS = {
-  equity: 'fixture-global-equity-eur-provisional',
-  bond: 'fixture-eur-bonds-provisional',
-  cash: 'fixture-eur-cash-provisional',
-} as const
-
-const PROVISIONAL_INFLATION_SERIES_ID = 'fixture-de-eur-inflation-provisional'
-
-const provisionalSource: DatasetSource = {
-  kind: 'bundled',
-  path: 'src/features/rentenluecke/model/historicalReturns.ts',
-  sourceName: 'Provisional Phase 1 fixture data',
-  license: 'App fixture data; not a researched historical dataset',
-}
-
 export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
   ...HISTORICAL_PRODUCTION_RETURN_SERIES,
-  {
-    id: PROVISIONAL_RETURN_SERIES_IDS.equity,
-    label: 'Provisorisch: Aktien Welt/EUR',
-    description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
-    role: 'equity',
-    suitableFor: ['equity'],
-    geography: 'Global',
-    currency: 'EUR',
-    returnBasis: 'real',
-    returnType: 'unknown',
-    source: provisionalSource,
-    license: provisionalSource.license,
-    licenseAllowsBundling: true,
-    commercialUseAllowed: true,
-    derivedData: false,
-    sourceDatasetVersion: 'phase1-fixture-v1',
-    sourceChecksum: 'phase1-equity-fixture-v1',
-    normalizedSeries: {
-      2015: 0.08,
-      2016: 0.04,
-      2017: 0.13,
-      2018: -0.11,
-      2019: 0.21,
-      2020: 0.06,
-      2021: 0.16,
-      2022: -0.17,
-      2023: 0.12,
-      2024: 0.09,
-    },
-    startYear: 2015,
-    endYear: 2024,
-    caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
-    confidence: 'low',
-    transformVersion: 'phase1-fixture-v1',
-    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
-    checksum: 'phase1-equity-fixture-v1',
-  },
-  {
-    id: PROVISIONAL_RETURN_SERIES_IDS.bond,
-    label: 'Provisorisch: EUR-Anleihen',
-    description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
-    role: 'bond',
-    suitableFor: ['bond'],
-    geography: 'EU',
-    currency: 'EUR',
-    returnBasis: 'real',
-    returnType: 'unknown',
-    source: provisionalSource,
-    license: provisionalSource.license,
-    licenseAllowsBundling: true,
-    commercialUseAllowed: true,
-    derivedData: false,
-    sourceDatasetVersion: 'phase1-fixture-v1',
-    sourceChecksum: 'phase1-bond-fixture-v1',
-    normalizedSeries: {
-      2015: 0.02,
-      2016: 0.03,
-      2017: 0.01,
-      2018: -0.01,
-      2019: 0.05,
-      2020: 0.04,
-      2021: -0.02,
-      2022: -0.12,
-      2023: 0.03,
-      2024: 0.02,
-    },
-    startYear: 2015,
-    endYear: 2024,
-    caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
-    confidence: 'low',
-    transformVersion: 'phase1-fixture-v1',
-    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
-    checksum: 'phase1-bond-fixture-v1',
-  },
-  {
-    id: PROVISIONAL_RETURN_SERIES_IDS.cash,
-    label: 'Provisorisch: EUR-Cash',
-    description: 'Small Phase 1 fixture series for end-to-end historical bootstrap wiring.',
-    role: 'cash',
-    suitableFor: ['cash'],
-    geography: 'EU',
-    currency: 'EUR',
-    returnBasis: 'real',
-    returnType: 'yieldBased',
-    source: provisionalSource,
-    license: provisionalSource.license,
-    licenseAllowsBundling: true,
-    commercialUseAllowed: true,
-    derivedData: false,
-    sourceDatasetVersion: 'phase1-fixture-v1',
-    sourceChecksum: 'phase1-cash-fixture-v1',
-    normalizedSeries: {
-      2015: -0.01,
-      2016: -0.01,
-      2017: -0.01,
-      2018: -0.02,
-      2019: -0.02,
-      2020: -0.01,
-      2021: -0.03,
-      2022: -0.07,
-      2023: 0.0,
-      2024: 0.01,
-    },
-    startYear: 2015,
-    endYear: 2024,
-    caveats: ['Provisional fixture data, not researched historical market data.', 'Replace in Phase 2.'],
-    confidence: 'low',
-    transformVersion: 'phase1-fixture-v1',
-    transformDescription: 'Hand-authored small fixture series for Phase 1 wiring tests.',
-    checksum: 'phase1-cash-fixture-v1',
-  },
 ]
 
 export const HISTORICAL_INFLATION_SERIES: InflationSeries[] = [
   ...HISTORICAL_PRODUCTION_INFLATION_SERIES,
-  {
-    id: PROVISIONAL_INFLATION_SERIES_ID,
-    label: 'Provisorisch: Deutschland/EUR Inflation',
-    description: 'Small Phase 1 fixture inflation series used read-only by historical bootstrap mode.',
-    geography: 'DE',
-    currency: 'EUR',
-    annualInflation: {
-      2015: 0.003,
-      2016: 0.005,
-      2017: 0.015,
-      2018: 0.018,
-      2019: 0.014,
-      2020: 0.005,
-      2021: 0.031,
-      2022: 0.069,
-      2023: 0.059,
-      2024: 0.022,
-    },
-    source: provisionalSource,
-    license: provisionalSource.license,
-    licenseAllowsBundling: true,
-    commercialUseAllowed: true,
-    derivedData: false,
-    sourceDatasetVersion: 'phase1-fixture-v1',
-    sourceChecksum: 'phase1-inflation-fixture-v1',
-    startYear: 2015,
-    endYear: 2024,
-    caveats: ['Provisional fixture data, not researched historical inflation data.', 'Replace in Phase 2.'],
-    confidence: 'low',
-    transformVersion: 'phase1-fixture-v1',
-    transformDescription: 'Hand-authored small fixture inflation series for Phase 1 wiring tests.',
-    checksum: 'phase1-inflation-fixture-v1',
-  },
 ]
 
 export function createManualFixedRealReturnSeries(annualReturn: number): ManualFixedReturnSeries {
@@ -356,6 +209,28 @@ export function findInflationSeries(id: string): InflationSeries | undefined {
   return HISTORICAL_INFLATION_SERIES.find((series) => series.id === id)
 }
 
+export function createFixedInflationSource(annualInflationRate: number): FixedInflationSource {
+  return {
+    id: FIXED_INFLATION_SOURCE_ID,
+    kind: 'fixed',
+    label: 'Manuell: feste Inflation',
+    description: 'Constant annual inflation assumption from the manual percentage input.',
+    annualInflationRate,
+    caveats: ['Manual fixed inflation. It does not restrict usable historical return years.'],
+  }
+}
+
+export function getInflationSourceOptions(annualInflationRate: number): InflationSourceOption[] {
+  return [createFixedInflationSource(annualInflationRate), ...HISTORICAL_INFLATION_SERIES]
+}
+
+export function findInflationSourceOption(
+  id: string,
+  annualInflationRate: number,
+): InflationSourceOption | undefined {
+  return id === FIXED_INFLATION_SOURCE_ID ? createFixedInflationSource(annualInflationRate) : findInflationSeries(id)
+}
+
 export function getReturnSeriesOptionsForRole(
   role: PortfolioComponentRole,
   manualCashRealReturn: number,
@@ -378,7 +253,7 @@ export function getReturnSeriesOptionsForRole(
 
 export function getValidHistoricalYears(
   components: PortfolioComponent[],
-  inflationSeries: InflationSeries,
+  inflationSource: InflationSourceOption,
 ): number[] {
   const requiredYearSets = components
     .map((component) => {
@@ -391,7 +266,9 @@ export function getValidHistoricalYears(
     })
     .filter((set): set is Set<number> => set !== null)
 
-  requiredYearSets.push(yearsWithFiniteValues(inflationSeries.annualInflation))
+  if (!isFixedInflationSource(inflationSource)) {
+    requiredYearSets.push(yearsWithFiniteValues(inflationSource.annualInflation))
+  }
 
   if (requiredYearSets.length === 0) {
     return []
@@ -412,13 +289,13 @@ export function sampleHistoricalYearsWithReplacement(years: number[], count: num
 
 export function generateHistoricalReturnPath(
   components: PortfolioComponent[],
-  inflationSeries: InflationSeries,
+  inflationSource: InflationSourceOption,
   sampledYears: number[],
   manualCashRealReturn: number,
   rng: () => number = createSeededRandom(0),
 ): number[] {
   return sampledYears.map((year) => {
-    const inflation = inflationSeries.annualInflation[year]
+    const inflation = resolveInflationForSampledYear(inflationSource, year)
 
     return components.reduce((portfolioReturn, component) => {
       if (component.weight === 0) {
@@ -435,7 +312,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
   return hashString(
     stableStringify({
       input,
-      inflationSeriesId: settings.inflationSeriesId,
+      inflationSourceId: settings.inflationSourceId,
       manualCashRealReturn: settings.manualCashRealReturn,
       simulations: settings.simulations,
       portfolioComponents: settings.portfolioComponents.map((component) => ({
@@ -445,7 +322,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
         returnSeriesId: component.returnSeriesId,
         datasetVersion: getHistoricalDatasetVersion(component.returnSeriesId),
       })),
-      inflationVersion: getHistoricalInflationVersion(settings.inflationSeriesId),
+      inflationVersion: getInflationSourceVersion(settings.inflationSourceId, input.annualInflationRate),
     }),
   )
 }
@@ -454,21 +331,44 @@ export function simulateHistoricalBootstrapScenario(
   input: RentenlueckeInput,
   settings: HistoricalBootstrapSettings,
 ): SimulationResult & { metadata: HistoricalBootstrapMetadata } {
-  const inflationSeries = getRequiredInflationSeries(settings.inflationSeriesId)
-  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSeries)
+  const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
+  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
   const baseline = simulateScenarioWithReturnPath(input, [])
   const seed = createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 })
-  const sampledYears = sampleHistoricalYearsWithReplacement(validYears, baseline.rows.length, seed)
+  const sampledYears = sampleHistoricalYearsForPath(settings.portfolioComponents, inflationSource, validYears, baseline.rows.length, seed)
   const returnPath = generateHistoricalReturnPath(
     settings.portfolioComponents,
-    inflationSeries,
+    inflationSource,
     sampledYears,
     settings.manualCashRealReturn,
     createSeededRandom(seed),
   )
+  const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
   return {
-    ...simulateScenarioWithReturnPath(input, returnPath),
+    ...simulateScenarioWithReturnPath(input, returnPath, inflationPath),
+    metadata: { validYears, sampledYears, seed },
+  }
+}
+
+export function simulateHistoricalBootstrapReferenceScenario(
+  input: RentenlueckeInput,
+  settings: HistoricalBootstrapSettings,
+): SimulationResult & { metadata: HistoricalBootstrapMetadata } {
+  const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
+  const baseline = simulateScenario(input)
+  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
+  const seed = createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 })
+  const sampledYears = sampleHistoricalYearsForPath(
+    settings.portfolioComponents,
+    inflationSource,
+    validYears,
+    baseline.rows.length,
+    seed,
+  )
+
+  return {
+    ...simulateScenarioWithReturnPath(input, [], generateHistoricalInflationPath(inflationSource, sampledYears)),
     metadata: { validYears, sampledYears, seed },
   }
 }
@@ -477,30 +377,34 @@ export function runHistoricalBootstrapSimulation(
   input: RentenlueckeInput,
   settings: HistoricalBootstrapSettings,
 ): HistoricalBootstrapSimulationSummary {
-  const inflationSeries = getRequiredInflationSeries(settings.inflationSeriesId)
-  const referenceResult = simulateScenario(input)
-  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSeries)
-  const years = referenceResult.rows.length
+  const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
+  const baseline = simulateScenario(input)
+  const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
+  const years = baseline.rows.length
   const seed = createHistoricalBootstrapSeed(input, settings)
   const rng = createSeededRandom(seed)
-  const referenceSampledYears = sampleHistoricalYearsWithReplacement(
+  const referenceSampledYears = sampleHistoricalYearsForPath(
+    settings.portfolioComponents,
+    inflationSource,
     validYears,
     years,
     createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 }),
   )
+  const referenceResult = simulateHistoricalBootstrapReferenceScenario(input, settings)
   const pathResults = Array.from({ length: settings.simulations }, () => {
     const pathSeed = Math.floor(rng() * 4_294_967_296)
     const returnSeed = Math.floor(rng() * 4_294_967_296)
-    const sampledYears = sampleHistoricalYearsWithReplacement(validYears, years, pathSeed)
+    const sampledYears = sampleHistoricalYearsForPath(settings.portfolioComponents, inflationSource, validYears, years, pathSeed)
     const returnPath = generateHistoricalReturnPath(
       settings.portfolioComponents,
-      inflationSeries,
+      inflationSource,
       sampledYears,
       settings.manualCashRealReturn,
       createSeededRandom(returnSeed),
     )
+    const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
-    return simulateScenarioWithReturnPath(input, returnPath)
+    return simulateScenarioWithReturnPath(input, returnPath, inflationPath)
   })
   const successfulPaths = pathResults.filter((result) => result.summary.survivesUntilPlanningAge).length
   const rows = referenceResult.rows.map((referenceRow, rowIndex) => {
@@ -530,13 +434,50 @@ export function runHistoricalBootstrapSimulation(
   }
 }
 
-function getRequiredInflationSeries(id: string): InflationSeries {
-  const inflationSeries = findInflationSeries(id)
-  if (!inflationSeries) {
-    throw new Error(`Unknown inflation series: ${id}`)
+function getRequiredInflationSource(id: string, annualInflationRate: number): InflationSourceOption {
+  const inflationSource = findInflationSourceOption(id, annualInflationRate)
+  if (!inflationSource) {
+    throw new Error(`Unknown inflation source: ${id}`)
   }
 
-  return inflationSeries
+  return inflationSource
+}
+
+function generateHistoricalInflationPath(inflationSource: InflationSourceOption, sampledYears: number[]): number[] {
+  return sampledYears.map((year) => resolveInflationForSampledYear(inflationSource, year))
+}
+
+function sampleHistoricalYearsForPath(
+  components: PortfolioComponent[],
+  inflationSource: InflationSourceOption,
+  validYears: number[],
+  count: number,
+  seed: number,
+): number[] {
+  if (validYears.length === 0 && !requiresSampledCalendarYear(components, inflationSource)) {
+    return Array.from({ length: count }, (_, index) => index)
+  }
+
+  return sampleHistoricalYearsWithReplacement(validYears, count, seed)
+}
+
+function requiresSampledCalendarYear(components: PortfolioComponent[], inflationSource: InflationSourceOption): boolean {
+  return !isFixedInflationSource(inflationSource) || components.some((component) => {
+    return Boolean(component.returnSeriesId && !isSyntheticReturnSeriesId(component.returnSeriesId))
+  })
+}
+
+function resolveInflationForSampledYear(inflationSource: InflationSourceOption, year: number): number {
+  if (isFixedInflationSource(inflationSource)) {
+    return inflationSource.annualInflationRate
+  }
+
+  const inflation = inflationSource.annualInflation[year]
+  if (!Number.isFinite(inflation)) {
+    throw new Error(`Missing ${inflationSource.label} inflation for ${year}`)
+  }
+
+  return inflation
 }
 
 function resolveComponentNominalReturn(
@@ -578,7 +519,7 @@ function createSyntheticReturnSeries(assumption: AssetClassAssumption): Syntheti
     kind: 'synthetic',
     label: `Synthetisch: ${assumption.label} (${expectedPercent} Erwartung, ${volatilityPercent} Volatilität)`,
     description:
-      'Nominale Renditen aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',
+      'Synthetischer Renditepfad aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',
     suitableFor: [role],
     returnBasis: 'nominal',
     assumptionKey: assumption.key,
@@ -591,6 +532,10 @@ function createSyntheticReturnSeries(assumption: AssetClassAssumption): Syntheti
 
 function isSyntheticReturnSeriesId(id: string): boolean {
   return id === 'manual-fixed-real' || Boolean(findSyntheticReturnSeries(id))
+}
+
+export function isFixedInflationSource(source: InflationSourceOption): source is FixedInflationSource {
+  return 'kind' in source && source.kind === 'fixed'
 }
 
 function formatAssumptionPercent(value: number): string {
@@ -632,7 +577,11 @@ export function getHistoricalDatasetVersion(id?: string): string {
   return series ? `${series.transformVersion}:${series.checksum ?? ''}` : id
 }
 
-export function getHistoricalInflationVersion(id: string): string {
+export function getInflationSourceVersion(id: string, annualInflationRate = 0): string {
+  if (id === FIXED_INFLATION_SOURCE_ID) {
+    return stableStringify({ id, annualInflationRate })
+  }
+
   const series = findInflationSeries(id)
   return series ? `${series.transformVersion}:${series.checksum ?? ''}` : id
 }

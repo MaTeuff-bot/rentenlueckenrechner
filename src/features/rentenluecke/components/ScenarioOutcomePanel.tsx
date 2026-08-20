@@ -125,7 +125,7 @@ export function ScenarioOutcomePanel({
       <p className="chart-note">
         {`P10, P50 und P90 sind Perzentile aus ${stochasticSummary.simulations.toLocaleString(
           'de-DE',
-        )} Bootstrap-Verläufen. Historische Quellen ziehen Jahre mit Zurücklegen aus ${historicalYearLabel}; synthetische Quellen ziehen eigene nominale Renditen je Anlageklasse. Das ist kein Backtest eines konkreten Kalenderzeitraums.`}{' '}
+        )} Bootstrap-Verläufen. Historische Quellen ziehen Jahre mit Zurücklegen aus ${historicalYearLabel}; synthetische Quellen ziehen eigene Renditepfade je Anlageklasse. Das ist kein Backtest eines konkreten Kalenderzeitraums.`}{' '}
         Die Überlebenswahrscheinlichkeit basiert auf der Periodensterbetafel 2023/2025 des Statistischen Bundesamts
         (Destatis) für Deutschland und ist bedingt auf das aktuelle Alter. Sie ist keine individuelle Prognose und keine
         Anlageberatung.

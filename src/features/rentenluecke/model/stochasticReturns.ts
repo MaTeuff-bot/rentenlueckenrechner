@@ -163,14 +163,26 @@ export function generatePortfolioReturnPath(
   })
 }
 
-export function simulateScenarioWithReturnPath(input: RentenlueckeInput, returnPath: number[]): SimulationResult {
+export function simulateScenarioWithReturnPath(
+  input: RentenlueckeInput,
+  returnPath: number[],
+  inflationPath?: number[],
+): SimulationResult {
   const parsed = rentenlueckeInputSchema.parse(input)
   const scenario = normalizeInput(parsed)
-  const getAnnualReturn = (yearIndex: number) => returnPath[yearIndex] ?? scenario.annualReturnInRetirement
-  const accumulationRows = simulateAccumulationRows(scenario, getAnnualReturn)
+  const getAnnualReturn = (yearIndex: number, phase: 'accumulation' | 'retirement') =>
+    returnPath[yearIndex] ?? (phase === 'accumulation' ? scenario.annualReturnBeforeRetirement : scenario.annualReturnInRetirement)
+  const getAnnualInflation = inflationPath
+    ? (yearIndex: number) => inflationPath[yearIndex] ?? scenario.annualInflationRate
+    : undefined
+  const accumulationRows = simulateAccumulationRows(scenario, getAnnualReturn, getAnnualInflation)
   const projectedCapitalAtRetirement = accumulationRows.at(-1)?.closingCapital ?? scenario.currentCapital
-  const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement, getAnnualReturn)
-  const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(scenario)
+  const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement, getAnnualReturn, getAnnualInflation)
+  const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(
+    scenario,
+    undefined,
+    getAnnualInflation,
+  )
   const summary = deriveSummary(
     scenario,
     projectedCapitalAtRetirement,

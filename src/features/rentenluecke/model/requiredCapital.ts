@@ -1,5 +1,6 @@
+import { createInflationFactorResolver } from './simulateAccumulation'
 import { simulateRetirementRows } from './simulateRetirement'
-import type { NormalizedScenario } from './types'
+import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario } from './types'
 
 export const REQUIRED_CAPITAL_EPSILON = 1
 export const MAX_REQUIRED_CAPITAL = 1_000_000_000_000
@@ -13,14 +14,19 @@ export class RequiredCapitalCalculationError extends Error {
   }
 }
 
-export function calculateRequiredCapitalAtRetirement(scenario: NormalizedScenario): number {
-  if (estimateNominalGapWithoutReturns(scenario) === 0) {
+export function calculateRequiredCapitalAtRetirement(
+  scenario: NormalizedScenario,
+  getAnnualReturn?: AnnualReturnResolver,
+  getAnnualInflation?: AnnualInflationResolver,
+): number {
+  if (estimateNominalGapWithoutReturns(scenario, getAnnualInflation) === 0) {
     return 0
   }
 
-  const survives = (capital: number) => simulateRetirementRows(scenario, capital).every((row) => !row.depleted)
+  const survives = (capital: number) =>
+    simulateRetirementRows(scenario, capital, getAnnualReturn, getAnnualInflation).every((row) => !row.depleted)
 
-  let high = Math.max(1, estimateNominalGapWithoutReturns(scenario))
+  let high = Math.max(1, estimateNominalGapWithoutReturns(scenario, getAnnualInflation))
   let boundIterations = 0
 
   while (!survives(high)) {
@@ -48,12 +54,16 @@ export function calculateRequiredCapitalAtRetirement(scenario: NormalizedScenari
   return high
 }
 
-function estimateNominalGapWithoutReturns(scenario: NormalizedScenario): number {
+function estimateNominalGapWithoutReturns(
+  scenario: NormalizedScenario,
+  getAnnualInflation?: AnnualInflationResolver,
+): number {
   let total = 0
+  const getInflationFactor = createInflationFactorResolver(scenario.annualInflationRate, getAnnualInflation)
 
   for (let retirementYear = 0; retirementYear < scenario.retirementYears; retirementYear += 1) {
     const yearIndex = scenario.yearsToRetirement + retirementYear
-    const inflationFactor = Math.pow(1 + scenario.annualInflationRate, yearIndex)
+    const inflationFactor = getInflationFactor(yearIndex)
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
     const retirementIncome = scenario.annualRetirementIncomeToday * inflationFactor
     total += Math.max(0, desiredSpending - retirementIncome)

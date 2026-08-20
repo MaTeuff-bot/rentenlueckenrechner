@@ -8,7 +8,7 @@ This note is intentionally decision-oriented. It is not legal advice; licensing 
 
 ## Phase 2 objective
 
-Replace the Phase 1 provisional historical return/inflation fixtures with production-ranked Germany/EUR-suitable datasets, or adapters where public bundling is not legally safe.
+Replace the Phase 1 temporary historical return/inflation scaffolding with production-ranked Germany/EUR-suitable datasets, or adapters where public bundling is not legally safe. The shipped runtime should not expose non-production sample data.
 
 Required series:
 
@@ -90,7 +90,7 @@ In this path, Phase 2 may need either:
 
 1. a narrower Germany-only official-source equity proxy if found,
 2. a generated series from a redistributable academic/public dataset after deeper license review,
-3. or a product decision to keep equity provisional/blocked until licensed data is available.
+3. or a product decision to keep equity blocked until licensed data is available.
 
 ## Updated product/licensing context
 
@@ -351,12 +351,12 @@ countryCoverage?: {
 1. Add `DATA_LICENSES.md`.
 2. Add a generator script, e.g. `scripts/generateHistoricalReturnData.mjs` or `.py`, that downloads/reads JST R.6 and Bundesbank CPI, computes the post-1950 snapshots, and writes a TypeScript data module.
 3. Add generated data under `src/features/rentenluecke/model/returnData/`, keeping raw downloaded data out of the repo unless explicitly chosen.
-4. Replace Phase 1 fixture default IDs with the generated production IDs.
-5. Keep the Phase 1 provisional fixtures only as test fixtures or remove them from user-facing defaults.
+4. Replace Phase 1 temporary default IDs with the generated production IDs.
+5. Keep any non-production sample data test-only or remove it entirely from user-facing defaults.
 6. Add tests for:
    - 1950–2020 synchronized valid-year coverage;
    - metadata/license completeness;
-   - no Phase 1 provisional dataset selected by default;
+   - no Phase 1 non-production dataset selected by default;
    - deterministic seed changes when generated dataset checksum changes;
    - sampled historical mode still produces stable rows and warnings do not trigger for 71 observations.
 7. Run full gate: `npm test -- --run`, `npm run lint`, `npm run build`.

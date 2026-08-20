@@ -3,12 +3,14 @@ import { NumberInput } from '../../../shared/components/NumberInput'
 import { PercentInput } from '../../../shared/components/PercentInput'
 import {
   findHistoricalReturnSeries,
-  findInflationSeries,
+  findInflationSourceOption,
   findSyntheticReturnSeries,
+  getInflationSourceOptions,
   getReturnSeriesOptionsForRole,
   HISTORICAL_MINIMUM_OBSERVATIONS,
+  isFixedInflationSource,
   type HistoricalReturnSeries,
-  type InflationSeries,
+  type InflationSourceOption,
   type ManualFixedReturnSeries,
   type ReturnSeriesOption,
   type SyntheticReturnSeries,
@@ -31,7 +33,7 @@ type InputPanelProps = {
       bond: string
       cash: string
     }
-    inflationSeriesId: string
+    inflationSourceId: string
     manualCashRealReturn: number
   }
   historicalValidYears: number[]
@@ -41,6 +43,7 @@ type InputPanelProps = {
   onAllocationChange: (field: AssetClassKey, value: number) => void
   onHistoricalReturnSeriesChange: (role: 'equity' | 'bond' | 'cash', seriesId: string) => void
   onManualCashRealReturnChange: (value: number) => void
+  onInflationSourceChange: (sourceId: string) => void
   onReset: () => void
 }
 
@@ -55,10 +58,12 @@ export function InputPanel({
   onAllocationChange,
   onHistoricalReturnSeriesChange,
   onManualCashRealReturnChange,
+  onInflationSourceChange,
   onReset,
 }: InputPanelProps) {
   const portfolioComponents = createPortfolioComponents(allocation, historical.returnSeriesIds)
-  const inflationSeries = findInflationSeries(historical.inflationSeriesId)
+  const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
+  const inflationOptions = getInflationSourceOptions(input.annualInflationRate)
   const selectedReturnSources = portfolioComponents.map((component) => {
     const role = component.role === 'bond' ? 'bond' : component.role === 'cash' ? 'cash' : 'equity'
     return {
@@ -99,7 +104,7 @@ export function InputPanel({
           </div>
           <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
             <span>{validYearLabel}</span>
-            <span>Inflation: {inflationSeries ? shortInflationLabel(inflationSeries) : historical.inflationSeriesId}</span>
+            <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>
             <span>Stichprobe mit Zurücklegen</span>
             {usesJstSource ? <span>JST: nicht kommerziell</span> : null}
           </div>
@@ -234,17 +239,6 @@ export function InputPanel({
               onChange={onManualCashRealReturnChange}
             />
           ) : null}
-          <div className="field">
-            <label className="field-label" htmlFor="historical-inflation-series">
-              Inflationsdatensatz
-            </label>
-            <input
-              id="historical-inflation-series"
-              value={inflationSeries?.label ?? historical.inflationSeriesId}
-              readOnly
-              title={inflationSeries?.caveats.join(' ')}
-            />
-          </div>
         </fieldset>
 
         <fieldset className="wide-fieldset">
@@ -253,7 +247,7 @@ export function InputPanel({
             {selectedReturnSources.map(({ role, label, source }) =>
               source ? <ReturnSourceCard key={role} label={label} source={source} /> : null,
             )}
-            {inflationSeries ? <InflationSourceCard source={inflationSeries} /> : null}
+            {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
           </div>
           <details className="method-details">
             <summary>Methode und Grenzen</summary>
@@ -271,36 +265,38 @@ export function InputPanel({
         </fieldset>
 
         <fieldset>
-          <legend>Annahmen</legend>
-          <PercentInput
-            id="annualInflationRate"
-            label={inputLabels.annualInflationRate}
-            value={input.annualInflationRate}
-            min={-5}
-            max={20}
-            error={errors.annualInflationRate}
-            onChange={(value) => onChange('annualInflationRate', value)}
-          />
-          <PercentInput
-            id="annualReturnBeforeRetirement"
-            label={inputLabels.annualReturnBeforeRetirement}
-            value={input.annualReturnBeforeRetirement}
-            min={-50}
-            max={50}
-            error={errors.annualReturnBeforeRetirement}
-            readOnly
-            onChange={(value) => onChange('annualReturnBeforeRetirement', value)}
-          />
-          <PercentInput
-            id="annualReturnInRetirement"
-            label={inputLabels.annualReturnInRetirement}
-            value={input.annualReturnInRetirement}
-            min={-50}
-            max={50}
-            error={errors.annualReturnInRetirement}
-            readOnly
-            onChange={(value) => onChange('annualReturnInRetirement', value)}
-          />
+          <legend>Inflation</legend>
+          <p className="field-help">
+            Die Szenario-Inflation steuert Zahlungsströme in heutiger Kaufkraft und die reale Darstellung des Ledgers.
+            Bei historischen Quellen wird der gewählte CPI-Jahrespfad zusätzlich mit den gezogenen Kalenderjahren synchronisiert.
+          </p>
+          <div className="field">
+            <label className="field-label" htmlFor="inflation-source">
+              Inflationsquelle
+            </label>
+            <select
+              id="inflation-source"
+              value={historical.inflationSourceId}
+              onChange={(event) => onInflationSourceChange(event.target.value)}
+            >
+              {inflationOptions.map((option) => (
+                <option key={option.id} value={option.id} title={option.caveats.join(' ')}>
+                  {formatInflationDropdownLabel(option)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {inflationSource && isFixedInflationSource(inflationSource) ? (
+            <PercentInput
+              id="annualInflationRate"
+              label={inputLabels.annualInflationRate}
+              value={input.annualInflationRate}
+              min={-5}
+              max={20}
+              error={errors.annualInflationRate}
+              onChange={(value) => onChange('annualInflationRate', value)}
+            />
+          ) : null}
         </fieldset>
       </div>
     </section>
@@ -348,7 +344,38 @@ function ReturnSourceCard({ label, source }: { label: string; source: ReturnSeri
   )
 }
 
-function InflationSourceCard({ source }: { source: InflationSeries }) {
+function InflationSourceCard({ source }: { source: InflationSourceOption }) {
+  if (isFixedInflationSource(source)) {
+    return (
+      <article className="source-detail-card">
+        <h3>Inflation</h3>
+        <dl>
+          <div>
+            <dt>Quelle</dt>
+            <dd>Manuelle Eingabe</dd>
+          </div>
+          <div>
+            <dt>Version</dt>
+            <dd>Feste Annahme</dd>
+          </div>
+          <div>
+            <dt>Abdeckung</dt>
+            <dd>Alle simulierten Jahre</dd>
+          </div>
+          <div>
+            <dt>Basis</dt>
+            <dd>{formatPrecisePercent(source.annualInflationRate)} pro Jahr</dd>
+          </div>
+          <div>
+            <dt>Lizenz</dt>
+            <dd>Manuelle Modellannahme</dd>
+          </div>
+        </dl>
+        <CaveatTags caveats={source.caveats.slice(0, 3)} />
+      </article>
+    )
+  }
+
   return (
     <article className="source-detail-card">
       <h3>Inflation</h3>
@@ -429,6 +456,14 @@ function formatDropdownLabel(source: ReturnSeriesOption): string {
   return source.label
 }
 
+function formatInflationDropdownLabel(source: InflationSourceOption): string {
+  if (isFixedInflationSource(source)) {
+    return `Manuell: feste Inflation (${formatPrecisePercent(source.annualInflationRate)})`
+  }
+
+  return `Historisch: ${source.label}`
+}
+
 function getSourceName(source: ReturnSeriesOption): string {
   return isSyntheticSource(source) ? 'Synthetische Modellannahme' : source.source.sourceName
 }
@@ -459,7 +494,7 @@ function getBasisLabel(source: ReturnSeriesOption): string {
   }
 
   if (isGeneratedSyntheticSource(source)) {
-    return `Nominal, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
+    return `Synthetischer Renditepfad, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
   }
 
   const typeLabel = source.returnType === 'grossTotal' ? 'Total Return' : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
@@ -503,17 +538,22 @@ function formatCaveatTag(caveat: string): string {
     return 'Schätzwert enthalten'
   }
 
-  if (caveat.includes('Provisional fixture')) {
-    return 'provisorisch'
-  }
 
   return caveat
 }
 
-function shortInflationLabel(source: InflationSeries): string {
+function shortInflationLabel(source: InflationSourceOption): string {
+  if (isFixedInflationSource(source)) {
+    return `Manuell ${formatPrecisePercent(source.annualInflationRate)}`
+  }
+
   return source.label.replace('Deutschland CPI Inflation', 'Deutschland CPI')
 }
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)} %`
+}
+
+function formatPrecisePercent(value: number): string {
+  return `${Number((value * 100).toFixed(2)).toLocaleString('de-DE')} %`
 }
