@@ -519,7 +519,7 @@ function createSyntheticReturnSeries(assumption: AssetClassAssumption): Syntheti
     kind: 'synthetic',
     label: `Synthetisch: ${assumption.label} (${expectedPercent} Erwartung, ${volatilityPercent} Volatilität)`,
     description:
-      'Nominale Renditen aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',
+      'Synthetischer Renditepfad aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',
     suitableFor: [role],
     returnBasis: 'nominal',
     assumptionKey: assumption.key,

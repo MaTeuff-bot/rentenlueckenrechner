@@ -114,11 +114,11 @@ describe('InputPanel return source UX', () => {
     expect(screen.getByRole('group', { name: 'Inflation' })).toBeInTheDocument()
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Historisch: Deutschland CPI Inflation, 1950-2020')
     expect(screen.getByText(/Zahlungsströme in heutiger Kaufkraft/)).toBeInTheDocument()
-    expect(screen.getByText(/Umwandlung realer historischer oder manueller Renditen/)).toBeInTheDocument()
+    expect(screen.getByText(/CPI-Jahrespfad zusätzlich mit den gezogenen Kalenderjahren synchronisiert/)).toBeInTheDocument()
     expect(screen.queryByText(/synchronisiert nur die gezogenen Kalenderjahre/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Inflation pro Jahr')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Nominale Rendite vor Rentenbeginn')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Nominale Rendite im Ruhestand')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Interner Planwert vor Rentenbeginn')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Interner Planwert im Ruhestand')).not.toBeInTheDocument()
   })
 
   it('shows the fixed percent input only for manual inflation', () => {

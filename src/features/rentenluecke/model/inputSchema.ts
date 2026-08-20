@@ -9,8 +9,8 @@ export const inputLabels = {
   monthlyDesiredSpendingToday: 'Gewünschte monatliche Ausgaben im Ruhestand, heutige Kaufkraft',
   monthlyRetirementIncomeToday: 'Erwartetes monatliches Renteneinkommen, heutige Kaufkraft',
   annualInflationRate: 'Inflation pro Jahr',
-  annualReturnBeforeRetirement: 'Nominale Rendite vor Rentenbeginn',
-  annualReturnInRetirement: 'Nominale Rendite im Ruhestand',
+  annualReturnBeforeRetirement: 'Interner Planwert vor Rentenbeginn',
+  annualReturnInRetirement: 'Interner Planwert im Ruhestand',
 } as const
 
 const money = z.number().finite().min(0, 'Muss mindestens 0 sein.')

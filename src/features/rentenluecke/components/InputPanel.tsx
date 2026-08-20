@@ -267,8 +267,8 @@ export function InputPanel({
         <fieldset>
           <legend>Inflation</legend>
           <p className="field-help">
-            Eine Inflationsquelle steuert Zahlungsströme in heutiger Kaufkraft, die Rückrechnung des Ledgers und die
-            Umwandlung realer historischer oder manueller Renditen in nominale Werte.
+            Die Szenario-Inflation steuert Zahlungsströme in heutiger Kaufkraft und die reale Darstellung des Ledgers.
+            Bei historischen Quellen wird der gewählte CPI-Jahrespfad zusätzlich mit den gezogenen Kalenderjahren synchronisiert.
           </p>
           <div className="field">
             <label className="field-label" htmlFor="inflation-source">
@@ -494,7 +494,7 @@ function getBasisLabel(source: ReturnSeriesOption): string {
   }
 
   if (isGeneratedSyntheticSource(source)) {
-    return `Nominal, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
+    return `Synthetischer Renditepfad, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
   }
 
   const typeLabel = source.returnType === 'grossTotal' ? 'Total Return' : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
@@ -538,9 +538,6 @@ function formatCaveatTag(caveat: string): string {
     return 'Schätzwert enthalten'
   }
 
-  if (caveat.includes('Provisional fixture')) {
-    return 'provisorisch'
-  }
 
   return caveat
 }
