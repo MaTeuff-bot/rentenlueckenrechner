@@ -8,6 +8,7 @@ import {
   HISTORICAL_MINIMUM_OBSERVATIONS,
   HISTORICAL_RETURN_SERIES,
   SYNTHETIC_RETURN_SERIES_IDS,
+  calculateExpectedAnnualReturnForSelection,
   createHistoricalBootstrapSeed,
   createFixedInflationSource,
   findInflationSeries,
@@ -405,6 +406,39 @@ describe('historical returns', () => {
     expect(runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)).toEqual(
       runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings),
     )
+  })
+
+  it('calculates the reference return from the currently selected sources', () => {
+    const syntheticSettings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        {
+          equity: SYNTHETIC_RETURN_SERIES_IDS.equity,
+          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
+          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
+        },
+      ),
+      inflationSourceId: FIXED_INFLATION_SOURCE_ID,
+      manualCashRealReturn: 0,
+      simulations: 25,
+    }
+    const historicalSettings = {
+      ...syntheticSettings,
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        {
+          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
+          bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
+          cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
+        },
+      ),
+    }
+
+    const syntheticExpectedReturn = calculateExpectedAnnualReturnForSelection(DEFAULT_INPUT, syntheticSettings)
+    const historicalExpectedReturn = calculateExpectedAnnualReturnForSelection(DEFAULT_INPUT, historicalSettings)
+
+    expect(syntheticExpectedReturn).toBeCloseTo(0.057)
+    expect(historicalExpectedReturn).not.toBeCloseTo(syntheticExpectedReturn)
   })
 
   it('uses fixed-return rows with the selected inflation source as bootstrap reference capital', () => {

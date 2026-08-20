@@ -27,7 +27,7 @@ npm run build
 
 ## Interpreting The Outcome Chart
 
-The merged outcome chart shows all capital values in today's purchasing power. The deterministic line follows the yearly ledger with the allocation-derived expected return, while P10, P50, and P90 summarize simulated return paths; the shaded band spans P10 to P90.
+The merged outcome chart shows all capital values in today's purchasing power. The deterministic line follows the yearly ledger with the expected annual return of the currently selected return sources, while P10, P50, and P90 summarize simulated return paths; the shaded band spans P10 to P90.
 
 The depletion probability line is the share of simulated paths with capital at or below 0 EUR by each age. The optional survival probability line comes from the bundled Destatis period life table and is conditional on the current age. Risk cards highlight the first ages where survival falls to 20 %, 10 %, and 5 %, plus the planning horizon when it is a distinct age.
 

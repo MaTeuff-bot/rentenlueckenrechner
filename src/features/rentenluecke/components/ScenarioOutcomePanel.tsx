@@ -66,7 +66,7 @@ export function ScenarioOutcomePanel({
           <h2 id="outcome-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
             In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Die zentrale
-            Linie zeigt P50, die gestrichelte Linie den Planwert mit erwarteter Rendite. Alle Kapitalwerte sind in heutiger
+            Linie zeigt P50, die gestrichelte Linie den Planwert mit Erwartungswert der Auswahl. Alle Kapitalwerte sind in heutiger
             Kaufkraft dargestellt.
           </p>
         </div>
