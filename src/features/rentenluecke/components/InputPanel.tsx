@@ -1,28 +1,17 @@
-import { CurrencyInput } from '../../../shared/components/CurrencyInput'
-import { NumberInput } from '../../../shared/components/NumberInput'
-import { PercentInput } from '../../../shared/components/PercentInput'
 import {
-  findHistoricalReturnSeries,
   findInflationSourceOption,
-  findSyntheticReturnSeries,
   getInflationSourceOptions,
-  getReturnSeriesOptionsForRole,
   HISTORICAL_MINIMUM_OBSERVATIONS,
-  isFixedInflationSource,
-  type HistoricalReturnSeries,
-  type InflationSourceOption,
-  type ManualFixedReturnSeries,
-  type ReturnSeriesOption,
-  type SyntheticReturnSeries,
 } from '../model/historicalReturns'
-import { inputLabels, type InputFieldName } from '../model/inputSchema'
-import {
-  ASSET_CLASS_ASSUMPTIONS,
-  createPortfolioComponents,
-  type AssetAllocation,
-  type AssetClassKey,
-} from '../model/stochasticReturns'
+import { type InputFieldName } from '../model/inputSchema'
+import { createPortfolioComponents, type AssetAllocation, type AssetClassKey } from '../model/stochasticReturns'
 import type { RentenlueckeInput } from '../model/types'
+import { AllocationSection } from './InputPanel/AllocationSection'
+import { InflationSourceSection } from './InputPanel/InflationSourceSection'
+import { PersonalDataSection, RetirementCashflowSection, SavingsSection } from './InputPanel/BasicInputSections'
+import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
+import { ReturnSourceSection } from './InputPanel/ReturnSourceSection'
+import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInflationLabel } from './InputPanel/sourceDisplay'
 
 type InputPanelProps = {
   input: RentenlueckeInput
@@ -121,125 +110,24 @@ export function InputPanel({
           ) : null}
         </fieldset>
 
-        <fieldset>
-          <legend>Persönliche Daten</legend>
-          <NumberInput
-            id="currentAge"
-            label={inputLabels.currentAge}
-            value={input.currentAge}
-            min={0}
-            max={100}
-            error={errors.currentAge}
-            onChange={(value) => onChange('currentAge', value)}
-          />
-          <NumberInput
-            id="retirementAge"
-            label={inputLabels.retirementAge}
-            value={input.retirementAge}
-            min={0}
-            max={100}
-            error={errors.retirementAge}
-            onChange={(value) => onChange('retirementAge', value)}
-          />
-          <NumberInput
-            id="planningAge"
-            label={inputLabels.planningAge}
-            value={input.planningAge}
-            min={0}
-            max={120}
-            error={errors.planningAge}
-            onChange={(value) => onChange('planningAge', value)}
-          />
-        </fieldset>
+        <PersonalDataSection input={input} errors={errors} onChange={onChange} />
 
-        <fieldset>
-          <legend>Vermögen und Sparrate</legend>
-          <CurrencyInput
-            id="currentCapital"
-            label={inputLabels.currentCapital}
-            value={input.currentCapital}
-            error={errors.currentCapital}
-            onChange={(value) => onChange('currentCapital', value)}
-          />
-          <CurrencyInput
-            id="monthlyContributionToday"
-            label={inputLabels.monthlyContributionToday}
-            value={input.monthlyContributionToday}
-            error={errors.monthlyContributionToday}
-            onChange={(value) => onChange('monthlyContributionToday', value)}
-          />
-        </fieldset>
+        <SavingsSection input={input} errors={errors} onChange={onChange} />
 
-        <fieldset>
-          <legend>Ausgaben und Einkommen im Ruhestand</legend>
-          <CurrencyInput
-            id="monthlyDesiredSpendingToday"
-            label={inputLabels.monthlyDesiredSpendingToday}
-            value={input.monthlyDesiredSpendingToday}
-            error={errors.monthlyDesiredSpendingToday}
-            onChange={(value) => onChange('monthlyDesiredSpendingToday', value)}
-          />
-          <CurrencyInput
-            id="monthlyRetirementIncomeToday"
-            label={inputLabels.monthlyRetirementIncomeToday}
-            value={input.monthlyRetirementIncomeToday}
-            error={errors.monthlyRetirementIncomeToday}
-            onChange={(value) => onChange('monthlyRetirementIncomeToday', value)}
-          />
-        </fieldset>
+        <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
 
-        <fieldset>
-          <legend>Aufteilung</legend>
-          {ASSET_CLASS_ASSUMPTIONS.map((assumption) => (
-            <PercentInput
-              key={assumption.key}
-              id={`allocation-${assumption.key}`}
-              label={assumption.label}
-              value={allocation[assumption.key]}
-              min={0}
-              max={100}
-              error={allocationError && assumption.key === 'fixed' ? allocationError : undefined}
-              onChange={(value) => onAllocationChange(assumption.key, value)}
-            />
-          ))}
-        </fieldset>
+        <AllocationSection
+          allocation={allocation}
+          allocationError={allocationError}
+          onAllocationChange={onAllocationChange}
+        />
 
-        <fieldset>
-          <legend>Renditequellen je Anlageklasse</legend>
-          {portfolioComponents.map((component) => {
-            const role = component.role === 'bond' ? 'bond' : component.role === 'cash' ? 'cash' : 'equity'
-            const options = getReturnSeriesOptionsForRole(component.role, historical.manualCashRealReturn)
-
-            return (
-              <div className="field" key={component.id}>
-                <label className="field-label" htmlFor={`historical-series-${role}`}>
-                  {component.label}
-                </label>
-                <select
-                  id={`historical-series-${role}`}
-                  value={component.returnSeriesId}
-                  onChange={(event) => onHistoricalReturnSeriesChange(role, event.target.value)}
-                >
-                  {options.map((option) => (
-                    <option key={option.id} value={option.id} title={option.caveats.join(' ')}>
-                      {formatDropdownLabel(option)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
-          })}
-          {historical.returnSeriesIds.cash === 'manual-fixed-real' ? (
-            <PercentInput
-              id="manualCashRealReturn"
-              label="Cash: manueller fester Realzins"
-              value={historical.manualCashRealReturn}
-              min={-50}
-              max={50}
-              onChange={onManualCashRealReturnChange}
-            />
-          ) : null}
-        </fieldset>
+        <ReturnSourceSection
+          portfolioComponents={portfolioComponents}
+          manualCashRealReturn={historical.manualCashRealReturn}
+          onHistoricalReturnSeriesChange={onHistoricalReturnSeriesChange}
+          onManualCashRealReturnChange={onManualCashRealReturnChange}
+        />
 
         <fieldset className="wide-fieldset">
           <legend>Ausgewählte Quellen im Detail</legend>
@@ -264,296 +152,16 @@ export function InputPanel({
           </details>
         </fieldset>
 
-        <fieldset>
-          <legend>Inflation</legend>
-          <p className="field-help">
-            Die Szenario-Inflation steuert Zahlungsströme in heutiger Kaufkraft und die reale Darstellung des Ledgers.
-            Bei historischen Quellen wird der gewählte CPI-Jahrespfad zusätzlich mit den gezogenen Kalenderjahren synchronisiert.
-          </p>
-          <div className="field">
-            <label className="field-label" htmlFor="inflation-source">
-              Inflationsquelle
-            </label>
-            <select
-              id="inflation-source"
-              value={historical.inflationSourceId}
-              onChange={(event) => onInflationSourceChange(event.target.value)}
-            >
-              {inflationOptions.map((option) => (
-                <option key={option.id} value={option.id} title={option.caveats.join(' ')}>
-                  {formatInflationDropdownLabel(option)}
-                </option>
-              ))}
-            </select>
-          </div>
-          {inflationSource && isFixedInflationSource(inflationSource) ? (
-            <PercentInput
-              id="annualInflationRate"
-              label={inputLabels.annualInflationRate}
-              value={input.annualInflationRate}
-              min={-5}
-              max={20}
-              error={errors.annualInflationRate}
-              onChange={(value) => onChange('annualInflationRate', value)}
-            />
-          ) : null}
-        </fieldset>
+        <InflationSourceSection
+          input={input}
+          errors={errors}
+          inflationSource={inflationSource}
+          inflationOptions={inflationOptions}
+          selectedInflationSourceId={historical.inflationSourceId}
+          onChange={onChange}
+          onInflationSourceChange={onInflationSourceChange}
+        />
       </div>
     </section>
   )
-}
-
-function findReturnSeriesOption(id: string, manualCashRealReturn: number): ReturnSeriesOption | undefined {
-  if (id === 'manual-fixed-real') {
-    return getReturnSeriesOptionsForRole('cash', manualCashRealReturn).find((option) => option.id === id)
-  }
-
-  return findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id)
-}
-
-function ReturnSourceCard({ label, source }: { label: string; source: ReturnSeriesOption }) {
-  const caveats = source.caveats.slice(0, 3)
-
-  return (
-    <article className="source-detail-card">
-      <h3>{label}</h3>
-      <dl>
-        <div>
-          <dt>Quelle</dt>
-          <dd>{getSourceName(source)}</dd>
-        </div>
-        <div>
-          <dt>Version</dt>
-          <dd>{getSourceVersion(source)}</dd>
-        </div>
-        <div>
-          <dt>Abdeckung</dt>
-          <dd>{getCoverageLabel(source)}</dd>
-        </div>
-        <div>
-          <dt>Basis</dt>
-          <dd>{getBasisLabel(source)}</dd>
-        </div>
-        <div>
-          <dt>Lizenz</dt>
-          <dd>{getLicenseLabel(source)}</dd>
-        </div>
-      </dl>
-      <CaveatTags caveats={caveats} />
-    </article>
-  )
-}
-
-function InflationSourceCard({ source }: { source: InflationSourceOption }) {
-  if (isFixedInflationSource(source)) {
-    return (
-      <article className="source-detail-card">
-        <h3>Inflation</h3>
-        <dl>
-          <div>
-            <dt>Quelle</dt>
-            <dd>Manuelle Eingabe</dd>
-          </div>
-          <div>
-            <dt>Version</dt>
-            <dd>Feste Annahme</dd>
-          </div>
-          <div>
-            <dt>Abdeckung</dt>
-            <dd>Alle simulierten Jahre</dd>
-          </div>
-          <div>
-            <dt>Basis</dt>
-            <dd>{formatPrecisePercent(source.annualInflationRate)} pro Jahr</dd>
-          </div>
-          <div>
-            <dt>Lizenz</dt>
-            <dd>Manuelle Modellannahme</dd>
-          </div>
-        </dl>
-        <CaveatTags caveats={source.caveats.slice(0, 3)} />
-      </article>
-    )
-  }
-
-  return (
-    <article className="source-detail-card">
-      <h3>Inflation</h3>
-      <dl>
-        <div>
-          <dt>Quelle</dt>
-          <dd>{source.source.sourceName}</dd>
-        </div>
-        <div>
-          <dt>Version</dt>
-          <dd>{source.sourceDatasetVersion}</dd>
-        </div>
-        <div>
-          <dt>Abdeckung</dt>
-          <dd>{source.startYear}-{source.endYear}, {Object.keys(source.annualInflation).length} Beobachtungen</dd>
-        </div>
-        <div>
-          <dt>Basis</dt>
-          <dd>Deutsche CPI-Inflation, {source.currency}</dd>
-        </div>
-        <div>
-          <dt>Lizenz</dt>
-          <dd>{source.license}</dd>
-        </div>
-      </dl>
-      <CaveatTags caveats={source.caveats.slice(0, 3)} />
-    </article>
-  )
-}
-
-function CaveatTags({ caveats }: { caveats: readonly string[] }) {
-  return (
-    <div className="source-caveats" aria-label="Caveats">
-      {caveats.map((caveat) => (
-        <span key={caveat}>{formatCaveatTag(caveat)}</span>
-      ))}
-    </div>
-  )
-}
-
-function isManualFixedSource(source: ReturnSeriesOption): source is ManualFixedReturnSeries {
-  return source.id === 'manual-fixed-real'
-}
-
-function isSyntheticSource(source: ReturnSeriesOption): source is ManualFixedReturnSeries | SyntheticReturnSeries {
-  return 'kind' in source
-}
-
-function isGeneratedSyntheticSource(source: ReturnSeriesOption): source is SyntheticReturnSeries {
-  return isSyntheticSource(source) && !isManualFixedSource(source)
-}
-
-function isHistoricalSource(source: ReturnSeriesOption): source is HistoricalReturnSeries {
-  return !isSyntheticSource(source)
-}
-
-function formatDropdownLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Cash: fester Realzins'
-  }
-
-  if (isGeneratedSyntheticSource(source)) {
-    return source.label.replace('Synthetisch: ', 'Synthetisch: ')
-  }
-
-  if (source.role === 'equity') {
-    return 'Historisch: Aktien, entwickelte Märkte'
-  }
-
-  if (source.role === 'bond') {
-    return 'Historisch: Staatsanleihen, entwickelte Märkte'
-  }
-
-  if (source.role === 'cash') {
-    return 'Historisch: Bills/Cash, entwickelte Märkte'
-  }
-
-  return source.label
-}
-
-function formatInflationDropdownLabel(source: InflationSourceOption): string {
-  if (isFixedInflationSource(source)) {
-    return `Manuell: feste Inflation (${formatPrecisePercent(source.annualInflationRate)})`
-  }
-
-  return `Historisch: ${source.label}`
-}
-
-function getSourceName(source: ReturnSeriesOption): string {
-  return isSyntheticSource(source) ? 'Synthetische Modellannahme' : source.source.sourceName
-}
-
-function getSourceVersion(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Manuelle Eingabe'
-  }
-
-  return source.sourceDatasetVersion
-}
-
-function getCoverageLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Keine historische Jahresabdeckung'
-  }
-
-  if (isGeneratedSyntheticSource(source)) {
-    return 'Keine historische Jahresabdeckung'
-  }
-
-  return `${source.startYear}-${source.endYear}, ${Object.keys(source.normalizedSeries).length} Beobachtungen`
-}
-
-function getBasisLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Fester Realzins'
-  }
-
-  if (isGeneratedSyntheticSource(source)) {
-    return `Synthetischer Renditepfad, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
-  }
-
-  const typeLabel = source.returnType === 'grossTotal' ? 'Total Return' : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
-  return `${source.returnBasis === 'real' ? 'Real' : 'Nominal'}, ${typeLabel}, ${source.currency}`
-}
-
-function getLicenseLabel(source: ReturnSeriesOption): string {
-  if (isSyntheticSource(source)) {
-    return 'Modellannahme, kein externer Datensatz'
-  }
-
-  return source.commercialUseAllowed ? source.license : `${source.license}; nicht für kommerzielle Nutzung freigegeben`
-}
-
-function formatCaveatTag(caveat: string): string {
-  if (caveat.includes('not cleared for commercial use')) {
-    return 'nicht kommerziell'
-  }
-
-  if (caveat.includes('not an exact EUR-hedged') || caveat.includes('ETF')) {
-    return 'ETF/EUR-Proxy'
-  }
-
-  if (caveat.includes('equal-weighted')) {
-    return 'gleichgewichtet'
-  }
-
-  if (caveat.includes('Synthetic source')) {
-    return 'synthetisch'
-  }
-
-  if (caveat.includes('Manual synthetic')) {
-    return 'manuell'
-  }
-
-  if (caveat.includes('Annual inflation')) {
-    return 'CPI-Jahresproxy'
-  }
-
-  if (caveat.includes('estimated value')) {
-    return 'Schätzwert enthalten'
-  }
-
-
-  return caveat
-}
-
-function shortInflationLabel(source: InflationSourceOption): string {
-  if (isFixedInflationSource(source)) {
-    return `Manuell ${formatPrecisePercent(source.annualInflationRate)}`
-  }
-
-  return source.label.replace('Deutschland CPI Inflation', 'Deutschland CPI')
-}
-
-function formatPercent(value: number): string {
-  return `${Math.round(value * 100)} %`
-}
-
-function formatPrecisePercent(value: number): string {
-  return `${Number((value * 100).toFixed(2)).toLocaleString('de-DE')} %`
 }
