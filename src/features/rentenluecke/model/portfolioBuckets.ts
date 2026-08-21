@@ -68,9 +68,13 @@ export function createDefaultPortfolioBuckets(
   allocation: AssetAllocation,
 ): PortfolioBucket[] {
   const roles: PortfolioBucketRole[] = ['equity', 'bond', 'cash']
+  const allocationTotal = allocation.equity + allocation.bonds + allocation.fixed
+  if (allocationTotal <= 0) return []
+  const normalizationFactor = Math.abs(allocationTotal - 1) < 1e-12 ? 1 : allocationTotal
+
   return roles.flatMap((role) => {
     const config = ROLE_CONFIG[role]
-    const weight = allocation[config.allocationKey]
+    const weight = allocation[config.allocationKey] / normalizationFactor
     return weight === 0
       ? []
       : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, role }]

@@ -66,14 +66,13 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
 
-  it('shows the allocation error and hides calculated outputs when allocation no longer sums to 100 percent', () => {
+  it('regenerates bucket-backed allocation when an allocation slider changes', () => {
     render(<RentenlueckeCalculator />)
 
     fireEvent.change(inputById('allocation-equity'), { target: { value: '60' } })
 
-    expect(screen.getAllByText('Die Aufteilung muss zusammen 100 % ergeben.')).not.toHaveLength(0)
-    expect(screen.getByRole('status')).toHaveTextContent('Die Aufteilung muss zusammen 100 % ergeben.')
-    expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).not.toBeInTheDocument()
+    expect(inputById('allocation-equity')).toHaveValue(66.7)
+    expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
   })
 })

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { rentenlueckeInputSchema } from '../../model/inputSchema'
-import { calculateAllocationFromBuckets } from '../../model/portfolioBuckets'
+import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn } from '../../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './defaults'
 import { normalizeHistoricalState } from './migrations'
@@ -50,7 +50,12 @@ export function loadInitialState(): ScenarioState {
 }
 
 export function serializeScenarioState(state: ScenarioState): string {
-  return JSON.stringify({ version: 6, ...state })
+  const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
+  const input = withDeterministicPortfolioReturn(
+    { ...state.input, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets) },
+    calculatePortfolioExpectedReturn(allocation),
+  )
+  return JSON.stringify({ version: 6, ...state, input, allocation })
 }
 
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -75,7 +80,7 @@ function stateWithDerivedReturn(persisted: {
   const allocation = calculateAllocationFromBuckets(persisted.portfolioBuckets)
   return {
     input: withDeterministicPortfolioReturn(
-      persisted.input,
+      { ...persisted.input, currentCapital: calculatePortfolioBucketTotal(persisted.portfolioBuckets) },
       calculatePortfolioExpectedReturn(allocation),
     ),
     allocation,
