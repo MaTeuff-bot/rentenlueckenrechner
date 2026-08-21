@@ -1,9 +1,11 @@
+import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 import type { RentenlueckeInput } from '../../model/types'
 
 export type ScenarioState = {
   input: RentenlueckeInput
   allocation: AssetAllocation
+  portfolioBuckets: PortfolioBucket[]
   historical: {
     returnSeriesIds: {
       equity: string
