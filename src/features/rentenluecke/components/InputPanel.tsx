@@ -4,18 +4,20 @@ import {
   HISTORICAL_MINIMUM_OBSERVATIONS,
 } from '../model/historicalReturns'
 import { type InputFieldName } from '../model/inputSchema'
-import { createPortfolioComponents, type AssetAllocation, type AssetClassKey } from '../model/stochasticReturns'
+import { calculatePortfolioBucketTotal, type PortfolioBucket } from '../model/portfolioBuckets'
+import { createPortfolioComponents, type AssetAllocation } from '../model/stochasticReturns'
 import type { RentenlueckeInput } from '../model/types'
-import { AllocationSection } from './InputPanel/AllocationSection'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
 import { PersonalDataSection, RetirementCashflowSection, SavingsSection } from './InputPanel/BasicInputSections'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
 import { ReturnSourceSection } from './InputPanel/ReturnSourceSection'
+import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
 import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInflationLabel } from './InputPanel/sourceDisplay'
 
 type InputPanelProps = {
   input: RentenlueckeInput
   allocation: AssetAllocation
+  portfolioBuckets: PortfolioBucket[]
   historical: {
     returnSeriesIds: {
       equity: string
@@ -28,8 +30,11 @@ type InputPanelProps = {
   historicalValidYears: number[]
   errors: Partial<Record<InputFieldName, string>>
   allocationError: string | null
+  portfolioBucketError: string | null
   onChange: (field: InputFieldName, value: number) => void
-  onAllocationChange: (field: AssetClassKey, value: number) => void
+  onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
+  onPortfolioBucketAdd: () => void
+  onPortfolioBucketRemove: (id: string) => void
   onHistoricalReturnSeriesChange: (role: 'equity' | 'bond' | 'cash', seriesId: string) => void
   onManualCashRealReturnChange: (value: number) => void
   onInflationSourceChange: (sourceId: string) => void
@@ -39,12 +44,16 @@ type InputPanelProps = {
 export function InputPanel({
   input,
   allocation,
+  portfolioBuckets,
   historical,
   historicalValidYears,
   errors,
   allocationError,
+  portfolioBucketError,
   onChange,
-  onAllocationChange,
+  onPortfolioBucketChange,
+  onPortfolioBucketAdd,
+  onPortfolioBucketRemove,
   onHistoricalReturnSeriesChange,
   onManualCashRealReturnChange,
   onInflationSourceChange,
@@ -114,13 +123,17 @@ export function InputPanel({
 
         <SavingsSection input={input} errors={errors} onChange={onChange} />
 
-        <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
-
-        <AllocationSection
+        <PortfolioBucketSection
+          buckets={portfolioBuckets}
+          total={calculatePortfolioBucketTotal(portfolioBuckets)}
           allocation={allocation}
-          allocationError={allocationError}
-          onAllocationChange={onAllocationChange}
+          error={portfolioBucketError ?? allocationError}
+          onUpdate={onPortfolioBucketChange}
+          onAdd={onPortfolioBucketAdd}
+          onRemove={onPortfolioBucketRemove}
         />
+
+        <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
 
         <ReturnSourceSection
           portfolioComponents={portfolioComponents}

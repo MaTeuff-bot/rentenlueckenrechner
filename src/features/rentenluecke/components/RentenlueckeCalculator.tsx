@@ -9,15 +9,19 @@ export function RentenlueckeCalculator() {
   const {
     input,
     allocation,
+    portfolioBuckets,
     historical,
     historicalValidYears,
     fieldErrors,
     allocationError,
+    portfolioBucketError,
     isValid,
     result,
     stochasticSummary,
     updateField,
-    updateAllocation,
+    updatePortfolioBucket,
+    addPortfolioBucket,
+    removePortfolioBucket,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
     updateInflationSource,
@@ -41,12 +45,16 @@ export function RentenlueckeCalculator() {
         <InputPanel
           input={input}
           allocation={allocation}
+          portfolioBuckets={portfolioBuckets}
           historical={historical}
           historicalValidYears={historicalValidYears}
           errors={fieldErrors}
           allocationError={allocationError}
+          portfolioBucketError={portfolioBucketError}
           onChange={updateField}
-          onAllocationChange={updateAllocation}
+          onPortfolioBucketChange={updatePortfolioBucket}
+          onPortfolioBucketAdd={addPortfolioBucket}
+          onPortfolioBucketRemove={removePortfolioBucket}
           onHistoricalReturnSeriesChange={updateHistoricalReturnSeries}
           onManualCashRealReturnChange={updateManualCashRealReturn}
           onInflationSourceChange={updateInflationSource}
@@ -55,7 +63,7 @@ export function RentenlueckeCalculator() {
 
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
-            {allocationError ??
+            {portfolioBucketError ?? allocationError ??
               'Bitte korrigiere die markierten Eingaben. Ergebnisse, Diagramm und Tabelle werden erst mit gültigen Annahmen berechnet.'}
           </section>
         ) : (

@@ -9,8 +9,9 @@ import {
   FIXED_INFLATION_SOURCE_ID,
 } from '../../model/historicalReturns'
 import { DEFAULT_INPUT } from '../../model/defaults'
-import { DEFAULT_ASSET_ALLOCATION, type AssetClassKey } from '../../model/stochasticReturns'
+import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import type { InputFieldName } from '../../model/inputSchema'
+import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
 import { InputPanel } from '../InputPanel'
 
 function inputById(id: string): HTMLInputElement {
@@ -41,12 +42,16 @@ function renderInputPanel(
     <InputPanel
       input={DEFAULT_INPUT}
       allocation={DEFAULT_ASSET_ALLOCATION}
+      portfolioBuckets={createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION)}
       historical={historical}
       historicalValidYears={Array.from({ length: 71 }, (_, index) => 1950 + index)}
       errors={{}}
       allocationError={options.allocationError ?? null}
+      portfolioBucketError={null}
       onChange={vi.fn<(field: InputFieldName, value: number) => void>()}
-      onAllocationChange={vi.fn<(field: AssetClassKey, value: number) => void>()}
+      onPortfolioBucketChange={vi.fn()}
+      onPortfolioBucketAdd={vi.fn()}
+      onPortfolioBucketRemove={vi.fn()}
       onHistoricalReturnSeriesChange={vi.fn()}
       onManualCashRealReturnChange={vi.fn<(value: number) => void>()}
       onInflationSourceChange={vi.fn<(sourceId: string) => void>()}
