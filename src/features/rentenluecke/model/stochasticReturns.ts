@@ -11,7 +11,7 @@ export type AssetClassKey = 'equity' | 'bonds' | 'fixed'
 export type PortfolioComponentRole = 'equity' | 'bond' | 'cash' | 'other'
 
 export type PortfolioComponent = {
-  id: AssetClassKey
+  id: string
   label: string
   role: PortfolioComponentRole
   weight: number
