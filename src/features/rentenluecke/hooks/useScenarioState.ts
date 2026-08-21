@@ -6,6 +6,7 @@ import {
   simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
+import { createDefaultPortfolioBuckets } from '../model/portfolioBuckets'
 import {
   calculatePortfolioExpectedReturn,
   createPortfolioComponents,
@@ -20,7 +21,7 @@ export { parsePersistedScenarioState } from './scenarioState/persistence'
 
 export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
-  const { input, allocation, historical } = state
+  const { input, allocation, portfolioBuckets, historical } = state
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const allocationError = useMemo(() => getAllocationValidationError(allocation), [allocation])
@@ -52,11 +53,20 @@ export function useScenarioState() {
 
   useEffect(() => {
     if (!isValid || !parsedInput.success) return
-    localStorage.setItem(STORAGE_KEY, serializeScenarioState({ input: parsedInput.data, allocation, historical }))
-  }, [allocation, historical, isValid, parsedInput])
+    localStorage.setItem(
+      STORAGE_KEY,
+      serializeScenarioState({ input: parsedInput.data, allocation, portfolioBuckets, historical }),
+    )
+  }, [allocation, historical, isValid, parsedInput, portfolioBuckets])
 
   const updateField = (field: InputFieldName, value: number) => {
-    setState((current) => ({ ...current, input: { ...current.input, [field]: value } }))
+    setState((current) => ({
+      ...current,
+      input: { ...current.input, [field]: value },
+      portfolioBuckets: field === 'currentCapital'
+        ? createDefaultPortfolioBuckets(value, current.allocation)
+        : current.portfolioBuckets,
+    }))
   }
 
   const updateAllocation = (field: AssetClassKey, value: number) => {
@@ -66,6 +76,7 @@ export function useScenarioState() {
       return {
         ...current,
         allocation,
+        portfolioBuckets: createDefaultPortfolioBuckets(current.input.currentCapital, allocation),
         input: withDeterministicPortfolioReturn(current.input, derivedReturn),
       }
     })
@@ -104,6 +115,7 @@ export function useScenarioState() {
   return {
     input,
     allocation,
+    portfolioBuckets,
     historical,
     historicalSettings,
     historicalValidYears,

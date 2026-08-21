@@ -1,114 +1,55 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-  DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
-  FIXED_INFLATION_SOURCE_ID,
-  SYNTHETIC_RETURN_SERIES_IDS,
-} from '../../model/historicalReturns'
 import { DEFAULT_INPUT } from '../../model/defaults'
+import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
-import { parsePersistedScenarioState } from '../useScenarioState'
+import { createDefaultState } from '../scenarioState/defaults'
+import { parsePersistedScenarioState, serializeScenarioState } from '../scenarioState/persistence'
 
 function persistedJson(value: unknown): string {
   return JSON.stringify(value)
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('migrates v3 synthetic mode to synthetic asset return sources', () => {
-    const state = parsePersistedScenarioState(
-      persistedJson({
-        version: 3,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        returnModel: 'synthetic',
-        historical: {
-          returnSeriesIds: {
-            equity: 'jst-r6-developed-equal-weight-equity-real-post1950',
-            bond: 'jst-r6-developed-equal-weight-bonds-real-post1950',
-            cash: 'jst-r6-developed-equal-weight-bills-real-post1950',
-          },
-          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
+  it('roundtrips a v6 scenario with portfolio buckets', () => {
+    const scenario = {
+      ...createDefaultState(),
+      portfolioBuckets: [
+        { id: 'world-etf', name: 'World ETF', value: 35_000, role: 'equity' as const },
+        { id: 'bonds', name: 'Bonds', value: 10_000, role: 'bond' as const },
+        { id: 'cash-reserve', name: 'Reserve', value: 5_000, role: 'cash' as const },
+      ],
+    }
 
-    expect(state.historical.returnSeriesIds).toEqual(SYNTHETIC_RETURN_SERIES_IDS)
-    expect(state.historical.inflationSourceId).toBe(FIXED_INFLATION_SOURCE_ID)
+    expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
+    expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
+      version: 6,
+      portfolioBuckets: scenario.portfolioBuckets,
+    })
   })
 
-  it('migrates old provisional fixture ids to production defaults', () => {
-    const state = parsePersistedScenarioState(
-      persistedJson({
-        version: 4,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        historical: {
-          returnSeriesIds: {
-            equity: 'fixture-global-equity-eur-provisional',
-            bond: 'fixture-eur-bonds-provisional',
-            cash: 'fixture-eur-cash-provisional',
-          },
-          inflationSeriesId: 'fixture-de-eur-inflation-provisional',
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
-
-    expect(state.historical.returnSeriesIds).toEqual(DEFAULT_HISTORICAL_RETURN_SERIES_IDS)
-    expect(state.historical.inflationSourceId).toBe(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
+  it.each([1, 2, 3, 4, 5])('falls back to defaults for a v%i shape', (version) => {
+    expect(parsePersistedScenarioState(persistedJson({
+      version,
+      input: { ...DEFAULT_INPUT, currentCapital: 123_456 },
+      allocation: { equity: 0, bonds: 0, fixed: 1 },
+    }))).toEqual(createDefaultState())
   })
 
-  it('falls back to the production CPI default for unknown persisted inflation sources', () => {
-    const state = parsePersistedScenarioState(
-      persistedJson({
-        version: 5,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        historical: {
-          returnSeriesIds: { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS },
-          inflationSourceId: 'missing-inflation-source',
-          manualCashRealReturn: 0,
-        },
-      }),
-    )
-
-    expect(state.historical.inflationSourceId).toBe(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
+  it('falls back to defaults for invalid v6 data', () => {
+    expect(parsePersistedScenarioState(persistedJson({
+      version: 6,
+      input: DEFAULT_INPUT,
+      allocation: DEFAULT_ASSET_ALLOCATION,
+      historical: createDefaultState().historical,
+    }))).toEqual(createDefaultState())
   })
+})
 
-  it('preserves v3 historical manual Cash selections during migration', () => {
-    const state = parsePersistedScenarioState(
-      persistedJson({
-        version: 3,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-        returnModel: 'historicalAnnualBootstrap',
-        historical: {
-          returnSeriesIds: {
-            equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-            bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-            cash: 'manual-fixed-real',
-          },
-          inflationSeriesId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-          manualCashRealReturn: 0.01,
-        },
-      }),
-    )
+describe('createDefaultState', () => {
+  it('creates buckets matching the default capital and allocation', () => {
+    const state = createDefaultState()
 
-    expect(state.historical.returnSeriesIds.cash).toBe('manual-fixed-real')
-    expect(state.historical.manualCashRealReturn).toBe(0.01)
-  })
-
-  it('migrates v2 synthetic scenarios to synthetic asset return sources', () => {
-    const state = parsePersistedScenarioState(
-      persistedJson({
-        version: 2,
-        input: DEFAULT_INPUT,
-        allocation: DEFAULT_ASSET_ALLOCATION,
-      }),
-    )
-
-    expect(state.historical.returnSeriesIds).toEqual(SYNTHETIC_RETURN_SERIES_IDS)
-    expect(state.historical.inflationSourceId).toBe(FIXED_INFLATION_SOURCE_ID)
+    expect(calculatePortfolioBucketTotal(state.portfolioBuckets)).toBe(DEFAULT_INPUT.currentCapital)
+    expect(calculateAllocationFromBuckets(state.portfolioBuckets)).toEqual(DEFAULT_ASSET_ALLOCATION)
   })
 })
