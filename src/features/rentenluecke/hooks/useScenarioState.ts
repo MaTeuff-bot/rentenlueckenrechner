@@ -6,10 +6,14 @@ import {
   simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
-import { createDefaultPortfolioBuckets } from '../model/portfolioBuckets'
+import {
+  calculateAllocationFromBuckets,
+  calculatePortfolioBucketTotal,
+  createDefaultPortfolioBuckets,
+  createPortfolioComponentsFromBuckets,
+} from '../model/portfolioBuckets'
 import {
   calculatePortfolioExpectedReturn,
-  createPortfolioComponents,
   DEFAULT_STOCHASTIC_SETTINGS,
   getAllocationValidationError,
   type AssetClassKey,
@@ -21,7 +25,15 @@ export { parsePersistedScenarioState } from './scenarioState/persistence'
 
 export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
-  const { input, allocation, portfolioBuckets, historical } = state
+  const { portfolioBuckets, historical } = state
+  const allocation = useMemo(() => calculateAllocationFromBuckets(portfolioBuckets), [portfolioBuckets])
+  const input = useMemo(() => {
+    const annualReturn = calculatePortfolioExpectedReturn(allocation)
+    return withDeterministicPortfolioReturn({
+      ...state.input,
+      currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
+    }, annualReturn)
+  }, [allocation, portfolioBuckets, state.input])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const allocationError = useMemo(() => getAllocationValidationError(allocation), [allocation])
@@ -31,12 +43,12 @@ export function useScenarioState() {
   const isValid = parsedInput.success && !allocationError
   const historicalSettings = useMemo(
     () => ({
-      portfolioComponents: createPortfolioComponents(allocation, historical.returnSeriesIds),
+      portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets, historical.returnSeriesIds),
       inflationSourceId: historical.inflationSourceId,
       manualCashRealReturn: historical.manualCashRealReturn,
       simulations: DEFAULT_STOCHASTIC_SETTINGS.simulations,
     }),
-    [allocation, historical],
+    [historical, portfolioBuckets],
   )
   const historicalValidYears = useMemo(() => {
     const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
@@ -64,19 +76,21 @@ export function useScenarioState() {
       ...current,
       input: { ...current.input, [field]: value },
       portfolioBuckets: field === 'currentCapital'
-        ? createDefaultPortfolioBuckets(value, current.allocation)
+        ? createDefaultPortfolioBuckets(value, calculateAllocationFromBuckets(current.portfolioBuckets))
         : current.portfolioBuckets,
     }))
   }
 
   const updateAllocation = (field: AssetClassKey, value: number) => {
     setState((current) => {
-      const allocation = { ...current.allocation, [field]: value }
+      const currentAllocation = calculateAllocationFromBuckets(current.portfolioBuckets)
+      const allocation = { ...currentAllocation, [field]: value }
       const derivedReturn = calculatePortfolioExpectedReturn(allocation)
+      const currentCapital = calculatePortfolioBucketTotal(current.portfolioBuckets)
       return {
         ...current,
         allocation,
-        portfolioBuckets: createDefaultPortfolioBuckets(current.input.currentCapital, allocation),
+        portfolioBuckets: createDefaultPortfolioBuckets(currentCapital, allocation),
         input: withDeterministicPortfolioReturn(current.input, derivedReturn),
       }
     })

@@ -481,4 +481,29 @@ describe('historical returns', () => {
     expect(HISTORICAL_RETURN_SERIES[0]?.id).toBe(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)
     expect(HISTORICAL_INFLATION_SERIES[0]?.id).toBe(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
   })
+
+  it('keeps bootstrap seeds and results stable when a component label is renamed', () => {
+    const settings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
+        DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+      ),
+      inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+      manualCashRealReturn: 0,
+      simulations: 25,
+    }
+    const renamedSettings = {
+      ...settings,
+      portfolioComponents: settings.portfolioComponents.map((component, index) =>
+        index === 0 ? { ...component, label: 'Renamed bucket' } : component,
+      ),
+    }
+
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, renamedSettings)).toBe(
+      createHistoricalBootstrapSeed(DEFAULT_INPUT, settings),
+    )
+    expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, renamedSettings)).toEqual(
+      simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    )
+  })
 })
