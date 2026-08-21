@@ -11,6 +11,8 @@ import {
   calculatePortfolioBucketTotal,
   createDefaultPortfolioBuckets,
   createPortfolioComponentsFromBuckets,
+  validatePortfolioBuckets,
+  type PortfolioBucket,
 } from '../model/portfolioBuckets'
 import {
   calculatePortfolioExpectedReturn,
@@ -22,6 +24,8 @@ import { createDefaultState, withDeterministicPortfolioReturn } from './scenario
 import { loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
+
+let nextPortfolioBucketId = 1
 
 export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
@@ -36,11 +40,12 @@ export function useScenarioState() {
   }, [allocation, portfolioBuckets, state.input])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
+  const portfolioBucketError = useMemo(() => validatePortfolioBuckets(portfolioBuckets), [portfolioBuckets])
   const allocationError = useMemo(() => getAllocationValidationError(allocation), [allocation])
   const fieldErrors = useMemo<Partial<Record<InputFieldName, string>>>(() => {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
-  const isValid = parsedInput.success && !allocationError
+  const isValid = parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
     () => ({
       portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets, historical.returnSeriesIds),
@@ -96,6 +101,35 @@ export function useScenarioState() {
     })
   }
 
+  const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
+    setState((current) => ({
+      ...current,
+      portfolioBuckets: current.portfolioBuckets.map((bucket) =>
+        bucket.id === id ? { ...bucket, ...patch } : bucket,
+      ),
+    }))
+  }
+
+  const addPortfolioBucket = () => {
+    setState((current) => {
+      let id: string
+      do {
+        id = `portfolio-${Date.now()}-${nextPortfolioBucketId++}`
+      } while (current.portfolioBuckets.some((bucket) => bucket.id === id))
+      return {
+        ...current,
+        portfolioBuckets: [
+          ...current.portfolioBuckets,
+          { id, name: 'Neue Anlage', value: 0, role: 'equity' },
+        ],
+      }
+    })
+  }
+
+  const removePortfolioBucket = (id: string) => {
+    setState((current) => ({ ...current, portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id) }))
+  }
+
   const updateHistoricalReturnSeries = (role: 'equity' | 'bond' | 'cash', seriesId: string) => {
     setState((current) => ({
       ...current,
@@ -135,11 +169,15 @@ export function useScenarioState() {
     historicalValidYears,
     fieldErrors,
     allocationError,
+    portfolioBucketError,
     isValid,
     result,
     stochasticSummary,
     updateField,
     updateAllocation,
+    updatePortfolioBucket,
+    addPortfolioBucket,
+    removePortfolioBucket,
     updateHistoricalReturnSeries,
     updateManualCashRealReturn,
     updateInflationSource,

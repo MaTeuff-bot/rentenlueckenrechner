@@ -65,14 +65,36 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
-
-  it('regenerates bucket-backed allocation when an allocation slider changes', () => {
+  it('updates the derived total, allocation, and result from a bucket value', () => {
     render(<RentenlueckeCalculator />)
 
-    fireEvent.change(inputById('allocation-equity'), { target: { value: '60' } })
-
-    expect(inputById('allocation-equity')).toHaveValue(66.7)
+    expect(document.getElementById('currentCapital')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 50.000')
+    fireEvent.change(inputById('portfolio-value-equity'), { target: { value: '40000' } })
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 55.000')
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Aktien 72,7 %')
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
+  })
+
+  it('adds, retypes, and removes a bucket', () => {
+    render(<RentenlueckeCalculator />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Anlage hinzufügen/ }))
+    const newName = screen.getByDisplayValue('Neue Anlage')
+    const newRow = newName.closest('.portfolio-bucket') as HTMLElement
+    fireEvent.change(newRow.querySelector('input[type="number"]') as HTMLInputElement, { target: { value: '10000' } })
+    fireEvent.change(newRow.querySelector('select') as HTMLSelectElement, { target: { value: 'cash' } })
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Cash 25 %')
+    fireEvent.click(screen.getByRole('button', { name: 'Neue Anlage entfernen' }))
+    expect(screen.queryByDisplayValue('Neue Anlage')).not.toBeInTheDocument()
+  })
+
+  it('hides results for an empty portfolio', () => {
+    render(<RentenlueckeCalculator />)
+
+    for (const button of screen.getAllByRole('button', { name: /entfernen$/ })) fireEvent.click(button)
+    expect(screen.getByRole('status')).toHaveTextContent('Gesamtwert des Portfolios muss größer als 0')
+    expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
 })

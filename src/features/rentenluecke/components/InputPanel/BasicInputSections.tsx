@@ -47,14 +47,7 @@ export function PersonalDataSection({ input, errors, onChange }: BasicSectionPro
 export function SavingsSection({ input, errors, onChange }: BasicSectionProps) {
   return (
     <fieldset>
-      <legend>Vermögen und Sparrate</legend>
-      <CurrencyInput
-        id="currentCapital"
-        label={inputLabels.currentCapital}
-        value={input.currentCapital}
-        error={errors.currentCapital}
-        onChange={(value) => onChange('currentCapital', value)}
-      />
+      <legend>Sparrate</legend>
       <CurrencyInput
         id="monthlyContributionToday"
         label={inputLabels.monthlyContributionToday}
