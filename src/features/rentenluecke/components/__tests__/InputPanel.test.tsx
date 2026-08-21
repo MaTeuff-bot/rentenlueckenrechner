@@ -35,6 +35,7 @@ function renderInputPanel(
     inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
     manualCashRealReturn: 0,
   },
+  options: { allocationError?: string; onReset?: () => void } = {},
 ) {
   render(
     <InputPanel
@@ -43,13 +44,13 @@ function renderInputPanel(
       historical={historical}
       historicalValidYears={Array.from({ length: 71 }, (_, index) => 1950 + index)}
       errors={{}}
-      allocationError={null}
+      allocationError={options.allocationError ?? null}
       onChange={vi.fn<(field: InputFieldName, value: number) => void>()}
       onAllocationChange={vi.fn<(field: AssetClassKey, value: number) => void>()}
       onHistoricalReturnSeriesChange={vi.fn()}
       onManualCashRealReturnChange={vi.fn<(value: number) => void>()}
       onInflationSourceChange={vi.fn<(sourceId: string) => void>()}
-      onReset={vi.fn()}
+      onReset={options.onReset ?? vi.fn()}
     />,
   )
 }
@@ -138,5 +139,19 @@ describe('InputPanel return source UX', () => {
 
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')
     expect(inputById('annualInflationRate')).toBeInTheDocument()
+  })
+
+  it('renders allocation errors and delegates reset without running a scenario', () => {
+    const onReset = vi.fn()
+
+    renderInputPanel(undefined, {
+      allocationError: 'Die Aufteilung muss zusammen 100 % ergeben.',
+      onReset,
+    })
+
+    expect(screen.getAllByText('Die Aufteilung muss zusammen 100 % ergeben.')).not.toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eingaben zurücksetzen' }))
+    expect(onReset).toHaveBeenCalledOnce()
   })
 })
