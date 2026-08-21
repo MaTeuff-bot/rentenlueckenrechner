@@ -43,7 +43,7 @@ function inputById(id: string): HTMLInputElement {
 }
 
 describe('RentenlueckeCalculator', () => {
-  it('renders core result, simulation, table, and assumptions content by default', () => {
+  it('renders core result, simulation, table, and assumptions content by default', async () => {
     render(<RentenlueckeCalculator />)
 
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()

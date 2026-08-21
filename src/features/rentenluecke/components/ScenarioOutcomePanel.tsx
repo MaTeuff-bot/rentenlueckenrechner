@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import {
   buildRiskChips,
   buildScenarioOutcomeRows,
@@ -6,11 +6,14 @@ import {
   isCapitalDisplayCapped,
   type DepletionRiskChip,
 } from '../charting/scenarioOutcomeData'
-import { ScenarioOutcomeChart } from './ScenarioOutcomeChart'
 import { formatCurrency, formatPercent } from '../model/format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
 import { DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE, type LifeTableSex } from '../mortality/mortality'
+
+const ScenarioOutcomeChart = lazy(() =>
+  import('./ScenarioOutcomeChart').then((module) => ({ default: module.ScenarioOutcomeChart })),
+)
 
 type ScenarioOutcomePanelProps = {
   result: SimulationResult
@@ -112,14 +115,22 @@ export function ScenarioOutcomePanel({
         in der Simulation.
       </p>
 
-      <ScenarioOutcomeChart
-        rows={chartRows}
-        retirementAge={result.retirementRows[0]?.ageStart ?? 0}
-        depletionAgeEnd={result.summary.depletionAgeEnd}
-        showSurvivalProbability={showSurvivalProbability}
-        useLogCapitalScale={useLogCapitalScale}
-        capitalDisplayCap={capitalDisplayCap}
-      />
+      <Suspense
+        fallback={
+          <div className="chart-shell chart-loading" role="status">
+            Diagramm wird geladen …
+          </div>
+        }
+      >
+        <ScenarioOutcomeChart
+          rows={chartRows}
+          retirementAge={result.retirementRows[0]?.ageStart ?? 0}
+          depletionAgeEnd={result.summary.depletionAgeEnd}
+          showSurvivalProbability={showSurvivalProbability}
+          useLogCapitalScale={useLogCapitalScale}
+          capitalDisplayCap={capitalDisplayCap}
+        />
+      </Suspense>
 
       <div className="chart-interpretation-row" aria-label="Diagramm lesen">
         <span>Band: P10–P90</span>

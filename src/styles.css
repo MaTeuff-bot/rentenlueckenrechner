@@ -441,6 +441,13 @@ legend {
   min-height: 300px;
 }
 
+.chart-loading {
+  display: grid;
+  place-items: center;
+  color: #5a6877;
+  font-size: 0.9rem;
+}
+
 .chart-heading {
   align-items: center;
 }
