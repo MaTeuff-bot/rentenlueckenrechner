@@ -1,10 +1,14 @@
-# Rentenlueckenrechner
+# Persönlicher Ruhestandsplaner
 
-Vite/React/TypeScript app for estimating the capital needed at retirement to cover a monthly pension gap. The app runs a transparent yearly ledger from the current age through the planning age, then shows summary results, a merged outcome chart with deterministic, stochastic, depletion, and survival views, the yearly table, and assumptions.
+Der Rentenlückenrechner ist ein persönlicher Ruhestandsplaner als Vite/React/TypeScript-App. Er schätzt das zum Rentenbeginn benötigte Kapital für eine monatliche Rentenlücke und zeigt die Ergebnisse als Kennzahlen, Ergebnisdiagramm und Jahrestabelle.
 
 ## Core Idea
 
 The yearly table is the source of truth. Framework-free model functions build annual accumulation and retirement rows; React components, local storage, and Recharts sit around that model as UI layers.
+
+Das bestehende Vermögen wird in frei benannten Portfolio-Bausteinen erfasst. Jeder Baustein ist genau einer Renditerolle zugeordnet: Aktien, Anleihen oder Cash. Werte und Rollen dieser Bausteine bestimmen gemeinsam die Portfolio-Aufteilung und die verwendeten Renditequellen; die Aufteilung wird nicht separat gespeichert oder bearbeitet.
+
+Bewusst nicht abgebildet sind individuelle Renditeannahmen je Baustein, Steuern, Gebühren, eine ETF-Suche und eine konkrete Entnahmestrategie.
 
 ## Commands
 

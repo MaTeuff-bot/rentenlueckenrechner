@@ -19,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v6 scenario with portfolio buckets', () => {
+  it('roundtrips a v7 scenario with portfolio buckets', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -31,9 +31,10 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 6,
+      version: 7,
       portfolioBuckets: scenario.portfolioBuckets,
     })
+    expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
   })
 
   it.each([1, 2, 3, 4, 5])('falls back to defaults for a v%i shape', (version) => {
@@ -77,10 +78,9 @@ describe('useScenarioState', () => {
     expect(result.current.result).toEqual(simulateHistoricalBootstrapReferenceScenario(defaults.input, expectedSettings))
   })
 
-  it('derives input, allocation, and historical components from multiple buckets with the same role', () => {
+  it('ignores stale v6 allocation and derives input, allocation, and historical components from buckets', () => {
     const persisted = createDefaultState()
     persisted.input = { ...persisted.input, currentCapital: 999_999, annualReturnBeforeRetirement: 0, annualReturnInRetirement: 0 }
-    persisted.allocation = { equity: 0, bonds: 0, fixed: 1 }
     persisted.portfolioBuckets = [
       { id: 'world', name: 'World ETF', value: 30_000, role: 'equity' },
       { id: 'small-cap', name: 'Small Cap', value: 5_000, role: 'equity' },
@@ -88,7 +88,10 @@ describe('useScenarioState', () => {
       { id: 'reserve', name: 'Reserve', value: 5_000, role: 'cash' },
       { id: 'zero', name: 'Zero', value: 0, role: 'cash' },
     ]
-    localStorage.setItem('rentenlueckenrechner.scenario.v6', JSON.stringify({ version: 6, ...persisted }))
+    localStorage.setItem(
+      'rentenlueckenrechner.scenario.v6',
+      JSON.stringify({ version: 6, ...persisted, allocation: { equity: 0, bonds: 0, fixed: 1 } }),
+    )
 
     const { result } = renderHook(() => useScenarioState())
     const expectedAllocation = { equity: 0.7, bonds: 0.2, fixed: 0.1 }
