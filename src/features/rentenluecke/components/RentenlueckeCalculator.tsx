@@ -32,11 +32,11 @@ export function RentenlueckeCalculator() {
     <main>
       <header className="hero">
         <div className="page-shell">
-          <p className="eyebrow">Rentenlückenrechner</p>
-          <h1>Benötigtes Kapital zum Rentenbeginn</h1>
+          <p className="eyebrow">Persönlicher Ruhestandsplaner</p>
+          <h1>Dein benötigtes Kapital zum Rentenbeginn</h1>
           <p>
-            Schätze mit einer transparenten Jahressimulation, wie viel Kapital zum Renteneintritt benötigt wird,
-            um eine monatliche Rentenlücke bis zum Planungshorizont zu decken.
+            Ordne deine benannten Portfolio-Bausteine den Rollen Aktien, Anleihen oder Cash zu und schätze mit
+            einer transparenten Jahressimulation, wie viel Kapital deine Rentenlücke bis zum Planungshorizont deckt.
           </p>
         </div>
       </header>

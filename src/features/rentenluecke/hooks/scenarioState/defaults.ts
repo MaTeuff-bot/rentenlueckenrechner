@@ -13,7 +13,6 @@ import type { ScenarioState } from './types'
 export function createDefaultState(): ScenarioState {
   return {
     input: withDeterministicPortfolioReturn(DEFAULT_INPUT, calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION)),
-    allocation: DEFAULT_ASSET_ALLOCATION,
     portfolioBuckets: createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION),
     historical: createDefaultHistoricalState(),
   }

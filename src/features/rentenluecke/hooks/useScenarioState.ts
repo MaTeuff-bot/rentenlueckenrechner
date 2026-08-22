@@ -18,7 +18,6 @@ import {
   calculatePortfolioExpectedReturn,
   DEFAULT_STOCHASTIC_SETTINGS,
   getAllocationValidationError,
-  type AssetClassKey,
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
@@ -72,9 +71,9 @@ export function useScenarioState() {
     if (!isValid || !parsedInput.success) return
     localStorage.setItem(
       STORAGE_KEY,
-      serializeScenarioState({ input: parsedInput.data, allocation, portfolioBuckets, historical }),
+      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, historical }),
     )
-  }, [allocation, historical, isValid, parsedInput, portfolioBuckets])
+  }, [historical, isValid, parsedInput, portfolioBuckets])
 
   const updateField = (field: InputFieldName, value: number) => {
     setState((current) => ({
@@ -84,21 +83,6 @@ export function useScenarioState() {
         ? createDefaultPortfolioBuckets(value, calculateAllocationFromBuckets(current.portfolioBuckets))
         : current.portfolioBuckets,
     }))
-  }
-
-  const updateAllocation = (field: AssetClassKey, value: number) => {
-    setState((current) => {
-      const currentAllocation = calculateAllocationFromBuckets(current.portfolioBuckets)
-      const allocation = { ...currentAllocation, [field]: value }
-      const derivedReturn = calculatePortfolioExpectedReturn(allocation)
-      const currentCapital = calculatePortfolioBucketTotal(current.portfolioBuckets)
-      return {
-        ...current,
-        allocation,
-        portfolioBuckets: createDefaultPortfolioBuckets(currentCapital, allocation),
-        input: withDeterministicPortfolioReturn(current.input, derivedReturn),
-      }
-    })
   }
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
@@ -174,7 +158,6 @@ export function useScenarioState() {
     result,
     stochasticSummary,
     updateField,
-    updateAllocation,
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
