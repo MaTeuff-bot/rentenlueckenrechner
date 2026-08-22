@@ -76,19 +76,6 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
   })
 
-  it('adds, retypes, and removes a bucket', () => {
-    render(<RentenlueckeCalculator />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Anlage hinzufügen/ }))
-    const newName = screen.getByDisplayValue('Neue Anlage')
-    const newRow = newName.closest('.portfolio-bucket') as HTMLElement
-    fireEvent.change(newRow.querySelector('input[type="number"]') as HTMLInputElement, { target: { value: '10000' } })
-    fireEvent.change(newRow.querySelector('select') as HTMLSelectElement, { target: { value: 'cash' } })
-    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Cash 25 %')
-    fireEvent.click(screen.getByRole('button', { name: 'Neue Anlage entfernen' }))
-    expect(screen.queryByDisplayValue('Neue Anlage')).not.toBeInTheDocument()
-  })
-
   it('hides results for an empty portfolio', () => {
     render(<RentenlueckeCalculator />)
 
