@@ -4,6 +4,7 @@ import {
   isFixedInflationSource,
   type HistoricalReturnSeries,
   type InflationSourceOption,
+  type ReturnSeriesCategory,
   type ReturnSeriesOption,
   type SyntheticReturnSeries,
   getReturnSeriesCategory,
@@ -27,7 +28,7 @@ export function isHistoricalSource(source: ReturnSeriesOption): source is Histor
 
 export function formatDropdownLabel(source: ReturnSeriesOption): string {
   const category = getReturnSeriesCategory(source.id)
-  const categoryLabel = category === 'equity' ? 'Aktien' : category === 'bond' ? 'Anleihen' : 'Cash'
+  const categoryLabel = formatSourceCategoryLabel(category)
   if (isGeneratedSyntheticSource(source)) {
     return `${categoryLabel} — ${source.label}`
   }
@@ -45,6 +46,13 @@ export function formatDropdownLabel(source: ReturnSeriesOption): string {
   }
 
   return source.label
+}
+
+export function formatSourceCategoryLabel(category: ReturnSeriesCategory | undefined): string {
+  if (category === 'equity') return 'Aktien'
+  if (category === 'bond') return 'Anleihen'
+  if (category === 'cash') return 'Cash'
+  return 'Unbekannt'
 }
 
 export function formatInflationDropdownLabel(source: InflationSourceOption): string {

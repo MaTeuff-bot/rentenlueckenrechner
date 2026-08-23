@@ -148,6 +148,28 @@ legend {
   font-weight: 700;
 }
 
+.field-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.source-category-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid #b9c4cf;
+  border-radius: 999px;
+  background: #f8fbfc;
+  color: #344355;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .field-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
