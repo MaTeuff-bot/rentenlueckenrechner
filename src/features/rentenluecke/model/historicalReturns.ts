@@ -9,7 +9,6 @@ export {
 export {
   HISTORICAL_RETURN_SERIES,
   SYNTHETIC_RETURN_SERIES,
-  createManualFixedRealReturnSeries,
   findHistoricalReturnSeries,
   findSyntheticReturnSeries,
 } from './historicalReturns/returnSeriesRegistry'
@@ -52,7 +51,6 @@ export type {
   HistoricalReturnSeries,
   InflationSeries,
   InflationSourceOption,
-  ManualFixedReturnSeries,
   ReturnBasis,
   ReturnSeriesOption,
   ReturnType,

@@ -22,8 +22,6 @@ export function RentenlueckeCalculator() {
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
-    updateHistoricalReturnSeries,
-    updateManualCashRealReturn,
     updateInflationSource,
     reset,
   } = useScenarioState()
@@ -55,8 +53,6 @@ export function RentenlueckeCalculator() {
           onPortfolioBucketChange={updatePortfolioBucket}
           onPortfolioBucketAdd={addPortfolioBucket}
           onPortfolioBucketRemove={removePortfolioBucket}
-          onHistoricalReturnSeriesChange={updateHistoricalReturnSeries}
-          onManualCashRealReturnChange={updateManualCashRealReturn}
           onInflationSourceChange={updateInflationSource}
           onReset={reset}
         />

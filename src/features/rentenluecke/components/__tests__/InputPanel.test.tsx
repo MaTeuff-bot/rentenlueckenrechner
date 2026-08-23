@@ -5,7 +5,6 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-  DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
   FIXED_INFLATION_SOURCE_ID,
 } from '../../model/historicalReturns'
 import { DEFAULT_INPUT } from '../../model/defaults'
@@ -24,25 +23,22 @@ function inputById(id: string): HTMLInputElement {
 
 function renderInputPanel(
   historical: {
-    returnSeriesIds: {
-      equity: string
-      bond: string
-      cash: string
-    }
     inflationSourceId: string
-    manualCashRealReturn: number
   } = {
-    returnSeriesIds: { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS },
     inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-    manualCashRealReturn: 0,
   },
-  options: { allocationError?: string; onReset?: () => void } = {},
+  options: { allocationError?: string; onReset?: () => void; syntheticCash?: boolean } = {},
 ) {
+  const buckets = createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION)
+  if (options.syntheticCash) {
+    const cash = buckets.find((bucket) => bucket.role === 'cash')
+    if (cash) cash.returnSeriesId = 'synthetic-cash-assumption-v1'
+  }
   render(
     <InputPanel
       input={DEFAULT_INPUT}
       allocation={DEFAULT_ASSET_ALLOCATION}
-      portfolioBuckets={createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION)}
+      portfolioBuckets={buckets}
       historical={historical}
       historicalValidYears={Array.from({ length: 71 }, (_, index) => 1950 + index)}
       errors={{}}
@@ -52,8 +48,6 @@ function renderInputPanel(
       onPortfolioBucketChange={vi.fn()}
       onPortfolioBucketAdd={vi.fn()}
       onPortfolioBucketRemove={vi.fn()}
-      onHistoricalReturnSeriesChange={vi.fn()}
-      onManualCashRealReturnChange={vi.fn<(value: number) => void>()}
       onInflationSourceChange={vi.fn<(sourceId: string) => void>()}
       onReset={options.onReset ?? vi.fn()}
     />,
@@ -77,15 +71,7 @@ describe('InputPanel return source UX', () => {
 
     expect(screen.queryByText(/Gemischte Quellen/)).not.toBeInTheDocument()
 
-    renderInputPanel({
-      returnSeriesIds: {
-        equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-        bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-        cash: 'synthetic-cash-assumption-v1',
-      },
-      inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
-    })
+    renderInputPanel(undefined, { syntheticCash: true })
 
     expect(screen.getByText(/Gemischte Quellen/)).toBeInTheDocument()
     expect(screen.getByText(/synthetische Anlagen ziehen separat/)).toBeInTheDocument()
@@ -137,9 +123,7 @@ describe('InputPanel return source UX', () => {
 
   it('shows the fixed percent input only for manual inflation', () => {
     renderInputPanel({
-      returnSeriesIds: { ...DEFAULT_HISTORICAL_RETURN_SERIES_IDS },
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
-      manualCashRealReturn: 0,
     })
 
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')

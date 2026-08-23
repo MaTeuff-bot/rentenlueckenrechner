@@ -4,24 +4,11 @@ import {
   SYNTHETIC_RETURN_ASSUMPTIONS_VERSION,
   SYNTHETIC_RETURN_SERIES_IDS,
 } from './constants'
-import type { HistoricalReturnSeries, ManualFixedReturnSeries, SyntheticReturnSeries } from './types'
+import type { HistoricalReturnSeries, SyntheticReturnSeries } from './types'
 
 export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
   ...HISTORICAL_PRODUCTION_RETURN_SERIES,
 ]
-
-export function createManualFixedRealReturnSeries(annualReturn: number): ManualFixedReturnSeries {
-  return {
-    id: 'manual-fixed-real',
-    kind: 'synthetic',
-    label: 'Manuell: fester Realzins',
-    description: 'Constant real Cash return. Does not restrict the usable historical years.',
-    suitableFor: ['cash'],
-    returnBasis: 'real',
-    annualReturn,
-    caveats: ['Manual synthetic return. It is synchronized with sampled inflation but has no historical year coverage.'],
-  }
-}
 
 export const SYNTHETIC_RETURN_SERIES: SyntheticReturnSeries[] = ASSET_CLASS_ASSUMPTIONS.map((assumption) =>
   createSyntheticReturnSeries(assumption),
@@ -36,7 +23,7 @@ export function findSyntheticReturnSeries(id: string): SyntheticReturnSeries | u
 }
 
 export function isSyntheticReturnSeriesId(id: string): boolean {
-  return id === 'manual-fixed-real' || Boolean(findSyntheticReturnSeries(id))
+  return Boolean(findSyntheticReturnSeries(id))
 }
 
 function createSyntheticReturnSeries(assumption: AssetClassAssumption): SyntheticReturnSeries {

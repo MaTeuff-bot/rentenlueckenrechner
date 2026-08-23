@@ -62,17 +62,6 @@ export type HistoricalReturnSeries = {
   checksum?: string
 }
 
-export type ManualFixedReturnSeries = {
-  id: 'manual-fixed-real'
-  kind: 'synthetic'
-  label: string
-  description: string
-  suitableFor: ['cash']
-  returnBasis: 'real'
-  annualReturn: number
-  caveats: string[]
-}
-
 export type SyntheticReturnSeries = {
   id: string
   kind: 'synthetic'
@@ -87,7 +76,7 @@ export type SyntheticReturnSeries = {
   caveats: string[]
 }
 
-export type ReturnSeriesOption = HistoricalReturnSeries | ManualFixedReturnSeries | SyntheticReturnSeries
+export type ReturnSeriesOption = HistoricalReturnSeries | SyntheticReturnSeries
 
 export type InflationSeries = {
   id: string
@@ -127,7 +116,6 @@ export type InflationSourceOption = FixedInflationSource | InflationSeries
 export type HistoricalBootstrapSettings = {
   portfolioComponents: PortfolioComponent[]
   inflationSourceId: string
-  manualCashRealReturn: number
   simulations: number
 }
 

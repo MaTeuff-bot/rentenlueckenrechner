@@ -28,7 +28,6 @@ export function simulateHistoricalBootstrapScenario(
     settings.portfolioComponents,
     inflationSource,
     sampledYears,
-    settings.manualCashRealReturn,
     createSeededRandom(seed),
   )
   const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
@@ -90,7 +89,6 @@ export function runHistoricalBootstrapSimulation(
       settings.portfolioComponents,
       inflationSource,
       sampledYears,
-      settings.manualCashRealReturn,
       createSeededRandom(returnSeed),
     )
     const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)

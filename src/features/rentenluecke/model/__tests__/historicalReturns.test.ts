@@ -74,13 +74,13 @@ describe('historical returns', () => {
     const runtimeIdsAndLabels = [
       ...HISTORICAL_RETURN_SERIES.flatMap((series) => [series.id, series.label]),
       ...HISTORICAL_INFLATION_SERIES.flatMap((series) => [series.id, series.label]),
-      ...getReturnSeriesOptionsForRole('equity', 0).flatMap((series) => [series.id, series.label]),
-      ...getReturnSeriesOptionsForRole('bond', 0).flatMap((series) => [series.id, series.label]),
-      ...getReturnSeriesOptionsForRole('cash', 0).flatMap((series) => [series.id, series.label]),
+      ...getReturnSeriesOptionsForRole('equity').flatMap((series) => [series.id, series.label]),
+      ...getReturnSeriesOptionsForRole('bond').flatMap((series) => [series.id, series.label]),
+      ...getReturnSeriesOptionsForRole('cash').flatMap((series) => [series.id, series.label]),
     ]
 
     expect(runtimeIdsAndLabels.every((value) => !/fixture|provisional|provisorisch/i.test(value))).toBe(true)
-    expect(getReturnSeriesOptionsForRole('cash', 0).map((series) => series.id)).toContain('manual-fixed-real')
+    expect(getReturnSeriesOptionsForRole('cash').map((series) => series.id)).not.toContain('manual-fixed-real')
   })
 
   it('has 1950-2020 synchronized default valid years with 71 observations', () => {
@@ -124,13 +124,13 @@ describe('historical returns', () => {
     expect(defaultInflation?.checksum).toMatch(/^sha256:/)
   })
 
-  it('computes valid years from observed intersections and ignores manual series coverage', () => {
+  it('computes valid years from observed intersections and ignores synthetic series coverage', () => {
     const components = createPortfolioComponents(
       { equity: 0.5, bonds: 0.3, fixed: 0.2 },
       {
         equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
         bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-        cash: 'manual-fixed-real',
+        cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
       },
     )
     const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)
@@ -221,7 +221,7 @@ describe('historical returns', () => {
       },
     )
     const defaultInflation = findInflationSeries(DEFAULT_HISTORICAL_INFLATION_SERIES_ID)!
-    const [pathReturn] = generateHistoricalReturnPath(components, defaultInflation, [2020], 0)
+    const [pathReturn] = generateHistoricalReturnPath(components, defaultInflation, [2020])
 
     const inflation2020 = defaultInflation.annualInflation[2020]
     const equityNominal = (1 + findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)!.normalizedSeries[2020]) * (1 + inflation2020) - 1
@@ -241,7 +241,7 @@ describe('historical returns', () => {
       },
     )
     const fixedInflation = createFixedInflationSource(0.1)
-    const [pathReturn] = generateHistoricalReturnPath(components, fixedInflation, [2020], 0)
+    const [pathReturn] = generateHistoricalReturnPath(components, fixedInflation, [2020])
     const equityReal = findHistoricalReturnSeries(DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity)!.normalizedSeries[2020]
 
     expect(pathReturn).toBeCloseTo((1 + equityReal) * 1.1 - 1)
@@ -262,11 +262,10 @@ describe('historical returns', () => {
         {
           equity: SYNTHETIC_RETURN_SERIES_IDS.equity,
           bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
-          cash: 'manual-fixed-real',
+          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
         },
       ),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
       simulations: 1,
     }
     const result = simulateHistoricalBootstrapReferenceScenario(input, settings)
@@ -297,7 +296,6 @@ describe('historical returns', () => {
         },
       ),
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
-      manualCashRealReturn: 0,
       simulations: 1,
     }
     const result = simulateHistoricalBootstrapReferenceScenario(input, settings)
@@ -320,14 +318,12 @@ describe('historical returns', () => {
       components,
       defaultInflation,
       [2020, 2020, 2020],
-      0,
       () => 0.5,
     )
     const secondPath = generateHistoricalReturnPath(
       components,
       defaultInflation,
       [2020, 2020, 2020],
-      0,
       () => 0.5,
     )
     const inflation2020 = defaultInflation.annualInflation[2020]
@@ -346,7 +342,6 @@ describe('historical returns', () => {
         DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
       ),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
 
@@ -373,7 +368,6 @@ describe('historical returns', () => {
         },
       ),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
 
@@ -396,7 +390,6 @@ describe('historical returns', () => {
         },
       ),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
 
@@ -419,7 +412,6 @@ describe('historical returns', () => {
         },
       ),
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
     const historicalSettings = {
@@ -452,7 +444,6 @@ describe('historical returns', () => {
         },
       ),
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
 
@@ -462,19 +453,6 @@ describe('historical returns', () => {
     expect(bootstrapSummary.rows.map((row) => row.planCapitalToday)).toEqual(
       fixedReturnSelectedInflationPlan.rows.map((row) => row.closingCapitalToday),
     )
-  })
-
-  it('lets manual fixed-real Cash avoid restricting valid years and converts it with sampled inflation', () => {
-    const components = createPortfolioComponents(
-      { equity: 0, bonds: 0, fixed: 1 },
-      {
-        equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-        bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-        cash: 'manual-fixed-real',
-      },
-    )
-
-    expect(generateHistoricalReturnPath(components, inflation, [2001], 0.01)).toEqual([0.0403])
   })
 
   it('keeps production series registered as runtime historical datasets', () => {
@@ -489,7 +467,6 @@ describe('historical returns', () => {
         DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
       ),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
-      manualCashRealReturn: 0,
       simulations: 25,
     }
     const renamedSettings = {
@@ -504,6 +481,28 @@ describe('historical returns', () => {
     )
     expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, renamedSettings)).toEqual(
       simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    )
+  })
+
+  it('changes the bootstrap seed when a bucket return source changes', () => {
+    const settings = {
+      portfolioComponents: createPortfolioComponents(
+        { equity: 1, bonds: 0, fixed: 0 },
+        DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
+      ),
+      inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+      simulations: 25,
+    }
+    const changedSettings = {
+      ...settings,
+      portfolioComponents: settings.portfolioComponents.map((component) => ({
+        ...component,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity,
+      })),
+    }
+
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, changedSettings)).not.toBe(
+      createHistoricalBootstrapSeed(DEFAULT_INPUT, settings),
     )
   })
 })

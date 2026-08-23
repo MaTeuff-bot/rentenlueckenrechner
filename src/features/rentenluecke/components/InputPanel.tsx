@@ -5,12 +5,12 @@ import {
 } from '../model/historicalReturns'
 import { type InputFieldName } from '../model/inputSchema'
 import { calculatePortfolioBucketTotal, type PortfolioBucket } from '../model/portfolioBuckets'
-import { createPortfolioComponents, type AssetAllocation } from '../model/stochasticReturns'
+import { type AssetAllocation } from '../model/stochasticReturns'
+import { createPortfolioComponentsFromBuckets } from '../model/portfolioBuckets'
 import type { RentenlueckeInput } from '../model/types'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
 import { PersonalDataSection, RetirementCashflowSection, SavingsSection } from './InputPanel/BasicInputSections'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
-import { ReturnSourceSection } from './InputPanel/ReturnSourceSection'
 import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
 import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInflationLabel } from './InputPanel/sourceDisplay'
 
@@ -19,13 +19,7 @@ type InputPanelProps = {
   allocation: AssetAllocation
   portfolioBuckets: PortfolioBucket[]
   historical: {
-    returnSeriesIds: {
-      equity: string
-      bond: string
-      cash: string
-    }
     inflationSourceId: string
-    manualCashRealReturn: number
   }
   historicalValidYears: number[]
   errors: Partial<Record<InputFieldName, string>>
@@ -35,8 +29,6 @@ type InputPanelProps = {
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
   onPortfolioBucketAdd: () => void
   onPortfolioBucketRemove: (id: string) => void
-  onHistoricalReturnSeriesChange: (role: 'equity' | 'bond' | 'cash', seriesId: string) => void
-  onManualCashRealReturnChange: (value: number) => void
   onInflationSourceChange: (sourceId: string) => void
   onReset: () => void
 }
@@ -54,20 +46,19 @@ export function InputPanel({
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
   onPortfolioBucketRemove,
-  onHistoricalReturnSeriesChange,
-  onManualCashRealReturnChange,
   onInflationSourceChange,
   onReset,
 }: InputPanelProps) {
-  const portfolioComponents = createPortfolioComponents(allocation, historical.returnSeriesIds)
+  const portfolioComponents = createPortfolioComponentsFromBuckets(portfolioBuckets)
   const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
   const inflationOptions = getInflationSourceOptions(input.annualInflationRate)
   const selectedReturnSources = portfolioComponents.map((component) => {
     const role = component.role === 'bond' ? 'bond' : component.role === 'cash' ? 'cash' : 'equity'
     return {
+      id: component.id,
       role,
       label: component.label,
-      source: findReturnSeriesOption(component.returnSeriesId ?? '', historical.manualCashRealReturn),
+      source: findReturnSeriesOption(component.returnSeriesId ?? ''),
     }
   })
   const hasHistoricalSource = selectedReturnSources.some(({ source }) => source && isHistoricalSource(source))
@@ -135,18 +126,11 @@ export function InputPanel({
 
         <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
 
-        <ReturnSourceSection
-          portfolioComponents={portfolioComponents}
-          manualCashRealReturn={historical.manualCashRealReturn}
-          onHistoricalReturnSeriesChange={onHistoricalReturnSeriesChange}
-          onManualCashRealReturnChange={onManualCashRealReturnChange}
-        />
-
         <fieldset className="wide-fieldset">
           <legend>Ausgewählte Quellen im Detail</legend>
           <div className="source-detail-grid">
-            {selectedReturnSources.map(({ role, label, source }) =>
-              source ? <ReturnSourceCard key={role} label={label} source={source} /> : null,
+            {selectedReturnSources.map(({ id, label, source }) =>
+              source ? <ReturnSourceCard key={id} label={label} source={source} /> : null,
             )}
             {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
           </div>
