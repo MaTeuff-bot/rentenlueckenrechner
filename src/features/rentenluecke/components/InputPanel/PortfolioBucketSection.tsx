@@ -1,4 +1,5 @@
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
+import { PercentInput } from '../../../../shared/components/PercentInput'
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import {
   getReturnSeriesCategory,
@@ -54,6 +55,15 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 </select>
               </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
+              <PercentInput
+                id={`portfolio-cost-${bucket.id}`}
+                label={`TER/Kosten p.a. von ${label}`}
+                value={bucket.annualCostRate ?? 0}
+                min={0}
+                max={100}
+                error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
+                onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
+              />
               <button className="secondary-button portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>Entfernen</button>
             </div>
           )
@@ -67,7 +77,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
         <span>Cash {percent.format(allocation.fixed)}</span>
       </div>
       {error ? <p className="field-error">{error}</p> : null}
-      <p className="portfolio-note">Die Simulation nutzt die aus diesen Anlagen abgeleitete Zielaufteilung; einzelne Anlagen werden noch nicht separat projiziert.</p>
+      <p className="portfolio-note">Die Renditequellen sind Proxys. TER/Kosten p.a. werden je Anlage separat von deren Rendite abgezogen.</p>
     </fieldset>
   )
 }

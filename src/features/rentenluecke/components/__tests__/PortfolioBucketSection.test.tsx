@@ -55,10 +55,13 @@ describe('PortfolioBucketSection', () => {
     expect(screen.getAllByText('Kategorie: Aktien').length).toBeGreaterThan(0)
     expect(screen.queryByLabelText('Typ von Neue Anlage')).not.toBeInTheDocument()
     fireEvent.change(sourceSelect, { target: { value: 'synthetic-cash-assumption-v1' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: /TER\/Kosten p\.a\. von Neue Anlage/ }), { target: { value: '0.22' } })
 
     expect(onUpdate).toHaveBeenNthCalledWith(1, 'new-bucket', { name: 'Notgroschen' })
     expect(onUpdate).toHaveBeenNthCalledWith(2, 'new-bucket', { value: 10_000 })
     expect(onUpdate).toHaveBeenNthCalledWith(3, 'new-bucket', { returnSeriesId: 'synthetic-cash-assumption-v1' })
+    expect(onUpdate).toHaveBeenNthCalledWith(4, 'new-bucket', { annualCostRate: 0.0022 })
+    expect(screen.getByText(/Renditequellen sind Proxys/)).toHaveTextContent('Kosten p.a. werden je Anlage separat')
 
     rerender(
       <PortfolioBucketSection

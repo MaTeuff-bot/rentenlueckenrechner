@@ -104,7 +104,7 @@ export function useScenarioState() {
         ...current,
         portfolioBuckets: [
           ...current.portfolioBuckets,
-          { id, name: 'Neue Anlage', value: 0, returnSeriesId: getDefaultReturnSeriesId('equity') },
+          { id, name: 'Neue Anlage', value: 0, returnSeriesId: getDefaultReturnSeriesId('equity'), annualCostRate: 0 },
         ],
       }
     })
