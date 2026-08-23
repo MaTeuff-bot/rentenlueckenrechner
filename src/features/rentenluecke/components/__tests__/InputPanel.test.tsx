@@ -31,7 +31,7 @@ function renderInputPanel(
 ) {
   const buckets = createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION)
   if (options.syntheticCash) {
-    const cash = buckets.find((bucket) => bucket.role === 'cash')
+    const cash = buckets.find((bucket) => bucket.id === 'fixed')
     if (cash) cash.returnSeriesId = 'synthetic-cash-assumption-v1'
   }
   render(
@@ -103,9 +103,9 @@ describe('InputPanel return source UX', () => {
   it('shows synthetic return sources as per-asset options', () => {
     renderInputPanel()
 
-    expect(screen.getByRole('option', { name: 'Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)' })).toBeInTheDocument()
+    expect(screen.getAllByRole('option', { name: 'Aktien — Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toHaveLength(3)
+    expect(screen.getAllByRole('option', { name: 'Anleihen — Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toHaveLength(3)
+    expect(screen.getAllByRole('option', { name: 'Cash — Synthetisch: Cash (2 % Erwartung, 1 % Volatilität)' })).toHaveLength(3)
   })
 
   it('shows one inflation source selector without nominal return inputs', () => {

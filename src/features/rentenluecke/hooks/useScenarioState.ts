@@ -11,7 +11,6 @@ import {
   calculatePortfolioBucketTotal,
   createPortfolioComponentsFromBuckets,
   getDefaultReturnSeriesId,
-  isReturnSeriesCompatibleWithRole,
   scalePortfolioBucketValuesToTotal,
   validatePortfolioBuckets,
   type PortfolioBucket,
@@ -90,7 +89,7 @@ export function useScenarioState() {
     setState((current) => ({
       ...current,
       portfolioBuckets: current.portfolioBuckets.map((bucket) =>
-        bucket.id === id ? updateBucket(bucket, patch) : bucket,
+        bucket.id === id ? { ...bucket, ...patch } : bucket,
       ),
     }))
   }
@@ -105,7 +104,7 @@ export function useScenarioState() {
         ...current,
         portfolioBuckets: [
           ...current.portfolioBuckets,
-          { id, name: 'Neue Anlage', value: 0, role: 'equity', returnSeriesId: getDefaultReturnSeriesId('equity') },
+          { id, name: 'Neue Anlage', value: 0, returnSeriesId: getDefaultReturnSeriesId('equity') },
         ],
       }
     })
@@ -148,11 +147,4 @@ export function useScenarioState() {
     updateInflationSource,
     reset,
   }
-}
-
-function updateBucket(bucket: PortfolioBucket, patch: Partial<Omit<PortfolioBucket, 'id'>>): PortfolioBucket {
-  const updated = { ...bucket, ...patch }
-  return isReturnSeriesCompatibleWithRole(updated.role, updated.returnSeriesId)
-    ? updated
-    : { ...updated, returnSeriesId: getDefaultReturnSeriesId(updated.role) }
 }

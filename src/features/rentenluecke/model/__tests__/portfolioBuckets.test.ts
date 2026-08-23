@@ -9,9 +9,9 @@ import {
 } from '../portfolioBuckets'
 
 const buckets: PortfolioBucket[] = [
-  { id: 'stocks', name: 'Aktien-ETF', value: 70_000, role: 'equity', returnSeriesId: 'synthetic-equity-assumption-v1' },
-  { id: 'bonds', name: 'Anleihen', value: 20_000, role: 'bond', returnSeriesId: 'synthetic-bonds-assumption-v1' },
-  { id: 'cash', name: 'Tagesgeld', value: 10_000, role: 'cash', returnSeriesId: 'synthetic-cash-assumption-v1' },
+  { id: 'stocks', name: 'Aktien-ETF', value: 70_000, returnSeriesId: 'synthetic-equity-assumption-v1' },
+  { id: 'bonds', name: 'Anleihen', value: 20_000, returnSeriesId: 'synthetic-bonds-assumption-v1' },
+  { id: 'cash', name: 'Tagesgeld', value: 10_000, returnSeriesId: 'synthetic-cash-assumption-v1' },
 ]
 
 describe('portfolio buckets', () => {
@@ -28,6 +28,13 @@ describe('portfolio buckets', () => {
     ])).toEqual({ equity: 0.7, bonds: 0.3, fixed: 0 })
   })
 
+  it('derives allocation category exclusively from the selected source', () => {
+    expect(calculateAllocationFromBuckets([
+      { ...buckets[0], value: 60, returnSeriesId: 'synthetic-cash-assumption-v1' },
+      { ...buckets[1], value: 40 },
+    ])).toEqual({ equity: 0, bonds: 0.4, fixed: 0.6 })
+  })
+
   it('ignores zero-value buckets and returns zero allocation for zero total', () => {
     const withZero = [...buckets, { ...buckets[0], id: 'empty', name: '', value: 0 }]
     expect(calculateAllocationFromBuckets(withZero)).toEqual({ equity: 0.7, bonds: 0.2, fixed: 0.1 })
@@ -36,11 +43,11 @@ describe('portfolio buckets', () => {
     })
   })
 
-  it('validates values, roles, and positive total while allowing blank names', () => {
+  it('validates values, sources, and positive total while allowing blank names', () => {
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 1 }])).toBeNull()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: Number.NaN }])).toBeTruthy()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: -1 }])).toBeTruthy()
-    expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 1, role: 'other' as never }])).toBeTruthy()
+    expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 1, returnSeriesId: 'unknown' }])).toBeTruthy()
     expect(validatePortfolioBuckets([])).toBeTruthy()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 0 }])).toBeTruthy()
   })
@@ -66,8 +73,8 @@ describe('portfolio buckets', () => {
 
   it('creates stable default buckets and omits zero allocations', () => {
     expect(createDefaultPortfolioBuckets(100_000, { equity: 0.7, bonds: 0.3, fixed: 0 })).toEqual([
-      { id: 'equity', name: 'Aktien', value: 70_000, role: 'equity', returnSeriesId: 'jst-r6-developed-equal-weight-equity-real-post1950' },
-      { id: 'bonds', name: 'Anleihen', value: 30_000, role: 'bond', returnSeriesId: 'jst-r6-developed-equal-weight-bonds-real-post1950' },
+      { id: 'equity', name: 'Aktien', value: 70_000, returnSeriesId: 'jst-r6-developed-equal-weight-equity-real-post1950' },
+      { id: 'bonds', name: 'Anleihen', value: 30_000, returnSeriesId: 'jst-r6-developed-equal-weight-bonds-real-post1950' },
     ])
   })
 })

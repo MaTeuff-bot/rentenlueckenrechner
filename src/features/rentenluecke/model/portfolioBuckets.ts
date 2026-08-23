@@ -1,14 +1,11 @@
 import type { AssetAllocation, PortfolioComponent } from './stochasticReturns'
 import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS } from './historicalReturns/constants'
-import { getReturnSeriesOptionsForRole } from './historicalReturns/sourceOptions'
-
-export type PortfolioBucketRole = 'equity' | 'bond' | 'cash'
+import { getReturnSeriesCategory, type ReturnSeriesCategory } from './historicalReturns/sourceOptions'
 
 export type PortfolioBucket = {
   id: string
   name: string
   value: number
-  role: PortfolioBucketRole
   returnSeriesId: string
 }
 
@@ -28,7 +25,8 @@ export function calculateAllocationFromBuckets(buckets: PortfolioBucket[]): Asse
   if (total <= 0) return allocation
 
   for (const bucket of buckets) {
-    if (bucket.value > 0) allocation[ROLE_CONFIG[bucket.role].allocationKey] += bucket.value / total
+    const category = getReturnSeriesCategory(bucket.returnSeriesId)
+    if (bucket.value > 0 && category) allocation[ROLE_CONFIG[category].allocationKey] += bucket.value / total
   }
   return allocation
 }
@@ -38,10 +36,7 @@ export function validatePortfolioBuckets(buckets: PortfolioBucket[]): string | n
     if (!Number.isFinite(bucket.value) || bucket.value < 0) {
       return 'Alle Portfolio-Werte müssen gültige, nicht negative Zahlen sein.'
     }
-    if (!(bucket.role in ROLE_CONFIG)) return 'Jeder Portfolio-Baustein muss eine gültige Rolle haben.'
-    if (!isReturnSeriesCompatibleWithRole(bucket.role, bucket.returnSeriesId)) {
-      return 'Jeder Portfolio-Baustein muss eine zur Rolle passende Renditequelle haben.'
-    }
+    if (!getReturnSeriesCategory(bucket.returnSeriesId)) return 'Jeder Portfolio-Baustein muss eine gültige Renditequelle haben.'
   }
   if (calculatePortfolioBucketTotal(buckets) <= 0) return 'Der Gesamtwert des Portfolios muss größer als 0 sein.'
   return null
@@ -53,11 +48,13 @@ export function createPortfolioComponentsFromBuckets(buckets: PortfolioBucket[])
 
   return buckets.flatMap((bucket) => {
     if (bucket.value <= 0) return []
-    const config = ROLE_CONFIG[bucket.role]
+    const role = getReturnSeriesCategory(bucket.returnSeriesId)
+    if (!role) return []
+    const config = ROLE_CONFIG[role]
     return [{
       id: bucket.id,
       label: bucket.name.trim() || config.defaultLabel,
-      role: bucket.role,
+      role,
       weight: bucket.value / total,
       returnSeriesId: bucket.returnSeriesId,
     }]
@@ -68,17 +65,17 @@ export function createDefaultPortfolioBuckets(
   currentCapital: number,
   allocation: AssetAllocation,
 ): PortfolioBucket[] {
-  const roles: PortfolioBucketRole[] = ['equity', 'bond', 'cash']
+  const categories: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
   const allocationTotal = allocation.equity + allocation.bonds + allocation.fixed
   if (allocationTotal <= 0) return []
   const normalizationFactor = Math.abs(allocationTotal - 1) < 1e-12 ? 1 : allocationTotal
 
-  return roles.flatMap((role) => {
-    const config = ROLE_CONFIG[role]
+  return categories.flatMap((category) => {
+    const config = ROLE_CONFIG[category]
     const weight = allocation[config.allocationKey] / normalizationFactor
     return weight === 0
       ? []
-      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, role, returnSeriesId: getDefaultReturnSeriesId(role) }]
+      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, returnSeriesId: getDefaultReturnSeriesId(category) }]
   })
 }
 
@@ -92,16 +89,6 @@ export function scalePortfolioBucketValuesToTotal(
   return buckets.map((bucket) => ({ ...bucket, value: bucket.value * scale }))
 }
 
-export function getDefaultReturnSeriesId(role: PortfolioBucketRole): string {
-  return DEFAULT_HISTORICAL_RETURN_SERIES_IDS[role]
-}
-
-export function isReturnSeriesCompatibleWithRole(role: PortfolioBucketRole, returnSeriesId: string): boolean {
-  return getReturnSeriesOptionsForRole(role).some((source) => source.id === returnSeriesId)
-}
-
-export function normalizePortfolioBucketSource(bucket: PortfolioBucket): PortfolioBucket {
-  return isReturnSeriesCompatibleWithRole(bucket.role, bucket.returnSeriesId)
-    ? bucket
-    : { ...bucket, returnSeriesId: getDefaultReturnSeriesId(bucket.role) }
+export function getDefaultReturnSeriesId(category: ReturnSeriesCategory): string {
+  return DEFAULT_HISTORICAL_RETURN_SERIES_IDS[category]
 }

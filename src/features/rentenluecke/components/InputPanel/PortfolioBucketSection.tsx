@@ -1,6 +1,6 @@
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
-import type { PortfolioBucket, PortfolioBucketRole } from '../../model/portfolioBuckets'
-import { getReturnSeriesOptionsForRole } from '../../model/historicalReturns'
+import type { PortfolioBucket } from '../../model/portfolioBuckets'
+import { getReturnSeriesOptions } from '../../model/historicalReturns'
 import { formatDropdownLabel } from './sourceDisplay'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 
@@ -14,11 +14,6 @@ type Props = {
   onRemove: (id: string) => void
 }
 
-const roleOptions: Array<{ value: PortfolioBucketRole; label: string }> = [
-  { value: 'equity', label: 'Aktien / Aktienfonds' },
-  { value: 'bond', label: 'Anleihen / Anleihenfonds' },
-  { value: 'cash', label: 'Cash / Tagesgeld' },
-]
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 })
 const currency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
@@ -30,7 +25,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
         {buckets.map((bucket, index) => {
           const fallbackName = `Anlage ${index + 1}`
           const label = bucket.name.trim() || fallbackName
-          const sourceOptions = getReturnSeriesOptionsForRole(bucket.role)
+          const sourceOptions = getReturnSeriesOptions()
           return (
             <div className="portfolio-bucket" key={bucket.id}>
               <label className="field">
@@ -44,12 +39,6 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 </select>
               </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
-              <label className="field">
-                <span className="field-label">Typ</span>
-                <select aria-label={`Typ von ${label}`} value={bucket.role} onChange={(event) => onUpdate(bucket.id, { role: event.target.value as PortfolioBucketRole })}>
-                  {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
               <button className="secondary-button portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>Entfernen</button>
             </div>
           )

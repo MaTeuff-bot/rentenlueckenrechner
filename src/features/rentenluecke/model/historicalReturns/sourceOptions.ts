@@ -16,6 +16,27 @@ import {
 } from './inflationSeriesRegistry'
 import type { InflationSourceOption, ReturnSeriesOption } from './types'
 
+export type ReturnSeriesCategory = 'equity' | 'bond' | 'cash'
+
+const RETURN_SERIES_CATEGORIES: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
+
+export function getReturnSeriesOptions(): ReturnSeriesOption[] {
+  return [...HISTORICAL_RETURN_SERIES, ...SYNTHETIC_RETURN_SERIES].filter(
+    (series) => getReturnSeriesCategory(series.id) !== undefined,
+  )
+}
+
+export function getReturnSeriesCategory(id: string): ReturnSeriesCategory | undefined {
+  const series = findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id)
+  if (!series) return undefined
+
+  const categories = RETURN_SERIES_CATEGORIES.filter((category) => series.suitableFor.includes(category))
+  if (categories.length !== 1) return undefined
+  const category = categories[0]
+  if (!('kind' in series) && series.role !== category) return undefined
+  return category
+}
+
 export function getInflationSourceOptions(annualInflationRate: number): InflationSourceOption[] {
   return [createFixedInflationSource(annualInflationRate), ...HISTORICAL_INFLATION_SERIES]
 }
