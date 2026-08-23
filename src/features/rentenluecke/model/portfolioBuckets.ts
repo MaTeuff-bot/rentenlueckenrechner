@@ -7,6 +7,7 @@ export type PortfolioBucket = {
   name: string
   value: number
   returnSeriesId: string
+  annualCostRate?: number
 }
 
 const ROLE_CONFIG = {
@@ -36,6 +37,10 @@ export function validatePortfolioBuckets(buckets: PortfolioBucket[]): string | n
     if (!Number.isFinite(bucket.value) || bucket.value < 0) {
       return 'Alle Portfolio-Werte müssen gültige, nicht negative Zahlen sein.'
     }
+    const annualCostRate = bucket.annualCostRate ?? 0
+    if (!Number.isFinite(annualCostRate) || annualCostRate < 0 || annualCostRate > 1) {
+      return 'Die jährlichen Kosten müssen zwischen 0 % und 100 % liegen.'
+    }
     if (!getReturnSeriesCategory(bucket.returnSeriesId)) return 'Jeder Portfolio-Baustein muss eine gültige Renditequelle haben.'
   }
   if (calculatePortfolioBucketTotal(buckets) <= 0) return 'Der Gesamtwert des Portfolios muss größer als 0 sein.'
@@ -57,6 +62,7 @@ export function createPortfolioComponentsFromBuckets(buckets: PortfolioBucket[])
       role,
       weight: bucket.value / total,
       returnSeriesId: bucket.returnSeriesId,
+      annualCostRate: bucket.annualCostRate ?? 0,
     }]
   })
 }
@@ -75,7 +81,7 @@ export function createDefaultPortfolioBuckets(
     const weight = allocation[config.allocationKey] / normalizationFactor
     return weight === 0
       ? []
-      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, returnSeriesId: getDefaultReturnSeriesId(category) }]
+      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, returnSeriesId: getDefaultReturnSeriesId(category), annualCostRate: 0 }]
   })
 }
 

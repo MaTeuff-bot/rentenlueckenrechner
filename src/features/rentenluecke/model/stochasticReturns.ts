@@ -16,6 +16,7 @@ export type PortfolioComponent = {
   role: PortfolioComponentRole
   weight: number
   returnSeriesId?: string
+  annualCostRate?: number
 }
 
 export type AssetClassAssumption = {

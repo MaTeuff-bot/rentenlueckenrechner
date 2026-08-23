@@ -7,12 +7,13 @@ import { createDefaultState, withDeterministicPortfolioReturn } from './defaults
 import { normalizeHistoricalState } from './migrations'
 import type { PersistedHistoricalState, ScenarioState } from './types'
 
-export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v9'
+export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v10'
 const portfolioBucketSchema = z.object({
   id: z.string(),
   name: z.string(),
   value: z.number().finite().min(0),
   returnSeriesId: z.string().refine((id) => getReturnSeriesCategory(id) !== undefined),
+  annualCostRate: z.number().finite().min(0).max(1).default(0),
 })
 
 const persistedScenarioFields = {
@@ -22,7 +23,7 @@ const persistedScenarioFields = {
     inflationSourceId: z.string(),
   }),
 }
-const persistedScenarioSchema = z.object({ version: z.literal(9), ...persistedScenarioFields })
+const persistedScenarioSchema = z.object({ version: z.literal(10), ...persistedScenarioFields })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -35,7 +36,7 @@ export function serializeScenarioState(state: ScenarioState): string {
     { ...state.input, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets) },
     calculatePortfolioExpectedReturn(allocation),
   )
-  return JSON.stringify({ version: 9, ...state, input })
+  return JSON.stringify({ version: 10, ...state, input })
 }
 
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {

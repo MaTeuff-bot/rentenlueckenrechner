@@ -26,7 +26,7 @@ export function generateHistoricalReturnPath(
         return portfolioReturn
       }
 
-      const annualReturn = resolveComponentNominalReturn(component, year, inflation, rng)
+      const annualReturn = deductAnnualCosts(resolveComponentNominalReturn(component, year, inflation, rng), component.annualCostRate)
       return portfolioReturn + component.weight * annualReturn
     }, 0)
   })
@@ -70,7 +70,7 @@ export function resolveComponentExpectedNominalReturn(
 ): number {
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
-    return syntheticSeries.expectedAnnualReturn
+    return deductAnnualCosts(syntheticSeries.expectedAnnualReturn, component.annualCostRate)
   }
 
   const series = component.returnSeriesId ? findHistoricalReturnSeries(component.returnSeriesId) : undefined
@@ -83,7 +83,7 @@ export function resolveComponentExpectedNominalReturn(
     throw new Error(`Missing ${series.label} return for ${year}`)
   }
 
-  return series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn
+  return deductAnnualCosts(series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn, component.annualCostRate)
 }
 
 function requiresSampledCalendarYear(components: PortfolioComponent[], inflationSource: InflationSourceOption): boolean {
@@ -118,4 +118,8 @@ function resolveComponentNominalReturn(
 
 function realToNominalReturn(realReturn: number, inflation: number): number {
   return (1 + realReturn) * (1 + inflation) - 1
+}
+
+function deductAnnualCosts(annualReturn: number, annualCostRate = 0): number {
+  return Math.max(-1, annualReturn - annualCostRate)
 }

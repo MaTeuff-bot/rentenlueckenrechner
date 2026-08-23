@@ -484,6 +484,25 @@ describe('historical returns', () => {
     )
   })
 
+  it('deducts component costs from historical paths and expected returns and clamps at -100%', () => {
+    const fixedInflation = createFixedInflationSource(0)
+    const baseComponent = {
+      id: 'equity', label: 'ETF', role: 'equity' as const, weight: 1,
+      returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity,
+    }
+    const grossSettings = { portfolioComponents: [baseComponent], inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 1 }
+    const netSettings = { ...grossSettings, portfolioComponents: [{ ...baseComponent, annualCostRate: 0.0022 }] }
+
+    expect(generateHistoricalReturnPath(netSettings.portfolioComponents, fixedInflation, [0], () => 0.5)[0]).toBeCloseTo(
+      generateHistoricalReturnPath(grossSettings.portfolioComponents, fixedInflation, [0], () => 0.5)[0] - 0.0022,
+    )
+    expect(calculateExpectedAnnualReturnForSelection(DEFAULT_INPUT, netSettings)).toBeCloseTo(
+      calculateExpectedAnnualReturnForSelection(DEFAULT_INPUT, grossSettings) - 0.0022,
+    )
+    expect(generateHistoricalReturnPath([{ ...baseComponent, annualCostRate: 1 }], fixedInflation, [0], () => 0.5)[0]).toBe(-1)
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, netSettings)).not.toBe(createHistoricalBootstrapSeed(DEFAULT_INPUT, grossSettings))
+  })
+
   it('changes the bootstrap seed when a bucket return source changes', () => {
     const settings = {
       portfolioComponents: createPortfolioComponents(

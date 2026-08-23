@@ -13,6 +13,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
         role: component.role,
         weight: component.weight,
         returnSeriesId: component.returnSeriesId,
+        annualCostRate: component.annualCostRate ?? 0,
         datasetVersion: getHistoricalDatasetVersion(component.returnSeriesId),
       })),
       inflationVersion: getInflationSourceVersion(settings.inflationSourceId, input.annualInflationRate),

@@ -48,22 +48,26 @@ describe('portfolio buckets', () => {
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: Number.NaN }])).toBeTruthy()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: -1 }])).toBeTruthy()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 1, returnSeriesId: 'unknown' }])).toBeTruthy()
+    expect(validatePortfolioBuckets([{ ...buckets[2], annualCostRate: -0.001 }])).toBeTruthy()
+    expect(validatePortfolioBuckets([{ ...buckets[2], annualCostRate: 1.001 }])).toBeTruthy()
+    expect(validatePortfolioBuckets([{ ...buckets[2], annualCostRate: Number.NaN }])).toBeTruthy()
+    expect(validatePortfolioBuckets([{ ...buckets[2], annualCostRate: 0.0022 }])).toBeNull()
     expect(validatePortfolioBuckets([])).toBeTruthy()
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 0 }])).toBeTruthy()
   })
 
   it('creates one component per positive bucket with fallback labels and role source ids', () => {
     expect(createPortfolioComponentsFromBuckets([
-      { ...buckets[0], id: 'world', name: ' World ETF ', value: 60 },
+      { ...buckets[0], id: 'world', name: ' World ETF ', value: 60, annualCostRate: 0.0022 },
       { ...buckets[0], id: 'small-cap', name: 'Small Cap', value: 10 },
       { ...buckets[1], name: '   ', value: 20 },
       { ...buckets[2], name: 'Reserve', value: 10 },
       { ...buckets[2], id: 'empty', name: 'Leer', value: 0 },
     ])).toEqual([
-      { id: 'world', label: 'World ETF', role: 'equity', weight: 0.6, returnSeriesId: 'synthetic-equity-assumption-v1' },
-      { id: 'small-cap', label: 'Small Cap', role: 'equity', weight: 0.1, returnSeriesId: 'synthetic-equity-assumption-v1' },
-      { id: 'bonds', label: 'Anleihen', role: 'bond', weight: 0.2, returnSeriesId: 'synthetic-bonds-assumption-v1' },
-      { id: 'cash', label: 'Reserve', role: 'cash', weight: 0.1, returnSeriesId: 'synthetic-cash-assumption-v1' },
+      { id: 'world', label: 'World ETF', role: 'equity', weight: 0.6, returnSeriesId: 'synthetic-equity-assumption-v1', annualCostRate: 0.0022 },
+      { id: 'small-cap', label: 'Small Cap', role: 'equity', weight: 0.1, returnSeriesId: 'synthetic-equity-assumption-v1', annualCostRate: 0 },
+      { id: 'bonds', label: 'Anleihen', role: 'bond', weight: 0.2, returnSeriesId: 'synthetic-bonds-assumption-v1', annualCostRate: 0 },
+      { id: 'cash', label: 'Reserve', role: 'cash', weight: 0.1, returnSeriesId: 'synthetic-cash-assumption-v1', annualCostRate: 0 },
     ])
   })
 
@@ -73,8 +77,8 @@ describe('portfolio buckets', () => {
 
   it('creates stable default buckets and omits zero allocations', () => {
     expect(createDefaultPortfolioBuckets(100_000, { equity: 0.7, bonds: 0.3, fixed: 0 })).toEqual([
-      { id: 'equity', name: 'Aktien', value: 70_000, returnSeriesId: 'jst-r6-developed-equal-weight-equity-real-post1950' },
-      { id: 'bonds', name: 'Anleihen', value: 30_000, returnSeriesId: 'jst-r6-developed-equal-weight-bonds-real-post1950' },
+      { id: 'equity', name: 'Aktien', value: 70_000, returnSeriesId: 'jst-r6-developed-equal-weight-equity-real-post1950', annualCostRate: 0 },
+      { id: 'bonds', name: 'Anleihen', value: 30_000, returnSeriesId: 'jst-r6-developed-equal-weight-bonds-real-post1950', annualCostRate: 0 },
     ])
   })
 })
