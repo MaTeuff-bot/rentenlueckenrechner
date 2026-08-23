@@ -19,26 +19,27 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v8 scenario with bucket-owned return sources', () => {
+  it('roundtrips a v9 scenario without persisted bucket roles', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
-        { id: 'world-etf', name: 'World ETF', value: 35_000, role: 'equity' as const, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
-        { id: 'bonds', name: 'Bonds', value: 10_000, role: 'bond' as const, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
-        { id: 'cash-reserve', name: 'Reserve', value: 5_000, role: 'cash' as const, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+        { id: 'world-etf', name: 'World ETF', value: 35_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
+        { id: 'bonds', name: 'Bonds', value: 10_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
+        { id: 'cash-reserve', name: 'Reserve', value: 5_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
       ],
     }
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 8,
+      version: 9,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('historical.returnSeriesIds')
+    expect(JSON.parse(serializeScenarioState(scenario)).portfolioBuckets.every((bucket: object) => !('role' in bucket))).toBe(true)
   })
 
-  it.each([1, 2, 3, 4, 5])('falls back to defaults for a v%i shape', (version) => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('falls back to defaults for a v%i shape', (version) => {
     expect(parsePersistedScenarioState(persistedJson({
       version,
       input: { ...DEFAULT_INPUT, currentCapital: 123_456 },
@@ -82,15 +83,15 @@ describe('useScenarioState', () => {
     const persisted = createDefaultState()
     persisted.input = { ...persisted.input, currentCapital: 999_999, annualReturnBeforeRetirement: 0, annualReturnInRetirement: 0 }
     persisted.portfolioBuckets = [
-      { id: 'world', name: 'World ETF', value: 30_000, role: 'equity', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
-      { id: 'small-cap', name: 'Small Cap', value: 5_000, role: 'equity', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
-      { id: 'bonds', name: 'Bonds', value: 10_000, role: 'bond', returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
-      { id: 'reserve', name: 'Reserve', value: 5_000, role: 'cash', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
-      { id: 'zero', name: 'Zero', value: 0, role: 'cash', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+      { id: 'world', name: 'World ETF', value: 30_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
+      { id: 'small-cap', name: 'Small Cap', value: 5_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
+      { id: 'bonds', name: 'Bonds', value: 10_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
+      { id: 'reserve', name: 'Reserve', value: 5_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+      { id: 'zero', name: 'Zero', value: 0, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
     ]
     localStorage.setItem(
-      'rentenlueckenrechner.scenario.v8',
-      JSON.stringify({ version: 8, ...persisted }),
+      'rentenlueckenrechner.scenario.v9',
+      JSON.stringify({ version: 9, ...persisted }),
     )
 
     const { result } = renderHook(() => useScenarioState())
@@ -119,15 +120,17 @@ describe('useScenarioState', () => {
     ])
   })
 
-  it('resets an incompatible source when a bucket role changes', () => {
+  it('derives allocation category when a bucket source changes', () => {
     const { result } = renderHook(() => useScenarioState())
-    const equity = result.current.portfolioBuckets.find((bucket) => bucket.role === 'equity')!
+    const equity = result.current.portfolioBuckets.find((bucket) => bucket.id === 'equity')!
 
-    act(() => result.current.updatePortfolioBucket(equity.id, { role: 'cash' }))
+    act(() => result.current.updatePortfolioBucket(equity.id, { returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash }))
 
     expect(result.current.portfolioBuckets.find((bucket) => bucket.id === equity.id)).toMatchObject({
-      role: 'cash',
       returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
     })
+    expect(result.current.allocation.equity).toBe(0)
+    expect(result.current.allocation.bonds).toBeCloseTo(0.2)
+    expect(result.current.allocation.fixed).toBeCloseTo(0.8)
   })
 })

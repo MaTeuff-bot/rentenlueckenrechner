@@ -23,9 +23,12 @@ export {
   getHistoricalDatasetVersion,
   getInflationSourceOptions,
   getInflationSourceVersion,
+  getReturnSeriesCategory,
+  getReturnSeriesOptions,
   getReturnSeriesOptionsForRole,
   getValidHistoricalYears,
 } from './historicalReturns/sourceOptions'
+export type { ReturnSeriesCategory } from './historicalReturns/sourceOptions'
 export {
   generateHistoricalReturnPath,
   sampleHistoricalYearsWithReplacement,

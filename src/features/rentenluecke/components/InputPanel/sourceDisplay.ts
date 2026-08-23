@@ -6,6 +6,7 @@ import {
   type InflationSourceOption,
   type ReturnSeriesOption,
   type SyntheticReturnSeries,
+  getReturnSeriesCategory,
 } from '../../model/historicalReturns'
 
 export function findReturnSeriesOption(id: string): ReturnSeriesOption | undefined {
@@ -25,20 +26,22 @@ export function isHistoricalSource(source: ReturnSeriesOption): source is Histor
 }
 
 export function formatDropdownLabel(source: ReturnSeriesOption): string {
+  const category = getReturnSeriesCategory(source.id)
+  const categoryLabel = category === 'equity' ? 'Aktien' : category === 'bond' ? 'Anleihen' : 'Cash'
   if (isGeneratedSyntheticSource(source)) {
-    return source.label.replace('Synthetisch: ', 'Synthetisch: ')
+    return `${categoryLabel} — ${source.label}`
   }
 
   if (source.role === 'equity') {
-    return 'Historisch: Aktien, entwickelte Märkte'
+    return 'Aktien — Historisch: entwickelte Märkte'
   }
 
   if (source.role === 'bond') {
-    return 'Historisch: Staatsanleihen, entwickelte Märkte'
+    return 'Anleihen — Historisch: Staatsanleihen, entwickelte Märkte'
   }
 
   if (source.role === 'cash') {
-    return 'Historisch: Bills/Cash, entwickelte Märkte'
+    return 'Cash — Historisch: Bills, entwickelte Märkte'
   }
 
   return source.label
