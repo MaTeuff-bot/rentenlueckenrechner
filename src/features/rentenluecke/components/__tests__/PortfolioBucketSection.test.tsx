@@ -12,8 +12,8 @@ describe('PortfolioBucketSection', () => {
     const onUpdate = vi.fn()
     const onRemove = vi.fn()
     const initialBuckets: PortfolioBucket[] = [
-      { id: 'equity', name: 'Aktien', value: 30_000, role: 'equity' },
-      { id: 'cash', name: 'Cash', value: 10_000, role: 'cash' },
+      { id: 'equity', name: 'Aktien', value: 30_000, role: 'equity', returnSeriesId: 'synthetic-equity-assumption-v1' },
+      { id: 'cash', name: 'Cash', value: 10_000, role: 'cash', returnSeriesId: 'synthetic-cash-assumption-v1' },
     ]
     const { rerender } = render(
       <PortfolioBucketSection
@@ -30,7 +30,7 @@ describe('PortfolioBucketSection', () => {
     fireEvent.click(screen.getByRole('button', { name: /Anlage hinzufügen/ }))
     expect(onAdd).toHaveBeenCalledOnce()
 
-    const addedBucket: PortfolioBucket = { id: 'new-bucket', name: 'Neue Anlage', value: 0, role: 'equity' }
+    const addedBucket: PortfolioBucket = { id: 'new-bucket', name: 'Neue Anlage', value: 0, role: 'equity', returnSeriesId: 'synthetic-equity-assumption-v1' }
     rerender(
       <PortfolioBucketSection
         buckets={[...initialBuckets, addedBucket]}
@@ -46,10 +46,12 @@ describe('PortfolioBucketSection', () => {
     fireEvent.change(screen.getByLabelText('Name von Neue Anlage'), { target: { value: 'Notgroschen' } })
     fireEvent.change(screen.getByLabelText(/^Aktueller Wert von Neue Anlage/), { target: { value: '10000' } })
     fireEvent.change(screen.getByLabelText('Typ von Neue Anlage'), { target: { value: 'cash' } })
+    fireEvent.change(screen.getByLabelText('Renditequelle/Proxy von Neue Anlage'), { target: { value: 'synthetic-equity-assumption-v1' } })
 
     expect(onUpdate).toHaveBeenNthCalledWith(1, 'new-bucket', { name: 'Notgroschen' })
     expect(onUpdate).toHaveBeenNthCalledWith(2, 'new-bucket', { value: 10_000 })
     expect(onUpdate).toHaveBeenNthCalledWith(3, 'new-bucket', { role: 'cash' })
+    expect(onUpdate).toHaveBeenNthCalledWith(4, 'new-bucket', { returnSeriesId: 'synthetic-equity-assumption-v1' })
 
     rerender(
       <PortfolioBucketSection

@@ -5,7 +5,6 @@ import {
   findSyntheticReturnSeries,
   HISTORICAL_RETURN_SERIES,
   isSyntheticReturnSeriesId,
-  createManualFixedRealReturnSeries,
   SYNTHETIC_RETURN_SERIES,
 } from './returnSeriesRegistry'
 import {
@@ -23,7 +22,6 @@ export function getInflationSourceOptions(annualInflationRate: number): Inflatio
 
 export function getReturnSeriesOptionsForRole(
   role: PortfolioComponentRole,
-  manualCashRealReturn: number,
 ): ReturnSeriesOption[] {
   const datasetRole = role === 'bond' ? 'bond' : role === 'cash' ? 'cash' : role === 'equity' ? 'equity' : 'other'
   const options: ReturnSeriesOption[] = HISTORICAL_RETURN_SERIES.filter((series) =>
@@ -32,10 +30,6 @@ export function getReturnSeriesOptionsForRole(
   const syntheticSeries = SYNTHETIC_RETURN_SERIES.find((series) => series.suitableFor.includes(datasetRole))
   if (syntheticSeries) {
     options.push(syntheticSeries)
-  }
-
-  if (role === 'cash') {
-    options.push(createManualFixedRealReturnSeries(manualCashRealReturn))
   }
 
   return options
@@ -71,10 +65,6 @@ export function getValidHistoricalYears(
 export function getHistoricalDatasetVersion(id?: string): string {
   if (!id) {
     return 'missing'
-  }
-
-  if (id === 'manual-fixed-real') {
-    return id
   }
 
   const syntheticSeries = findSyntheticReturnSeries(id)

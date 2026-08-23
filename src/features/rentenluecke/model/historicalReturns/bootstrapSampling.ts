@@ -16,7 +16,6 @@ export function generateHistoricalReturnPath(
   components: PortfolioComponent[],
   inflationSource: InflationSourceOption,
   sampledYears: number[],
-  manualCashRealReturn: number,
   rng: () => number = createSeededRandom(0),
 ): number[] {
   return sampledYears.map((year) => {
@@ -27,7 +26,7 @@ export function generateHistoricalReturnPath(
         return portfolioReturn
       }
 
-      const annualReturn = resolveComponentNominalReturn(component, year, inflation, manualCashRealReturn, rng)
+      const annualReturn = resolveComponentNominalReturn(component, year, inflation, rng)
       return portfolioReturn + component.weight * annualReturn
     }, 0)
   })
@@ -68,12 +67,7 @@ export function resolveComponentExpectedNominalReturn(
   component: PortfolioComponent,
   year: number,
   inflation: number,
-  manualCashRealReturn: number,
 ): number {
-  if (component.returnSeriesId === 'manual-fixed-real') {
-    return realToNominalReturn(manualCashRealReturn, inflation)
-  }
-
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
     return syntheticSeries.expectedAnnualReturn
@@ -102,13 +96,8 @@ function resolveComponentNominalReturn(
   component: PortfolioComponent,
   year: number,
   inflation: number,
-  manualCashRealReturn: number,
   rng: () => number,
 ): number {
-  if (component.returnSeriesId === 'manual-fixed-real') {
-    return realToNominalReturn(manualCashRealReturn, inflation)
-  }
-
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
     return Math.max(-1, sampleNormal(rng, syntheticSeries.expectedAnnualReturn, syntheticSeries.annualVolatility))

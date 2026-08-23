@@ -1,33 +1,23 @@
 import {
   findHistoricalReturnSeries,
   findSyntheticReturnSeries,
-  getReturnSeriesOptionsForRole,
   isFixedInflationSource,
   type HistoricalReturnSeries,
   type InflationSourceOption,
-  type ManualFixedReturnSeries,
   type ReturnSeriesOption,
   type SyntheticReturnSeries,
 } from '../../model/historicalReturns'
 
-export function findReturnSeriesOption(id: string, manualCashRealReturn: number): ReturnSeriesOption | undefined {
-  if (id === 'manual-fixed-real') {
-    return getReturnSeriesOptionsForRole('cash', manualCashRealReturn).find((option) => option.id === id)
-  }
-
+export function findReturnSeriesOption(id: string): ReturnSeriesOption | undefined {
   return findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id)
 }
 
-export function isManualFixedSource(source: ReturnSeriesOption): source is ManualFixedReturnSeries {
-  return source.id === 'manual-fixed-real'
-}
-
-export function isSyntheticSource(source: ReturnSeriesOption): source is ManualFixedReturnSeries | SyntheticReturnSeries {
+export function isSyntheticSource(source: ReturnSeriesOption): source is SyntheticReturnSeries {
   return 'kind' in source
 }
 
 export function isGeneratedSyntheticSource(source: ReturnSeriesOption): source is SyntheticReturnSeries {
-  return isSyntheticSource(source) && !isManualFixedSource(source)
+  return isSyntheticSource(source)
 }
 
 export function isHistoricalSource(source: ReturnSeriesOption): source is HistoricalReturnSeries {
@@ -35,10 +25,6 @@ export function isHistoricalSource(source: ReturnSeriesOption): source is Histor
 }
 
 export function formatDropdownLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Cash: fester Realzins'
-  }
-
   if (isGeneratedSyntheticSource(source)) {
     return source.label.replace('Synthetisch: ', 'Synthetisch: ')
   }
@@ -71,18 +57,10 @@ export function getSourceName(source: ReturnSeriesOption): string {
 }
 
 export function getSourceVersion(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Manuelle Eingabe'
-  }
-
   return source.sourceDatasetVersion
 }
 
 export function getCoverageLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Keine historische Jahresabdeckung'
-  }
-
   if (isGeneratedSyntheticSource(source)) {
     return 'Keine historische Jahresabdeckung'
   }
@@ -91,10 +69,6 @@ export function getCoverageLabel(source: ReturnSeriesOption): string {
 }
 
 export function getBasisLabel(source: ReturnSeriesOption): string {
-  if (isManualFixedSource(source)) {
-    return 'Fester Realzins'
-  }
-
   if (isGeneratedSyntheticSource(source)) {
     return `Synthetischer Renditepfad, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
   }

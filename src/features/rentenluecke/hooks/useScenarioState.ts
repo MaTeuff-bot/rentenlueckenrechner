@@ -9,8 +9,10 @@ import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '..
 import {
   calculateAllocationFromBuckets,
   calculatePortfolioBucketTotal,
-  createDefaultPortfolioBuckets,
   createPortfolioComponentsFromBuckets,
+  getDefaultReturnSeriesId,
+  isReturnSeriesCompatibleWithRole,
+  scalePortfolioBucketValuesToTotal,
   validatePortfolioBuckets,
   type PortfolioBucket,
 } from '../model/portfolioBuckets'
@@ -47,9 +49,8 @@ export function useScenarioState() {
   const isValid = parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
     () => ({
-      portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets, historical.returnSeriesIds),
+      portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets),
       inflationSourceId: historical.inflationSourceId,
-      manualCashRealReturn: historical.manualCashRealReturn,
       simulations: DEFAULT_STOCHASTIC_SETTINGS.simulations,
     }),
     [historical, portfolioBuckets],
@@ -80,7 +81,7 @@ export function useScenarioState() {
       ...current,
       input: { ...current.input, [field]: value },
       portfolioBuckets: field === 'currentCapital'
-        ? createDefaultPortfolioBuckets(value, calculateAllocationFromBuckets(current.portfolioBuckets))
+        ? scalePortfolioBucketValuesToTotal(current.portfolioBuckets, value)
         : current.portfolioBuckets,
     }))
   }
@@ -89,7 +90,7 @@ export function useScenarioState() {
     setState((current) => ({
       ...current,
       portfolioBuckets: current.portfolioBuckets.map((bucket) =>
-        bucket.id === id ? { ...bucket, ...patch } : bucket,
+        bucket.id === id ? updateBucket(bucket, patch) : bucket,
       ),
     }))
   }
@@ -104,7 +105,7 @@ export function useScenarioState() {
         ...current,
         portfolioBuckets: [
           ...current.portfolioBuckets,
-          { id, name: 'Neue Anlage', value: 0, role: 'equity' },
+          { id, name: 'Neue Anlage', value: 0, role: 'equity', returnSeriesId: getDefaultReturnSeriesId('equity') },
         ],
       }
     })
@@ -112,23 +113,6 @@ export function useScenarioState() {
 
   const removePortfolioBucket = (id: string) => {
     setState((current) => ({ ...current, portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id) }))
-  }
-
-  const updateHistoricalReturnSeries = (role: 'equity' | 'bond' | 'cash', seriesId: string) => {
-    setState((current) => ({
-      ...current,
-      historical: {
-        ...current.historical,
-        returnSeriesIds: { ...current.historical.returnSeriesIds, [role]: seriesId },
-      },
-    }))
-  }
-
-  const updateManualCashRealReturn = (value: number) => {
-    setState((current) => ({
-      ...current,
-      historical: { ...current.historical, manualCashRealReturn: value },
-    }))
   }
 
   const updateInflationSource = (sourceId: string) => {
@@ -161,9 +145,14 @@ export function useScenarioState() {
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
-    updateHistoricalReturnSeries,
-    updateManualCashRealReturn,
     updateInflationSource,
     reset,
   }
+}
+
+function updateBucket(bucket: PortfolioBucket, patch: Partial<Omit<PortfolioBucket, 'id'>>): PortfolioBucket {
+  const updated = { ...bucket, ...patch }
+  return isReturnSeriesCompatibleWithRole(updated.role, updated.returnSeriesId)
+    ? updated
+    : { ...updated, returnSeriesId: getDefaultReturnSeriesId(updated.role) }
 }

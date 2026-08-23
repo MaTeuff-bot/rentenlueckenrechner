@@ -7,7 +7,6 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
     stableStringify({
       input,
       inflationSourceId: settings.inflationSourceId,
-      manualCashRealReturn: settings.manualCashRealReturn,
       simulations: settings.simulations,
       portfolioComponents: settings.portfolioComponents.map((component) => ({
         id: component.id,

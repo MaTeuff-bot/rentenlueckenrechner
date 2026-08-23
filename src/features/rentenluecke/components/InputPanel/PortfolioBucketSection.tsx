@@ -1,5 +1,7 @@
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
 import type { PortfolioBucket, PortfolioBucketRole } from '../../model/portfolioBuckets'
+import { getReturnSeriesOptionsForRole } from '../../model/historicalReturns'
+import { formatDropdownLabel } from './sourceDisplay'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 
 type Props = {
@@ -28,11 +30,18 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
         {buckets.map((bucket, index) => {
           const fallbackName = `Anlage ${index + 1}`
           const label = bucket.name.trim() || fallbackName
+          const sourceOptions = getReturnSeriesOptionsForRole(bucket.role)
           return (
             <div className="portfolio-bucket" key={bucket.id}>
               <label className="field">
                 <span className="field-label">Name</span>
                 <input type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">Renditequelle/Proxy</span>
+                <select aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
+                  {sourceOptions.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
+                </select>
               </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
               <label className="field">

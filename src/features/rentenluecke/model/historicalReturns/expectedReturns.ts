@@ -18,12 +18,7 @@ export function calculateExpectedAnnualReturnForSelection(
         return portfolioReturn
       }
 
-      const annualReturn = resolveComponentExpectedNominalReturn(
-        component,
-        year,
-        inflation,
-        settings.manualCashRealReturn,
-      )
+      const annualReturn = resolveComponentExpectedNominalReturn(component, year, inflation)
       return portfolioReturn + component.weight * annualReturn
     }, 0)
   })

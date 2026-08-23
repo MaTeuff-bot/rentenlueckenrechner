@@ -1,4 +1,6 @@
 import type { AssetAllocation, PortfolioComponent } from './stochasticReturns'
+import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS } from './historicalReturns/constants'
+import { getReturnSeriesOptionsForRole } from './historicalReturns/sourceOptions'
 
 export type PortfolioBucketRole = 'equity' | 'bond' | 'cash'
 
@@ -7,9 +9,8 @@ export type PortfolioBucket = {
   name: string
   value: number
   role: PortfolioBucketRole
+  returnSeriesId: string
 }
-
-type ReturnSeriesIds = Partial<Record<PortfolioBucketRole, string>>
 
 const ROLE_CONFIG = {
   equity: { allocationKey: 'equity', defaultId: 'equity', defaultLabel: 'Aktien' },
@@ -38,15 +39,15 @@ export function validatePortfolioBuckets(buckets: PortfolioBucket[]): string | n
       return 'Alle Portfolio-Werte müssen gültige, nicht negative Zahlen sein.'
     }
     if (!(bucket.role in ROLE_CONFIG)) return 'Jeder Portfolio-Baustein muss eine gültige Rolle haben.'
+    if (!isReturnSeriesCompatibleWithRole(bucket.role, bucket.returnSeriesId)) {
+      return 'Jeder Portfolio-Baustein muss eine zur Rolle passende Renditequelle haben.'
+    }
   }
   if (calculatePortfolioBucketTotal(buckets) <= 0) return 'Der Gesamtwert des Portfolios muss größer als 0 sein.'
   return null
 }
 
-export function createPortfolioComponentsFromBuckets(
-  buckets: PortfolioBucket[],
-  returnSeriesIds: ReturnSeriesIds,
-): PortfolioComponent[] {
+export function createPortfolioComponentsFromBuckets(buckets: PortfolioBucket[]): PortfolioComponent[] {
   const total = calculatePortfolioBucketTotal(buckets)
   if (total <= 0) return []
 
@@ -58,7 +59,7 @@ export function createPortfolioComponentsFromBuckets(
       label: bucket.name.trim() || config.defaultLabel,
       role: bucket.role,
       weight: bucket.value / total,
-      returnSeriesId: returnSeriesIds[bucket.role],
+      returnSeriesId: bucket.returnSeriesId,
     }]
   })
 }
@@ -77,6 +78,30 @@ export function createDefaultPortfolioBuckets(
     const weight = allocation[config.allocationKey] / normalizationFactor
     return weight === 0
       ? []
-      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, role }]
+      : [{ id: config.defaultId, name: config.defaultLabel, value: currentCapital * weight, role, returnSeriesId: getDefaultReturnSeriesId(role) }]
   })
+}
+
+export function scalePortfolioBucketValuesToTotal(
+  buckets: PortfolioBucket[],
+  currentCapital: number,
+): PortfolioBucket[] {
+  const total = calculatePortfolioBucketTotal(buckets)
+  if (total <= 0) return createDefaultPortfolioBuckets(currentCapital, { equity: 1, bonds: 0, fixed: 0 })
+  const scale = currentCapital / total
+  return buckets.map((bucket) => ({ ...bucket, value: bucket.value * scale }))
+}
+
+export function getDefaultReturnSeriesId(role: PortfolioBucketRole): string {
+  return DEFAULT_HISTORICAL_RETURN_SERIES_IDS[role]
+}
+
+export function isReturnSeriesCompatibleWithRole(role: PortfolioBucketRole, returnSeriesId: string): boolean {
+  return getReturnSeriesOptionsForRole(role).some((source) => source.id === returnSeriesId)
+}
+
+export function normalizePortfolioBucketSource(bucket: PortfolioBucket): PortfolioBucket {
+  return isReturnSeriesCompatibleWithRole(bucket.role, bucket.returnSeriesId)
+    ? bucket
+    : { ...bucket, returnSeriesId: getDefaultReturnSeriesId(bucket.role) }
 }
