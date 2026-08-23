@@ -1,7 +1,12 @@
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
-import { getReturnSeriesOptions } from '../../model/historicalReturns'
-import { formatDropdownLabel } from './sourceDisplay'
+import {
+  getReturnSeriesCategory,
+  getReturnSeriesOptions,
+  type ReturnSeriesCategory,
+  type ReturnSeriesOption,
+} from '../../model/historicalReturns'
+import { formatDropdownLabel, formatSourceCategoryLabel } from './sourceDisplay'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 
 type Props = {
@@ -16,8 +21,11 @@ type Props = {
 
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 })
 const currency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+const sourceCategoryOrder: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
 
 export function PortfolioBucketSection({ buckets, total, allocation, error, onUpdate, onAdd, onRemove }: Props) {
+  const sourceOptionGroups = groupReturnSourcesByCategory(getReturnSeriesOptions())
+
   return (
     <fieldset className="wide-fieldset portfolio-section">
       <legend>Anlagen</legend>
@@ -25,7 +33,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
         {buckets.map((bucket, index) => {
           const fallbackName = `Anlage ${index + 1}`
           const label = bucket.name.trim() || fallbackName
-          const sourceOptions = getReturnSeriesOptions()
+          const category = getReturnSeriesCategory(bucket.returnSeriesId)
           return (
             <div className="portfolio-bucket" key={bucket.id}>
               <label className="field">
@@ -33,9 +41,16 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 <input type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
               </label>
               <label className="field">
-                <span className="field-label">Renditequelle/Proxy</span>
+                <span className="field-label-row">
+                  <span className="field-label">Renditequelle/Proxy</span>
+                  <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
+                </span>
                 <select aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
-                  {sourceOptions.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
+                  {sourceOptionGroups.map((group) => (
+                    <optgroup key={group.category} label={formatSourceCategoryLabel(group.category)}>
+                      {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
@@ -55,4 +70,11 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
       <p className="portfolio-note">Die Simulation nutzt die aus diesen Anlagen abgeleitete Zielaufteilung; einzelne Anlagen werden noch nicht separat projiziert.</p>
     </fieldset>
   )
+}
+
+function groupReturnSourcesByCategory(options: ReturnSeriesOption[]): Array<{ category: ReturnSeriesCategory; options: ReturnSeriesOption[] }> {
+  return sourceCategoryOrder.map((category) => ({
+    category,
+    options: options.filter((option) => getReturnSeriesCategory(option.id) === category),
+  })).filter((group) => group.options.length > 0)
 }

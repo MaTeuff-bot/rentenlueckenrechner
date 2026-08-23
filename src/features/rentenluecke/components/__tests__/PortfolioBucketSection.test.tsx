@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import { PortfolioBucketSection } from '../InputPanel/PortfolioBucketSection'
@@ -47,7 +47,12 @@ describe('PortfolioBucketSection', () => {
     fireEvent.change(screen.getByLabelText(/^Aktueller Wert von Neue Anlage/), { target: { value: '10000' } })
     const sourceSelect = screen.getByLabelText('Renditequelle/Proxy von Neue Anlage')
     expect(sourceSelect).toHaveTextContent('Aktien — Synthetisch:')
+    expect(sourceSelect).toHaveTextContent('Anleihen — Synthetisch:')
     expect(sourceSelect).toHaveTextContent('Cash — Synthetisch:')
+    expect(within(sourceSelect).getByRole('group', { name: 'Aktien' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Anleihen' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Cash' })).toBeInTheDocument()
+    expect(screen.getAllByText('Kategorie: Aktien').length).toBeGreaterThan(0)
     expect(screen.queryByLabelText('Typ von Neue Anlage')).not.toBeInTheDocument()
     fireEvent.change(sourceSelect, { target: { value: 'synthetic-cash-assumption-v1' } })
 
@@ -68,6 +73,7 @@ describe('PortfolioBucketSection', () => {
     )
 
     expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Cash 40 %')
+    expect(screen.getAllByText('Kategorie: Cash').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Notgroschen entfernen' }))
     expect(onRemove).toHaveBeenCalledWith('new-bucket')
   })
