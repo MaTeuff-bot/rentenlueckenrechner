@@ -7,7 +7,7 @@ export function EtfProfileCatalog() {
     <fieldset className="wide-fieldset">
       <legend>ETF-Steckbriefe</legend>
       <p className="portfolio-note">
-        Reine Referenzdaten: Diese ETFs sind weder auswählbare Renditequellen noch mit Portfolio-Anlagen verknüpft.
+        Für diese ETFs sind statische historische EUR-Xetra-Renditen als auswählbare Renditequellen gebündelt.
       </p>
       <div className="source-detail-grid etf-profile-grid">
         {getBundledEtfProfiles().map((profile) => (

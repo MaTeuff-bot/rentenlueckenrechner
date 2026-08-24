@@ -31,3 +31,12 @@ Bundled German CPI inflation values are generated from a Bundesbank-hosted time 
 Bundesbank/ESCB statistics reuse terms generally allow reuse free of charge with source attribution, while requiring that statistics and metadata are not misrepresented and that third-party rights remain respected. Destatis GENESIS/open-data material is generally made available under `Datenlizenz Deutschland - Namensnennung - Version 2.0`; cite Destatis/Federal Statistical Office and mark transformed calculations as own calculations.
 
 This repository stores transformed annual values, source metadata, checksums, and caveats so users can distinguish the bundled snapshot from the original provider statistics.
+
+## Yahoo Finance ETF Adjusted-Close Fallbacks
+
+The two bundled ETF series are static annual normalized returns derived from Yahoo Finance adjusted close observations for the EUR-denominated Xetra listings `IUSQ.DE` and `EUNM.DE`. The application does not fetch Yahoo data at runtime.
+
+- These are adjusted market-price series, not official fund NAV or official fund total-return series.
+- Market-price, currency, and adjustment effects can differ from official fund reporting.
+- The ETF TER is considered already reflected in the ETF price/NAV. Simulations therefore do not deduct a bucket's annual cost rate again when either ETF source is selected.
+- Yahoo's terms and any applicable third-party market-data rights apply to the source observations; the bundled records retain source URLs, transformation notes, and checksums.

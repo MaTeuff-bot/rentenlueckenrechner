@@ -34,6 +34,7 @@ export function formatDropdownLabel(source: ReturnSeriesOption): string {
   }
 
   if (source.role === 'equity') {
+    if (source.sourceKind === 'bundledEtf') return `Aktien — ETF: ${source.label}`
     return 'Aktien — Historisch: entwickelte Märkte'
   }
 
@@ -85,7 +86,11 @@ export function getBasisLabel(source: ReturnSeriesOption): string {
   }
 
   const typeLabel =
-    source.returnType === 'grossTotal' ? 'Total Return' : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
+    source.returnType === 'grossTotal'
+      ? 'Total Return'
+      : source.returnType === 'adjustedMarketPrice'
+        ? 'Yahoo Adjusted Market Price'
+        : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
   return `${source.returnBasis === 'real' ? 'Real' : 'Nominal'}, ${typeLabel}, ${source.currency}`
 }
 
