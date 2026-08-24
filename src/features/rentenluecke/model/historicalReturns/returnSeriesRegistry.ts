@@ -1,5 +1,6 @@
 import { ASSET_CLASS_ASSUMPTIONS, type AssetClassAssumption } from '../stochasticReturns'
 import { HISTORICAL_PRODUCTION_RETURN_SERIES } from '../returnData/historicalProductionData'
+import { BUNDLED_ETF_HISTORICAL_RETURN_SERIES } from '../returnData/bundledEtfHistoricalReturnData'
 import {
   SYNTHETIC_RETURN_ASSUMPTIONS_VERSION,
   SYNTHETIC_RETURN_SERIES_IDS,
@@ -8,6 +9,7 @@ import type { HistoricalReturnSeries, SyntheticReturnSeries } from './types'
 
 export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
   ...HISTORICAL_PRODUCTION_RETURN_SERIES,
+  ...BUNDLED_ETF_HISTORICAL_RETURN_SERIES,
 ]
 
 export const SYNTHETIC_RETURN_SERIES: SyntheticReturnSeries[] = ASSET_CLASS_ASSUMPTIONS.map((assumption) =>
@@ -34,6 +36,8 @@ function createSyntheticReturnSeries(assumption: AssetClassAssumption): Syntheti
   return {
     id: SYNTHETIC_RETURN_SERIES_IDS[role],
     kind: 'synthetic',
+    sourceKind: 'synthetic',
+    costTreatment: 'deductBucketAnnualCost',
     label: `Synthetisch: ${assumption.label} (${expectedPercent} Erwartung, ${volatilityPercent} Volatilität)`,
     description:
       'Synthetischer Renditepfad aus einer vereinfachten Normalverteilung. Gedacht für What-if-Annahmen oder Anlageklassen ohne gute historische Reihe.',

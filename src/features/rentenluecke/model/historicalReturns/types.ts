@@ -5,7 +5,9 @@ export type DatasetRole = 'equity' | 'bond' | 'cash' | 'inflation' | 'other'
 export type DatasetGeography = 'DE' | 'EU' | 'Global'
 export type DatasetCurrency = 'EUR'
 export type ReturnBasis = 'nominal' | 'real'
-export type ReturnType = 'price' | 'grossTotal' | 'netTotal' | 'yieldBased' | 'unknown'
+export type ReturnType = 'price' | 'adjustedMarketPrice' | 'grossTotal' | 'netTotal' | 'yieldBased' | 'unknown'
+export type ReturnSourceKind = 'historicalDataset' | 'synthetic' | 'bundledEtf'
+export type CostTreatment = 'deductBucketAnnualCost' | 'netOfFundCosts'
 export type DatasetConfidence = 'high' | 'medium' | 'low'
 
 export type DatasetCountryCoverage = {
@@ -42,6 +44,8 @@ export type HistoricalReturnSeries = {
   currency: DatasetCurrency
   returnBasis: ReturnBasis
   returnType: ReturnType
+  sourceKind: Exclude<ReturnSourceKind, 'synthetic'>
+  costTreatment: CostTreatment
   source: DatasetSource
   license: string
   licenseAllowsBundling: boolean
@@ -65,6 +69,8 @@ export type HistoricalReturnSeries = {
 export type SyntheticReturnSeries = {
   id: string
   kind: 'synthetic'
+  sourceKind: 'synthetic'
+  costTreatment: 'deductBucketAnnualCost'
   label: string
   description: string
   suitableFor: DatasetRole[]

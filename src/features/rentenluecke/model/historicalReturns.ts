@@ -55,6 +55,8 @@ export type {
   InflationSeries,
   InflationSourceOption,
   ReturnBasis,
+  ReturnSourceKind,
+  CostTreatment,
   ReturnSeriesOption,
   ReturnType,
   SyntheticReturnSeries,

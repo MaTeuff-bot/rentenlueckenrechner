@@ -26,7 +26,11 @@ export function generateHistoricalReturnPath(
         return portfolioReturn
       }
 
-      const annualReturn = deductAnnualCosts(resolveComponentNominalReturn(component, year, inflation, rng), component.annualCostRate)
+      const annualReturn = applySourceCostTreatment(
+        resolveComponentNominalReturn(component, year, inflation, rng),
+        component.returnSeriesId,
+        component.annualCostRate,
+      )
       return portfolioReturn + component.weight * annualReturn
     }, 0)
   })
@@ -70,7 +74,7 @@ export function resolveComponentExpectedNominalReturn(
 ): number {
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
-    return deductAnnualCosts(syntheticSeries.expectedAnnualReturn, component.annualCostRate)
+    return applyCostTreatment(syntheticSeries.expectedAnnualReturn, syntheticSeries.costTreatment, component.annualCostRate)
   }
 
   const series = component.returnSeriesId ? findHistoricalReturnSeries(component.returnSeriesId) : undefined
@@ -83,7 +87,11 @@ export function resolveComponentExpectedNominalReturn(
     throw new Error(`Missing ${series.label} return for ${year}`)
   }
 
-  return deductAnnualCosts(series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn, component.annualCostRate)
+  return applyCostTreatment(
+    series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn,
+    series.costTreatment,
+    component.annualCostRate,
+  )
 }
 
 function requiresSampledCalendarYear(components: PortfolioComponent[], inflationSource: InflationSourceOption): boolean {
@@ -122,4 +130,20 @@ function realToNominalReturn(realReturn: number, inflation: number): number {
 
 function deductAnnualCosts(annualReturn: number, annualCostRate = 0): number {
   return Math.max(-1, annualReturn - annualCostRate)
+}
+
+function applySourceCostTreatment(annualReturn: number, returnSeriesId?: string, annualCostRate = 0): number {
+  const source = returnSeriesId
+    ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId)
+    : undefined
+  if (!source) return deductAnnualCosts(annualReturn, annualCostRate)
+  return applyCostTreatment(annualReturn, source.costTreatment, annualCostRate)
+}
+
+function applyCostTreatment(
+  annualReturn: number,
+  costTreatment: 'deductBucketAnnualCost' | 'netOfFundCosts',
+  annualCostRate = 0,
+): number {
+  return costTreatment === 'netOfFundCosts' ? annualReturn : deductAnnualCosts(annualReturn, annualCostRate)
 }

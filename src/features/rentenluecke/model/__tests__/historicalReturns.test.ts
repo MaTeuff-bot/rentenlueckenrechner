@@ -503,6 +503,35 @@ describe('historical returns', () => {
     expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, netSettings)).not.toBe(createHistoricalBootstrapSeed(DEFAULT_INPUT, grossSettings))
   })
 
+  it('keeps ETF adjusted-price returns net of fund costs while other sources deduct bucket costs', () => {
+    const fixedInflation = createFixedInflationSource(0)
+    const etf = findHistoricalReturnSeries('etf-ie00b6r52259-iusq')!
+    const etfComponent = {
+      id: 'etf', label: 'IUSQ', role: 'equity' as const, weight: 1,
+      returnSeriesId: etf.id, annualCostRate: 0.25,
+    }
+    const etfSettings = {
+      portfolioComponents: [etfComponent], inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 1,
+    }
+
+    expect(etf.sourceKind).toBe('bundledEtf')
+    expect(etf.costTreatment).toBe('netOfFundCosts')
+    expect(generateHistoricalReturnPath([etfComponent], fixedInflation, [2012])[0]).toBe(etf.normalizedSeries[2012])
+    expect(calculateExpectedAnnualReturnForSelection(DEFAULT_INPUT, etfSettings)).toBeCloseTo(
+      Object.values(etf.normalizedSeries).reduce((sum, value) => sum + value, 0) / Object.keys(etf.normalizedSeries).length,
+    )
+    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, etfSettings)).toBe(createHistoricalBootstrapSeed(DEFAULT_INPUT, {
+      ...etfSettings,
+      portfolioComponents: [{ ...etfComponent, annualCostRate: 0 }],
+    }))
+
+    const equityOptions = getReturnSeriesOptionsForRole('equity')
+    expect(equityOptions.map(({ id }) => id)).toEqual(expect.arrayContaining([
+      'etf-ie00b6r52259-iusq',
+      'etf-ie00b4l5yc18-eunm',
+    ]))
+  })
+
   it('changes the bootstrap seed when a bucket return source changes', () => {
     const settings = {
       portfolioComponents: createPortfolioComponents(

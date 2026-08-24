@@ -55,14 +55,15 @@ function renderInputPanel(
 }
 
 describe('InputPanel return source UX', () => {
-  it('shows bundled ETF metadata without offering ETFs as return sources', () => {
+  it('shows bundled ETF metadata and offers both ETFs as return sources', () => {
     renderInputPanel()
 
     expect(screen.getByRole('group', { name: 'ETF-Steckbriefe' })).toBeInTheDocument()
     expect(screen.getByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).toBeInTheDocument()
     expect(screen.getByText('iShares MSCI EM UCITS ETF USD (Acc)')).toBeInTheDocument()
-    expect(screen.getByText(/weder auswählbare Renditequellen noch mit Portfolio-Anlagen verknüpft/)).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /IUSQ|EUNM/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/statische historische EUR-Xetra-Renditen als auswählbare Renditequellen/)).toBeInTheDocument()
+    expect(screen.getAllByRole('option', { name: /IUSQ\.DE/ }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('option', { name: /EUNM\.DE/ }).length).toBeGreaterThan(0)
   })
 
   it('renders selected source details with source, license, and caveat information', () => {
