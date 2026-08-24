@@ -102,7 +102,25 @@ export function getLicenseLabel(source: ReturnSeriesOption): string {
   return source.commercialUseAllowed ? source.license : `${source.license}; nicht für kommerzielle Nutzung freigegeben`
 }
 
+export function getCostTreatmentLabel(source: ReturnSeriesOption): string {
+  return source.costTreatment === 'netOfFundCosts'
+    ? 'ETF-TER/OCF bereits in der Renditequelle berücksichtigt; zusätzliche Bucket-Kosten werden aktuell nicht abgezogen'
+    : 'Bucket-Kosten werden jährlich von der Rendite abgezogen'
+}
+
 export function formatCaveatTag(caveat: string): string {
+  if (caveat.includes('Static fallback data')) {
+    return 'statischer Datenstand'
+  }
+
+  if (caveat.includes('not official fund NAV')) {
+    return 'Adjusted Close ≠ Fonds-NAV'
+  }
+
+  if (caveat.includes('EUR-denominated Xetra listing')) {
+    return 'EUR/Xetra-Marktkurs'
+  }
+
   if (caveat.includes('not cleared for commercial use')) {
     return 'nicht kommerziell'
   }

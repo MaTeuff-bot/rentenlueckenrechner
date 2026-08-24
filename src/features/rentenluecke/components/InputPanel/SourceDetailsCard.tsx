@@ -5,6 +5,7 @@ import {
   getBasisLabel,
   getCoverageLabel,
   getLicenseLabel,
+  getCostTreatmentLabel,
   getSourceName,
   getSourceVersion,
 } from './sourceDisplay'
@@ -35,6 +36,10 @@ export function ReturnSourceCard({ label, source }: { label: string; source: Ret
         <div>
           <dt>Lizenz</dt>
           <dd>{getLicenseLabel(source)}</dd>
+        </div>
+        <div>
+          <dt>Kostenbehandlung</dt>
+          <dd>{getCostTreatmentLabel(source)}</dd>
         </div>
       </dl>
       <CaveatTags caveats={caveats} />
