@@ -12,6 +12,7 @@ import { InflationSourceSection } from './InputPanel/InflationSourceSection'
 import { PersonalDataSection, RetirementCashflowSection, SavingsSection } from './InputPanel/BasicInputSections'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
 import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
+import { EtfProfileCatalog } from './InputPanel/EtfProfileCatalog'
 import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInflationLabel } from './InputPanel/sourceDisplay'
 
 type InputPanelProps = {
@@ -123,6 +124,8 @@ export function InputPanel({
           onAdd={onPortfolioBucketAdd}
           onRemove={onPortfolioBucketRemove}
         />
+
+        <EtfProfileCatalog />
 
         <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
 
