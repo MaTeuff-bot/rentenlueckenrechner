@@ -4,10 +4,9 @@ import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import {
   getReturnSeriesCategory,
   getReturnSeriesOptions,
-  type ReturnSeriesCategory,
   type ReturnSeriesOption,
 } from '../../model/historicalReturns'
-import { formatDropdownLabel, formatSourceCategoryLabel } from './sourceDisplay'
+import { findReturnSeriesOption, formatDropdownLabel, formatSourceCategoryLabel, isSyntheticSource } from './sourceDisplay'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 
 type Props = {
@@ -22,10 +21,8 @@ type Props = {
 
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 })
 const currency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const sourceCategoryOrder: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
-
 export function PortfolioBucketSection({ buckets, total, allocation, error, onUpdate, onAdd, onRemove }: Props) {
-  const sourceOptionGroups = groupReturnSourcesByCategory(getReturnSeriesOptions())
+  const sourceOptionGroups = groupReturnSourcesByType(getReturnSeriesOptions())
 
   return (
     <fieldset className="wide-fieldset portfolio-section">
@@ -35,6 +32,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
           const fallbackName = `Anlage ${index + 1}`
           const label = bucket.name.trim() || fallbackName
           const category = getReturnSeriesCategory(bucket.returnSeriesId)
+          const selectedSource = findReturnSeriesOption(bucket.returnSeriesId)
           return (
             <div className="portfolio-bucket" key={bucket.id}>
               <label className="field">
@@ -48,22 +46,29 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 </span>
                 <select aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
                   {sourceOptionGroups.map((group) => (
-                    <optgroup key={group.category} label={formatSourceCategoryLabel(group.category)}>
+                    <optgroup key={group.label} label={group.label}>
                       {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
                     </optgroup>
                   ))}
                 </select>
               </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
-              <PercentInput
-                id={`portfolio-cost-${bucket.id}`}
-                label={`TER/Kosten p.a. von ${label}`}
-                value={bucket.annualCostRate ?? 0}
-                min={0}
-                max={100}
-                error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
-                onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
-              />
+              <div className="portfolio-cost-field">
+                <PercentInput
+                  id={`portfolio-cost-${bucket.id}`}
+                  label={`TER/Kosten p.a. von ${label}`}
+                  value={bucket.annualCostRate ?? 0}
+                  min={0}
+                  max={100}
+                  error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
+                  onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
+                />
+                {selectedSource?.costTreatment === 'netOfFundCosts' ? (
+                  <p className="portfolio-cost-note">
+                    ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.
+                  </p>
+                ) : null}
+              </div>
               <button className="secondary-button portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>Entfernen</button>
             </div>
           )
@@ -77,14 +82,15 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
         <span>Cash {percent.format(allocation.fixed)}</span>
       </div>
       {error ? <p className="field-error">{error}</p> : null}
-      <p className="portfolio-note">Die Renditequellen sind Proxys. TER/Kosten p.a. werden je Anlage separat von deren Rendite abgezogen.</p>
+      <p className="portfolio-note">Die Renditequellen sind Proxys. Kosten p.a. werden bei Quellen mit separater Kostenbehandlung je Anlage abgezogen.</p>
     </fieldset>
   )
 }
 
-function groupReturnSourcesByCategory(options: ReturnSeriesOption[]): Array<{ category: ReturnSeriesCategory; options: ReturnSeriesOption[] }> {
-  return sourceCategoryOrder.map((category) => ({
-    category,
-    options: options.filter((option) => getReturnSeriesCategory(option.id) === category),
-  })).filter((group) => group.options.length > 0)
+function groupReturnSourcesByType(options: ReturnSeriesOption[]): Array<{ label: string; options: ReturnSeriesOption[] }> {
+  return [
+    { label: 'ETF-Renditequellen', options: options.filter((option) => option.sourceKind === 'bundledEtf') },
+    { label: 'Historische Anlageklassen', options: options.filter((option) => option.sourceKind === 'historicalDataset') },
+    { label: 'Synthetische Annahmen', options: options.filter(isSyntheticSource) },
+  ].filter((group) => group.options.length > 0)
 }

@@ -49,9 +49,9 @@ describe('PortfolioBucketSection', () => {
     expect(sourceSelect).toHaveTextContent('Aktien — Synthetisch:')
     expect(sourceSelect).toHaveTextContent('Anleihen — Synthetisch:')
     expect(sourceSelect).toHaveTextContent('Cash — Synthetisch:')
-    expect(within(sourceSelect).getByRole('group', { name: 'Aktien' })).toBeInTheDocument()
-    expect(within(sourceSelect).getByRole('group', { name: 'Anleihen' })).toBeInTheDocument()
-    expect(within(sourceSelect).getByRole('group', { name: 'Cash' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'ETF-Renditequellen' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Historische Anlageklassen' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Synthetische Annahmen' })).toBeInTheDocument()
     expect(screen.getAllByText('Kategorie: Aktien').length).toBeGreaterThan(0)
     expect(screen.queryByLabelText('Typ von Neue Anlage')).not.toBeInTheDocument()
     fireEvent.change(sourceSelect, { target: { value: 'synthetic-cash-assumption-v1' } })
@@ -61,7 +61,7 @@ describe('PortfolioBucketSection', () => {
     expect(onUpdate).toHaveBeenNthCalledWith(2, 'new-bucket', { value: 10_000 })
     expect(onUpdate).toHaveBeenNthCalledWith(3, 'new-bucket', { returnSeriesId: 'synthetic-cash-assumption-v1' })
     expect(onUpdate).toHaveBeenNthCalledWith(4, 'new-bucket', { annualCostRate: 0.0022 })
-    expect(screen.getByText(/Renditequellen sind Proxys/)).toHaveTextContent('Kosten p.a. werden je Anlage separat')
+    expect(screen.getByText(/Renditequellen sind Proxys/)).toHaveTextContent('Quellen mit separater Kostenbehandlung')
 
     rerender(
       <PortfolioBucketSection
@@ -79,5 +79,21 @@ describe('PortfolioBucketSection', () => {
     expect(screen.getAllByText('Kategorie: Cash').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Notgroschen entfernen' }))
     expect(onRemove).toHaveBeenCalledWith('new-bucket')
+  })
+
+  it('explains ETF cost treatment next to the cost input', () => {
+    render(
+      <PortfolioBucketSection
+        buckets={[{ id: 'etf', name: 'Welt-ETF', value: 20_000, returnSeriesId: 'etf-ie00b6r52259-iusq', annualCostRate: 0.001 }]}
+        total={20_000}
+        allocation={{ equity: 1, bonds: 0, fixed: 0 }}
+        error={null}
+        onUpdate={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/ETF-TER\/OCF ist in dieser Renditequelle bereits berücksichtigt/)).toHaveTextContent(/zusätzliche Kosten.*nicht abgezogen/)
   })
 })

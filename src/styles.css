@@ -724,6 +724,8 @@ tr:last-child td {
 .portfolio-bucket-list { display: grid; gap: 12px; }
 .portfolio-bucket { display: grid; grid-template-columns: minmax(140px, 1.4fr) minmax(140px, 1fr) minmax(190px, 1.2fr) auto; align-items: end; gap: 12px; padding: 14px; border: 1px solid #dce3ea; border-radius: 8px; background: #f8fafb; }
 .portfolio-bucket .field > input { min-height: 41px; border: 1px solid #b9c4cf; border-radius: 6px; padding: 9px 10px; }
+.portfolio-cost-field { align-self: end; }
+.portfolio-cost-note { max-width: 34rem; margin: 6px 0 0; color: #52606d; font-size: 0.82rem; line-height: 1.35; }
 .portfolio-remove { margin-bottom: 1px; }
 .portfolio-add { justify-self: start; }
 .portfolio-summary { display: flex; flex-wrap: wrap; gap: 10px 18px; color: #344355; }

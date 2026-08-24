@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
@@ -27,12 +27,16 @@ function renderInputPanel(
   } = {
     inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   },
-  options: { allocationError?: string; onReset?: () => void; syntheticCash?: boolean } = {},
+  options: { allocationError?: string; onReset?: () => void; syntheticCash?: boolean; etfEquity?: boolean } = {},
 ) {
   const buckets = createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION)
   if (options.syntheticCash) {
     const cash = buckets.find((bucket) => bucket.id === 'fixed')
     if (cash) cash.returnSeriesId = 'synthetic-cash-assumption-v1'
+  }
+  if (options.etfEquity) {
+    const equity = buckets.find((bucket) => bucket.id === 'equity')
+    if (equity) equity.returnSeriesId = 'etf-ie00b6r52259-iusq'
   }
   render(
     <InputPanel
@@ -64,6 +68,10 @@ describe('InputPanel return source UX', () => {
     expect(screen.getByText(/statische historische EUR-Xetra-Renditen als auswählbare Renditequellen/)).toBeInTheDocument()
     expect(screen.getAllByRole('option', { name: /IUSQ\.DE/ }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('option', { name: /EUNM\.DE/ }).length).toBeGreaterThan(0)
+    const sourceSelect = screen.getAllByLabelText(/Renditequelle\/Proxy von/)[0]
+    expect(within(sourceSelect).getByRole('group', { name: 'ETF-Renditequellen' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Historische Anlageklassen' })).toBeInTheDocument()
+    expect(within(sourceSelect).getByRole('group', { name: 'Synthetische Annahmen' })).toBeInTheDocument()
   })
 
   it('renders selected source details with source, license, and caveat information', () => {
@@ -75,6 +83,17 @@ describe('InputPanel return source UX', () => {
     expect(screen.getAllByText('ETF/EUR-Proxy').length).toBeGreaterThan(0)
     expect(screen.getByText('Bundesbank time series sourced to Federal Statistical Office, Wiesbaden')).toBeInTheDocument()
     expect(screen.getByText('CPI-Jahresproxy')).toBeInTheDocument()
+    expect(screen.getAllByText('Kostenbehandlung').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Bucket-Kosten werden jährlich von der Rendite abgezogen/).length).toBeGreaterThan(0)
+  })
+
+  it('shows ETF cost treatment and adjusted-close caveats in selected source details', () => {
+    renderInputPanel(undefined, { etfEquity: true })
+
+    expect(screen.getAllByText(/ETF-TER\/OCF bereits in der Renditequelle berücksichtigt/).length).toBeGreaterThan(0)
+    expect(screen.getByText('statischer Datenstand')).toBeInTheDocument()
+    expect(screen.getByText('Adjusted Close ≠ Fonds-NAV')).toBeInTheDocument()
+    expect(screen.getByText('EUR/Xetra-Marktkurs')).toBeInTheDocument()
   })
 
   it('shows the mixed-source note conditionally for selected synthetic and historical sources', () => {
