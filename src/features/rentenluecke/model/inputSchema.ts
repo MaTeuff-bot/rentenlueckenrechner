@@ -15,6 +15,21 @@ export const inputLabels = {
 
 const money = z.number().finite().min(0, 'Muss mindestens 0 sein.')
 const age = z.number().int('Muss eine ganze Zahl sein.').min(0, 'Muss mindestens 0 sein.').max(120, 'Ist zu hoch.')
+const retirementIncomeStream = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    amountMonthlyToday: money,
+    startAge: age,
+    endAge: age.nullable(),
+    amountBasis: z.enum(['net', 'gross']),
+    deductionMode: z.enum(['none', 'effectiveHaircut']),
+    effectiveDeductionRate: z.number().finite().min(0).max(1),
+  })
+  .refine((stream) => stream.endAge === null || stream.endAge > stream.startAge, {
+    path: ['endAge'],
+    message: 'Muss größer als das Startalter sein.',
+  })
 
 export const rentenlueckeInputSchema = z
   .object({
@@ -25,6 +40,7 @@ export const rentenlueckeInputSchema = z
     monthlyContributionToday: money,
     monthlyDesiredSpendingToday: money,
     monthlyRetirementIncomeToday: money,
+    retirementIncomeStreams: z.array(retirementIncomeStream).optional(),
     annualInflationRate: z
       .number()
       .finite()
