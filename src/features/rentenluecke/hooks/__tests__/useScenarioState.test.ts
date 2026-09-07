@@ -52,6 +52,7 @@ describe('parsePersistedScenarioState', () => {
     expect(migrated.retirementIncomeStreams).toEqual([{
       id: 'statutory-pension',
       name: 'Gesetzliche Rente',
+      kind: 'gesetzliche-rente',
       amountMonthlyToday: 2_345,
       startAge: input.retirementAge,
       endAge: null,
@@ -59,6 +60,22 @@ describe('parsePersistedScenarioState', () => {
       deductionMode: 'effectiveHaircut',
       effectiveDeductionRate: 0,
     }])
+  })
+
+  it('defaults a missing category in an existing v11 stream without a storage bump', () => {
+    const scenario = createDefaultState()
+    const retirementIncomeStreams = scenario.retirementIncomeStreams.map((stream) => {
+      const streamWithoutKind = { ...stream }
+      delete streamWithoutKind.kind
+      return streamWithoutKind
+    })
+    const parsed = parsePersistedScenarioState(persistedJson({
+      version: 11,
+      ...scenario,
+      retirementIncomeStreams,
+    }))
+
+    expect(parsed.retirementIncomeStreams[0].kind).toBe('gesetzliche-rente')
   })
 
   it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])('falls back to defaults for a v%i shape', (version) => {
@@ -169,6 +186,7 @@ describe('useScenarioState', () => {
     act(() => result.current.addRetirementIncomeStream())
     expect(result.current.retirementIncomeStreams).toHaveLength(2)
     const added = result.current.retirementIncomeStreams[1]
+    expect(added).toMatchObject({ kind: 'other', name: 'Weiteres Einkommen' })
     act(() => result.current.removeRetirementIncomeStream(added.id))
     expect(result.current.retirementIncomeStreams).toHaveLength(1)
   })

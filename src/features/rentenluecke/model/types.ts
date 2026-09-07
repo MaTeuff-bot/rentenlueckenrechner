@@ -1,6 +1,16 @@
+export type RetirementIncomeStreamKind =
+  | 'gesetzliche-rente'
+  | 'betriebsrente'
+  | 'private-rente'
+  | 'rental-income'
+  | 'side-income'
+  | 'bridge-income'
+  | 'other'
+
 export type RetirementIncomeStream = {
   id: string
   name: string
+  kind?: RetirementIncomeStreamKind
   amountMonthlyToday: number
   startAge: number
   endAge: number | null

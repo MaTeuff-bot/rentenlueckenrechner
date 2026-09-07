@@ -2,7 +2,50 @@ import type { ChangeEvent } from 'react'
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
 import { NumberInput } from '../../../../shared/components/NumberInput'
 import { PercentInput } from '../../../../shared/components/PercentInput'
-import type { RetirementIncomeStream } from '../../model/types'
+import type { RetirementIncomeStream, RetirementIncomeStreamKind } from '../../model/types'
+
+const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defaultName: string; helper: string }> = {
+  'gesetzliche-rente': {
+    label: 'Gesetzliche Rente',
+    defaultName: 'Gesetzliche Rente',
+    helper: 'Trage den Monatsbetrag aus deinem Rentenbescheid als Bruttobetrag in heutiger Kaufkraft ein.',
+  },
+  betriebsrente: {
+    label: 'Betriebsrente',
+    defaultName: 'Betriebsrente',
+    helper: 'Prüfe, ob deine Angabe brutto oder bereits netto ist, und bilde Abzüge bei Bedarf nur pauschal ab.',
+  },
+  'private-rente': {
+    label: 'Private Rente',
+    defaultName: 'Private Rente',
+    helper: 'Prüfe, ob deine Angabe brutto oder bereits netto ist, und bilde Abzüge bei Bedarf nur pauschal ab.',
+  },
+  'rental-income': {
+    label: 'Mieteinnahmen',
+    defaultName: 'Mieteinnahmen',
+    helper: 'Nutze einen nachhaltig erwarteten Betrag; Steuern, Leerstand und Instandhaltung werden nicht automatisch berechnet.',
+  },
+  'side-income': {
+    label: 'Nebenjob',
+    defaultName: 'Nebenjob',
+    helper: 'Steuern und Sozialabgaben werden nicht automatisch berechnet. Nutze dafür bei Bruttoangaben den pauschalen Abschlag.',
+  },
+  'bridge-income': {
+    label: 'Brückeneinkommen',
+    defaultName: 'Brückeneinkommen',
+    helper: 'Lege Start- und Endalter fest. Steuern und Sozialabgaben werden nicht automatisch berechnet.',
+  },
+  other: {
+    label: 'Sonstiges Einkommen',
+    defaultName: 'Weiteres Einkommen',
+    helper: 'Wähle netto oder brutto; Steuern sowie Kranken- und Pflegeversicherung werden nicht automatisch berechnet.',
+  },
+}
+
+const GENERIC_DEFAULT_NAMES = new Set([
+  'Weiteres Einkommen',
+  ...Object.values(CATEGORY_DETAILS).map(({ defaultName }) => defaultName),
+])
 
 type Props = {
   streams: RetirementIncomeStream[]
@@ -22,12 +65,32 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
       <div className="retirement-income-list">
         {streams.map((stream, index) => {
           const label = stream.name.trim() || `Einkommen ${index + 1}`
+          const kind = stream.kind ?? 'other'
+          const category = CATEGORY_DETAILS[kind]
           const endAgeError = stream.endAge !== null &&
             (!Number.isInteger(stream.endAge) || stream.endAge <= stream.startAge || stream.endAge > 120)
               ? 'Muss größer als das Startalter und höchstens 120 sein.'
               : undefined
           return (
             <div className="retirement-income-stream" key={stream.id}>
+              <label className="field">
+                <span className="field-label">Kategorie</span>
+                <select
+                  aria-label={`Kategorie von ${label}`}
+                  value={kind}
+                  onChange={(event) => {
+                    const nextKind = event.target.value as RetirementIncomeStreamKind
+                    const nextName = CATEGORY_DETAILS[nextKind].defaultName
+                    const mayReplaceName = stream.name.trim() === '' || GENERIC_DEFAULT_NAMES.has(stream.name.trim())
+                    onUpdate(stream.id, { kind: nextKind, ...(mayReplaceName ? { name: nextName } : {}) })
+                  }}
+                >
+                  {Object.entries(CATEGORY_DETAILS).map(([value, details]) => (
+                    <option key={value} value={value}>{details.label}</option>
+                  ))}
+                </select>
+                <span className="field-help">{category.helper}</span>
+              </label>
               <label className="field">
                 <span className="field-label">Name</span>
                 <input

@@ -13,6 +13,8 @@ import type { InputFieldName } from '../../model/inputSchema'
 import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
 import { createDefaultRetirementIncomeStreams } from '../../model/retirementIncomeStreams'
 import { InputPanel } from '../InputPanel'
+import { RetirementIncomeStreamsSection } from '../InputPanel/RetirementIncomeStreamsSection'
+import type { RetirementIncomeStream } from '../../model/types'
 
 function inputById(id: string): HTMLInputElement {
   const input = document.getElementById(id)
@@ -177,5 +179,63 @@ describe('InputPanel return source UX', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Eingaben zurücksetzen' }))
     expect(onReset).toHaveBeenCalledOnce()
+  })
+})
+
+describe('retirement income category selector', () => {
+  const baseStream: RetirementIncomeStream = {
+    id: 'income',
+    name: 'Weiteres Einkommen',
+    kind: 'other',
+    amountMonthlyToday: 0,
+    startAge: 67,
+    endAge: null,
+    amountBasis: 'net',
+    deductionMode: 'none',
+    effectiveDeductionRate: 0,
+  }
+
+  it('shows German category choices and category-specific caveats', () => {
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[{ ...baseStream, kind: 'rental-income', name: 'Mieteinnahmen' }]}
+        onUpdate={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    const selector = screen.getByLabelText('Kategorie von Mieteinnahmen')
+    expect(selector).toHaveDisplayValue('Mieteinnahmen')
+    expect(within(selector).getByRole('option', { name: 'Gesetzliche Rente' })).toBeInTheDocument()
+    expect(within(selector).getByRole('option', { name: 'Brückeneinkommen' })).toBeInTheDocument()
+    expect(screen.getByText(/Steuern, Leerstand und Instandhaltung werden nicht automatisch berechnet/)).toBeInTheDocument()
+  })
+
+  it('updates a generic default name when the category changes', () => {
+    const onUpdate = vi.fn()
+    render(
+      <RetirementIncomeStreamsSection streams={[baseStream]} onUpdate={onUpdate} onAdd={vi.fn()} onRemove={vi.fn()} />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Kategorie von Weiteres Einkommen'), { target: { value: 'side-income' } })
+
+    expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'side-income', name: 'Nebenjob' })
+  })
+
+  it('does not overwrite a custom name when the category changes', () => {
+    const onUpdate = vi.fn()
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[{ ...baseStream, name: 'Kiosk am Wochenende' }]}
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Kategorie von Kiosk am Wochenende'), { target: { value: 'side-income' } })
+
+    expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'side-income' })
   })
 })

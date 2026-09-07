@@ -19,6 +19,15 @@ const retirementIncomeStream = z
   .object({
     id: z.string(),
     name: z.string(),
+    kind: z.enum([
+      'gesetzliche-rente',
+      'betriebsrente',
+      'private-rente',
+      'rental-income',
+      'side-income',
+      'bridge-income',
+      'other',
+    ]).optional(),
     amountMonthlyToday: money,
     startAge: age,
     endAge: age.nullable(),
