@@ -1,5 +1,6 @@
 import { createInflationFactorResolver } from './simulateAccumulation'
 import { simulateRetirementRows } from './simulateRetirement'
+import { calculateRetirementIncomeForYear } from './retirementIncomeStreams'
 import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario } from './types'
 
 export const REQUIRED_CAPITAL_EPSILON = 1
@@ -65,8 +66,12 @@ function estimateNominalGapWithoutReturns(
     const yearIndex = scenario.yearsToRetirement + retirementYear
     const inflationFactor = getInflationFactor(yearIndex)
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
-    const retirementIncome = scenario.annualRetirementIncomeToday * inflationFactor
-    total += Math.max(0, desiredSpending - retirementIncome)
+    const retirementIncome = calculateRetirementIncomeForYear(
+      scenario.retirementIncomeStreams,
+      scenario.retirementAge + retirementYear,
+      inflationFactor,
+    )
+    total += Math.max(0, desiredSpending - retirementIncome.net)
   }
 
   return total

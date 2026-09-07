@@ -1,3 +1,14 @@
+export type RetirementIncomeStream = {
+  id: string
+  name: string
+  amountMonthlyToday: number
+  startAge: number
+  endAge: number | null
+  amountBasis: 'net' | 'gross'
+  deductionMode: 'none' | 'effectiveHaircut'
+  effectiveDeductionRate: number
+}
+
 export type RentenlueckeInput = {
   currentAge: number
   retirementAge: number
@@ -6,6 +17,7 @@ export type RentenlueckeInput = {
   monthlyContributionToday: number
   monthlyDesiredSpendingToday: number
   monthlyRetirementIncomeToday: number
+  retirementIncomeStreams?: RetirementIncomeStream[]
   annualInflationRate: number
   annualReturnBeforeRetirement: number
   annualReturnInRetirement: number
@@ -21,6 +33,7 @@ export type NormalizedScenario = {
   annualContributionToday: number
   annualDesiredSpendingToday: number
   annualRetirementIncomeToday: number
+  retirementIncomeStreams: RetirementIncomeStream[]
   annualInflationRate: number
   annualReturnBeforeRetirement: number
   annualReturnInRetirement: number
@@ -39,6 +52,10 @@ export type YearlyPeriodRow = {
   contribution: number
   desiredSpending: number
   retirementIncome: number
+  retirementIncomeGross: number
+  retirementIncomeDeductions: number
+  retirementIncomeNet: number
+  surplusIncome: number
   gapWithdrawal: number
   closingCapital: number
   closingCapitalToday: number

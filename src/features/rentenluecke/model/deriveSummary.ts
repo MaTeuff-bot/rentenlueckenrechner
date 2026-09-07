@@ -1,4 +1,5 @@
 import type { NormalizedScenario, SimulationSummary, YearlyPeriodRow } from './types'
+import { calculateRetirementIncomeForYear } from './retirementIncomeStreams'
 
 export function deriveSummary(
   scenario: NormalizedScenario,
@@ -6,7 +7,12 @@ export function deriveSummary(
   requiredCapitalAtRetirement: number,
   retirementRows: YearlyPeriodRow[],
 ): SimulationSummary {
-  const annualGapToday = Math.max(0, scenario.annualDesiredSpendingToday - scenario.annualRetirementIncomeToday)
+  const retirementIncomeToday = calculateRetirementIncomeForYear(
+    scenario.retirementIncomeStreams,
+    scenario.retirementAge,
+    1,
+  )
+  const annualGapToday = Math.max(0, scenario.annualDesiredSpendingToday - retirementIncomeToday.net)
   const monthlyGapToday = annualGapToday / 12
   const capitalShortfallAtRetirement = Math.max(0, requiredCapitalAtRetirement - projectedCapitalAtRetirement)
   const capitalSurplusAtRetirement = Math.max(0, projectedCapitalAtRetirement - requiredCapitalAtRetirement)

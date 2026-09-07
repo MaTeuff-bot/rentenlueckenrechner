@@ -1,4 +1,5 @@
 import type { NormalizedScenario, RentenlueckeInput } from './types'
+import { createDefaultRetirementIncomeStreams } from './retirementIncomeStreams'
 
 export function normalizeInput(input: RentenlueckeInput): NormalizedScenario {
   return {
@@ -11,6 +12,8 @@ export function normalizeInput(input: RentenlueckeInput): NormalizedScenario {
     annualContributionToday: input.monthlyContributionToday * 12,
     annualDesiredSpendingToday: input.monthlyDesiredSpendingToday * 12,
     annualRetirementIncomeToday: input.monthlyRetirementIncomeToday * 12,
+    retirementIncomeStreams:
+      input.retirementIncomeStreams ?? createDefaultRetirementIncomeStreams(input),
     annualInflationRate: input.annualInflationRate,
     annualReturnBeforeRetirement: input.annualReturnBeforeRetirement,
     annualReturnInRetirement: input.annualReturnInRetirement,

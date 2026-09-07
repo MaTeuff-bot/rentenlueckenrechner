@@ -1,4 +1,5 @@
 import { createInflationFactorResolver } from './simulateAccumulation'
+import { calculateRetirementIncomeForYear } from './retirementIncomeStreams'
 import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
 export const MONEY_EPSILON = 1e-7
@@ -19,8 +20,9 @@ export function simulateRetirementRows(
     const ageEnd = ageStart + 1
     const inflationFactor = getInflationFactor(yearIndex)
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
-    const retirementIncome = scenario.annualRetirementIncomeToday * inflationFactor
-    const gapWithdrawal = Math.max(0, desiredSpending - retirementIncome)
+    const income = calculateRetirementIncomeForYear(scenario.retirementIncomeStreams, ageStart, inflationFactor)
+    const gapWithdrawal = Math.max(0, desiredSpending - income.net)
+    const surplusIncome = Math.max(0, income.net - desiredSpending)
     const nominalReturnRate = getAnnualReturn?.(yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
     const investmentReturn = capital * nominalReturnRate
     const capitalBeforeCashflow = capital + investmentReturn
@@ -42,7 +44,11 @@ export function simulateRetirementRows(
       capitalBeforeCashflow,
       contribution: 0,
       desiredSpending,
-      retirementIncome,
+      retirementIncome: income.net,
+      retirementIncomeGross: income.gross,
+      retirementIncomeDeductions: income.deductions,
+      retirementIncomeNet: income.net,
+      surplusIncome,
       gapWithdrawal,
       closingCapital,
       closingCapitalToday,
