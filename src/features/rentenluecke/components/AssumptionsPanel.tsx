@@ -7,14 +7,28 @@ export function AssumptionsPanel() {
         eingegebenen Annahmen zu Inflation, Rendite, Ausgaben, Einkommen und Sparrate.
       </p>
       <p>
+        Gewünschte Ausgaben im Ruhestand werden als netto verfügbare Konsumausgaben in heutiger Kaufkraft verstanden.
+      </p>
+      <p>
+        Für die gesetzliche Rente kann der Monatsbetrag aus dem Rentenbescheid verwendet werden. Die Modellrechnung
+        behandelt ihn als Bruttobetrag in heutiger Kaufkraft; dabei wird vereinfacht angenommen, dass sich Lohn- und
+        Preisentwicklung langfristig ähnlich entwickeln.
+      </p>
+      <p>
         Die Simulation rechnet in Jahresschritten. Renditen werden jeweils auf das Kapital zu Jahresbeginn
         berechnet. Einzahlungen und Entnahmen erfolgen am Jahresende und beeinflussen daher erst das Kapital des
         Folgejahres.
       </p>
       <p>
-        Nicht berücksichtigt werden insbesondere: Steuern, Krankenversicherung, Pflegekosten, gesetzliche
-        Rentenformel, Rentenanpassungen, Renditeschwankungen, einmalige Ausgaben, Immobilien,
-        Partner-/Haushaltssituation und individuelle Produktausgestaltung.
+        Steuern sowie Kranken- und Pflegeversicherung werden nur über die von dir eingetragenen vereinfachten
+        pauschalen Abschläge berücksichtigt. Die tatsächlichen Kranken- und Pflegeversicherungsbeiträge hängen unter
+        anderem vom Versicherungsstatus und den Einkommensarten ab. Dies ist keine Steuer- oder
+        Sozialversicherungsberatung oder -berechnung.
+      </p>
+      <p>
+        Darüber hinaus nicht berücksichtigt werden insbesondere: gesetzliche Rentenformel, Rentenanpassungen,
+        Renditeschwankungen, einmalige Ausgaben, Immobilien, Partner-/Haushaltssituation und individuelle
+        Produktausgestaltung.
       </p>
       <p>
         Die optionale Überlebenswahrscheinlichkeit im Diagramm nutzt die Periodensterbetafel 2023/2025 des

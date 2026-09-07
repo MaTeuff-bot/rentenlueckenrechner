@@ -51,6 +51,26 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
+    expect(screen.getByText(/netto verfügbare Konsumausgaben in heutiger Kaufkraft/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Rentenbescheid/)).not.toHaveLength(0)
+    expect(screen.getAllByText(/behandelt ihn als Bruttobetrag in heutiger Kaufkraft/)).not.toHaveLength(0)
+    expect(screen.getByText(/Versicherungsstatus und den Einkommensarten/)).toBeInTheDocument()
+    expect(screen.getByText(/keine Steuer- oder Sozialversicherungsberatung oder -berechnung/)).toBeInTheDocument()
+  }, 20000)
+
+  it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
+    render(<RentenlueckeCalculator />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Details anzeigen' }))
+
+    expect(screen.getByRole('columnheader', { name: 'Gewünschte Nettoausgaben' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Bruttoeinkommen' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Vereinfachte Abzüge' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Nettoeinkommen' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Entnahmelücke' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Konsumierter Überschuss' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Entnahme für Nettolücke' })).toBeInTheDocument()
+    expect(screen.getAllByRole('cell', { name: '0 €' }).length).toBeGreaterThan(0)
   }, 20000)
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {
@@ -88,7 +108,7 @@ describe('RentenlueckeCalculator', () => {
   it('edits, adds, and removes retirement income streams', () => {
     render(<RentenlueckeCalculator />)
 
-    expect(screen.getByText(/Rentenbescheid/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Rentenbescheid/)).not.toHaveLength(0)
     const amount = inputById('retirement-income-amount-statutory-pension')
     fireEvent.change(amount, { target: { value: '2200' } })
     expect(amount).toHaveValue(2200)

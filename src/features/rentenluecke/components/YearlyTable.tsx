@@ -32,7 +32,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
               <th>Rendite</th>
               <th>Kapital vor Cashflow</th>
               <th>Einzahlung</th>
-              <th>Entnahme</th>
+              <th>Entnahme für Nettolücke</th>
               <th>Endkapital</th>
               <th>Endkapital heutige Kaufkraft</th>
               {showDetails ? (
@@ -40,9 +40,12 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Jahr Index</th>
                   <th>Inflationsfaktor</th>
                   <th>Renditeannahme</th>
-                  <th>Gewünschte Ausgaben</th>
-                  <th>Renteneinkommen</th>
-                  <th>Rentenlücke</th>
+                  <th>Gewünschte Nettoausgaben</th>
+                  <th>Bruttoeinkommen</th>
+                  <th>Vereinfachte Abzüge</th>
+                  <th>Nettoeinkommen</th>
+                  <th>Entnahmelücke</th>
+                  <th>Konsumierter Überschuss</th>
                   <th>Nicht gedeckte Entnahme</th>
                 </>
               ) : null}
@@ -66,8 +69,11 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{formatNumber(row.inflationFactor, 4)}</td>
                     <td>{formatPercent(row.nominalReturnRate)}</td>
                     <td>{formatCurrency(row.desiredSpending, 100)}</td>
-                    <td>{formatCurrency(row.retirementIncome, 100)}</td>
+                    <td>{formatCurrency(row.retirementIncomeGross, 100)}</td>
+                    <td>{formatCurrency(row.retirementIncomeDeductions, 100)}</td>
+                    <td>{formatCurrency(row.retirementIncomeNet, 100)}</td>
                     <td>{formatCurrency(row.gapWithdrawal, 100)}</td>
+                    <td>{formatCurrency(row.surplusIncome, 100)}</td>
                     <td>{formatCurrency(row.unfundedWithdrawal, 100)}</td>
                   </>
                 ) : null}
