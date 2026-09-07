@@ -35,6 +35,9 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
           const selectedSource = findReturnSeriesOption(bucket.returnSeriesId)
           return (
             <div className="portfolio-bucket" key={bucket.id}>
+              <button className="portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
+              </button>
               <label className="field">
                 <span className="field-label">Name</span>
                 <input type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
@@ -63,13 +66,10 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                   error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
                   onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
                 />
-                {selectedSource?.costTreatment === 'netOfFundCosts' ? (
-                  <p className="portfolio-cost-note">
-                    ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.
-                  </p>
-                ) : null}
               </div>
-              <button className="secondary-button portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>Entfernen</button>
+              <div className="portfolio-row-notes" aria-live="polite">
+                {selectedSource?.costTreatment === 'netOfFundCosts' ? <p className="portfolio-cost-note">ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.</p> : null}
+              </div>
             </div>
           )
         })}
