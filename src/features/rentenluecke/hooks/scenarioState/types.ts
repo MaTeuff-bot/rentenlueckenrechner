@@ -1,8 +1,9 @@
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
-import type { RentenlueckeInput } from '../../model/types'
+import type { RentenlueckeInput, RetirementIncomeStream } from '../../model/types'
 
 export type ScenarioState = {
   input: RentenlueckeInput
+  retirementIncomeStreams: RetirementIncomeStream[]
   portfolioBuckets: PortfolioBucket[]
   historical: {
     inflationSourceId: string

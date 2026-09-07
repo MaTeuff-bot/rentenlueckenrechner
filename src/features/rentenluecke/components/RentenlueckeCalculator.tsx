@@ -10,6 +10,7 @@ export function RentenlueckeCalculator() {
     input,
     allocation,
     portfolioBuckets,
+    retirementIncomeStreams,
     historical,
     historicalValidYears,
     fieldErrors,
@@ -22,6 +23,9 @@ export function RentenlueckeCalculator() {
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
+    updateRetirementIncomeStream,
+    addRetirementIncomeStream,
+    removeRetirementIncomeStream,
     updateInflationSource,
     reset,
   } = useScenarioState()
@@ -44,6 +48,7 @@ export function RentenlueckeCalculator() {
           input={input}
           allocation={allocation}
           portfolioBuckets={portfolioBuckets}
+          retirementIncomeStreams={retirementIncomeStreams}
           historical={historical}
           historicalValidYears={historicalValidYears}
           errors={fieldErrors}
@@ -53,6 +58,9 @@ export function RentenlueckeCalculator() {
           onPortfolioBucketChange={updatePortfolioBucket}
           onPortfolioBucketAdd={addPortfolioBucket}
           onPortfolioBucketRemove={removePortfolioBucket}
+          onRetirementIncomeStreamChange={updateRetirementIncomeStream}
+          onRetirementIncomeStreamAdd={addRetirementIncomeStream}
+          onRetirementIncomeStreamRemove={removeRetirementIncomeStream}
           onInflationSourceChange={updateInflationSource}
           onReset={reset}
         />

@@ -59,23 +59,16 @@ export function SavingsSection({ input, errors, onChange }: BasicSectionProps) {
   )
 }
 
-export function RetirementCashflowSection({ input, errors, onChange }: BasicSectionProps) {
+export function RetirementSpendingSection({ input, errors, onChange }: BasicSectionProps) {
   return (
     <fieldset>
-      <legend>Ausgaben und Einkommen im Ruhestand</legend>
+      <legend>Ausgaben im Ruhestand</legend>
       <CurrencyInput
         id="monthlyDesiredSpendingToday"
         label={inputLabels.monthlyDesiredSpendingToday}
         value={input.monthlyDesiredSpendingToday}
         error={errors.monthlyDesiredSpendingToday}
         onChange={(value) => onChange('monthlyDesiredSpendingToday', value)}
-      />
-      <CurrencyInput
-        id="monthlyRetirementIncomeToday"
-        label={inputLabels.monthlyRetirementIncomeToday}
-        value={input.monthlyRetirementIncomeToday}
-        error={errors.monthlyRetirementIncomeToday}
-        onChange={(value) => onChange('monthlyRetirementIncomeToday', value)}
       />
     </fieldset>
   )

@@ -6,11 +6,16 @@ import {
 import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import type { RentenlueckeInput } from '../../model/types'
+import { createDefaultRetirementIncomeStreams } from '../../model/retirementIncomeStreams'
 import type { ScenarioState } from './types'
 
 export function createDefaultState(): ScenarioState {
+  const baseInput = withDeterministicPortfolioReturn(DEFAULT_INPUT, calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION))
+  const retirementIncomeStreams = createDefaultRetirementIncomeStreams(baseInput)
+  const input = { ...baseInput, retirementIncomeStreams }
   return {
-    input: withDeterministicPortfolioReturn(DEFAULT_INPUT, calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION)),
+    input,
+    retirementIncomeStreams,
     portfolioBuckets: createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION),
     historical: createDefaultHistoricalState(),
   }

@@ -4,10 +4,11 @@ import { getReturnSeriesCategory } from '../../model/historicalReturns'
 import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn } from '../../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './defaults'
-import { normalizeHistoricalState } from './migrations'
+import { migrateV10RetirementIncome, normalizeHistoricalState } from './migrations'
 import type { PersistedHistoricalState, ScenarioState } from './types'
 
-export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v10'
+export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v11'
+export const LEGACY_STORAGE_KEY = 'rentenlueckenrechner.scenario.v10'
 const portfolioBucketSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -18,15 +19,22 @@ const portfolioBucketSchema = z.object({
 
 const persistedScenarioFields = {
   input: rentenlueckeInputSchema,
+  retirementIncomeStreams: rentenlueckeInputSchema.shape.retirementIncomeStreams.unwrap(),
   portfolioBuckets: z.array(portfolioBucketSchema),
   historical: z.object({
     inflationSourceId: z.string(),
   }),
 }
-const persistedScenarioSchema = z.object({ version: z.literal(10), ...persistedScenarioFields })
+const persistedScenarioSchema = z.object({ version: z.literal(11), ...persistedScenarioFields })
+const persistedV10ScenarioSchema = z.object({
+  version: z.literal(10),
+  input: rentenlueckeInputSchema,
+  portfolioBuckets: z.array(portfolioBucketSchema),
+  historical: z.object({ inflationSourceId: z.string().optional(), inflationSeriesId: z.string().optional() }),
+})
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
   return parsePersistedScenarioState(stored)
 }
 
@@ -36,7 +44,7 @@ export function serializeScenarioState(state: ScenarioState): string {
     { ...state.input, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets) },
     calculatePortfolioExpectedReturn(allocation),
   )
-  return JSON.stringify({ version: 10, ...state, input })
+  return JSON.stringify({ version: 11, ...state, input })
 }
 
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -45,6 +53,11 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     const parsed: unknown = JSON.parse(stored)
     const persisted = persistedScenarioSchema.safeParse(parsed)
     if (persisted.success) return stateWithDerivedReturn(persisted.data)
+    const legacy = persistedV10ScenarioSchema.safeParse(parsed)
+    if (legacy.success) return stateWithDerivedReturn({
+      ...legacy.data,
+      retirementIncomeStreams: migrateV10RetirementIncome(legacy.data.input),
+    })
     return createDefaultState()
   } catch {
     return createDefaultState()
@@ -54,6 +67,7 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
 function stateWithDerivedReturn(persisted: {
   input: ScenarioState['input']
   portfolioBuckets: ScenarioState['portfolioBuckets']
+  retirementIncomeStreams: ScenarioState['retirementIncomeStreams']
   historical: PersistedHistoricalState
 }): ScenarioState {
   const allocation = calculateAllocationFromBuckets(persisted.portfolioBuckets)
@@ -63,6 +77,7 @@ function stateWithDerivedReturn(persisted: {
       calculatePortfolioExpectedReturn(allocation),
     ),
     portfolioBuckets: persisted.portfolioBuckets,
+    retirementIncomeStreams: persisted.retirementIncomeStreams,
     historical: normalizeHistoricalState(persisted.historical),
   }
 }
