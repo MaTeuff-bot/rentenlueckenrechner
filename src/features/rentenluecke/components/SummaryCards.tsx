@@ -44,7 +44,7 @@ export function SummaryCards({ result, stochasticSummary }: SummaryCardsProps) {
           <strong>{formatApproxCurrency(hasShortfall ? displayedShortfall : displayedSurplus)}</strong>
         </article>
         <article className="result-card">
-          <span>Monatliche Rentenlücke in heutiger Kaufkraft</span>
+          <span>Monatliche Netto-Rentenlücke in heutiger Kaufkraft</span>
           <strong>{formatApproxCurrency(summary.monthlyGapToday, 50)}</strong>
         </article>
       </div>
