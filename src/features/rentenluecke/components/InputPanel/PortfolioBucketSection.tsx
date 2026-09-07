@@ -43,11 +43,8 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 <input type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
               </label>
               <label className="field">
-                <span className="field-label-row">
-                  <span className="field-label">Renditequelle/Proxy</span>
-                  <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
-                </span>
-                <select aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
+                <span className="field-label">Renditequelle/Proxy</span>
+                <select aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
                   {sourceOptionGroups.map((group) => (
                     <optgroup key={group.label} label={group.label}>
                       {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
@@ -67,7 +64,8 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                   onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
                 />
               </div>
-              <div className="portfolio-row-notes" aria-live="polite">
+              <div className="portfolio-row-notes" id={`portfolio-notes-${bucket.id}`} aria-live="polite">
+                <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
                 {selectedSource?.costTreatment === 'netOfFundCosts' ? <p className="portfolio-cost-note">ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.</p> : null}
               </div>
             </div>

@@ -53,6 +53,13 @@ describe('PortfolioBucketSection', () => {
     expect(within(sourceSelect).getByRole('group', { name: 'Historische Anlageklassen' })).toBeInTheDocument()
     expect(within(sourceSelect).getByRole('group', { name: 'Synthetische Annahmen' })).toBeInTheDocument()
     expect(screen.getAllByText('Kategorie: Aktien').length).toBeGreaterThan(0)
+    const notes = document.getElementById(sourceSelect.getAttribute('aria-describedby')!)!
+    expect(notes).toHaveClass('portfolio-row-notes')
+    expect(notes).toHaveTextContent('Kategorie: Aktien')
+    expect(notes.previousElementSibling).toHaveClass('portfolio-cost-field')
+    expect(notes.parentElement).toBe(sourceSelect.closest('.portfolio-bucket'))
+    expect(sourceSelect.closest('label')).not.toContainElement(notes)
+    expect(sourceSelect).toHaveAccessibleDescription('Kategorie: Aktien')
     expect(screen.queryByLabelText('Typ von Neue Anlage')).not.toBeInTheDocument()
     fireEvent.change(sourceSelect, { target: { value: 'synthetic-cash-assumption-v1' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: /TER\/Kosten p\.a\. von Neue Anlage/ }), { target: { value: '0.22' } })
@@ -75,6 +82,8 @@ describe('PortfolioBucketSection', () => {
       />,
     )
 
+    expect(screen.getByLabelText('Renditequelle/Proxy von Notgroschen')).toHaveAccessibleDescription('Kategorie: Cash')
+    expect(notes).toHaveTextContent('Kategorie: Cash')
     expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Cash 40 %')
     expect(screen.getAllByText('Kategorie: Cash').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Notgroschen entfernen' }))
@@ -94,6 +103,11 @@ describe('PortfolioBucketSection', () => {
       />,
     )
 
+    const selector = screen.getByLabelText('Renditequelle/Proxy von Welt-ETF')
+    const notes = document.getElementById(selector.getAttribute('aria-describedby')!)!
+    expect(notes.previousElementSibling).toHaveClass('portfolio-cost-field')
+    expect(notes).toHaveTextContent('Kategorie: Aktien')
+    expect(selector).toHaveAccessibleDescription(/Kategorie: Aktien.*ETF-TER\/OCF/)
     expect(screen.getByText(/ETF-TER\/OCF ist in dieser Renditequelle bereits berücksichtigt/)).toHaveTextContent(/zusätzliche Kosten.*nicht abgezogen/)
   })
 })
