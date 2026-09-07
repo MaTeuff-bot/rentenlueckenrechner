@@ -22,22 +22,25 @@ import {
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
+import type { RetirementIncomeStream } from '../model/types'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
 
 let nextPortfolioBucketId = 1
+let nextRetirementIncomeStreamId = 1
 
 export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
-  const { portfolioBuckets, historical } = state
+  const { portfolioBuckets, retirementIncomeStreams, historical } = state
   const allocation = useMemo(() => calculateAllocationFromBuckets(portfolioBuckets), [portfolioBuckets])
   const input = useMemo(() => {
     const annualReturn = calculatePortfolioExpectedReturn(allocation)
     return withDeterministicPortfolioReturn({
       ...state.input,
+      retirementIncomeStreams,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }, annualReturn)
-  }, [allocation, portfolioBuckets, state.input])
+  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const portfolioBucketError = useMemo(() => validatePortfolioBuckets(portfolioBuckets), [portfolioBuckets])
@@ -71,9 +74,9 @@ export function useScenarioState() {
     if (!isValid || !parsedInput.success) return
     localStorage.setItem(
       STORAGE_KEY,
-      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, historical }),
+      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, retirementIncomeStreams, historical }),
     )
-  }, [historical, isValid, parsedInput, portfolioBuckets])
+  }, [historical, isValid, parsedInput, portfolioBuckets, retirementIncomeStreams])
 
   const updateField = (field: InputFieldName, value: number) => {
     setState((current) => ({
@@ -114,6 +117,38 @@ export function useScenarioState() {
     setState((current) => ({ ...current, portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id) }))
   }
 
+  const updateRetirementIncomeStream = (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => {
+    setState((current) => ({
+      ...current,
+      retirementIncomeStreams: current.retirementIncomeStreams.map((stream) =>
+        stream.id === id ? { ...stream, ...patch } : stream,
+      ),
+    }))
+  }
+
+  const addRetirementIncomeStream = () => {
+    setState((current) => ({
+      ...current,
+      retirementIncomeStreams: [...current.retirementIncomeStreams, {
+        id: `retirement-income-${Date.now()}-${nextRetirementIncomeStreamId++}`,
+        name: 'Weiteres Einkommen',
+        amountMonthlyToday: 0,
+        startAge: current.input.retirementAge,
+        endAge: null,
+        amountBasis: 'net',
+        deductionMode: 'none',
+        effectiveDeductionRate: 0,
+      }],
+    }))
+  }
+
+  const removeRetirementIncomeStream = (id: string) => {
+    setState((current) => ({
+      ...current,
+      retirementIncomeStreams: current.retirementIncomeStreams.filter((stream) => stream.id !== id),
+    }))
+  }
+
   const updateInflationSource = (sourceId: string) => {
     setState((current) => ({
       ...current,
@@ -131,6 +166,7 @@ export function useScenarioState() {
     input,
     allocation,
     portfolioBuckets,
+    retirementIncomeStreams,
     historical,
     historicalSettings,
     historicalValidYears,
@@ -144,6 +180,9 @@ export function useScenarioState() {
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
+    updateRetirementIncomeStream,
+    addRetirementIncomeStream,
+    removeRetirementIncomeStream,
     updateInflationSource,
     reset,
   }

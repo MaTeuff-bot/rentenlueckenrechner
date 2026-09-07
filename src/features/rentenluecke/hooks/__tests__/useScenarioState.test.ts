@@ -19,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v10 scenario with annual bucket costs and without persisted bucket roles', () => {
+  it('roundtrips a v11 scenario with income streams and annual bucket costs', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -31,12 +31,34 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 10,
+      version: 11,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('historical.returnSeriesIds')
     expect(JSON.parse(serializeScenarioState(scenario)).portfolioBuckets.every((bucket: object) => !('role' in bucket))).toBe(true)
+  })
+
+  it('migrates v10 aggregate retirement income into one gross statutory pension stream', () => {
+    const legacy = createDefaultState()
+    const input = { ...legacy.input, monthlyRetirementIncomeToday: 2_345, retirementIncomeStreams: undefined }
+    const migrated = parsePersistedScenarioState(persistedJson({
+      version: 10,
+      input,
+      portfolioBuckets: legacy.portfolioBuckets,
+      historical: legacy.historical,
+    }))
+
+    expect(migrated.retirementIncomeStreams).toEqual([{
+      id: 'statutory-pension',
+      name: 'Gesetzliche Rente',
+      amountMonthlyToday: 2_345,
+      startAge: input.retirementAge,
+      endAge: null,
+      amountBasis: 'gross',
+      deductionMode: 'effectiveHaircut',
+      effectiveDeductionRate: 0,
+    }])
   })
 
   it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])('falls back to defaults for a v%i shape', (version) => {
@@ -132,5 +154,22 @@ describe('useScenarioState', () => {
     expect(result.current.allocation.equity).toBe(0)
     expect(result.current.allocation.bonds).toBeCloseTo(0.2)
     expect(result.current.allocation.fixed).toBeCloseTo(0.8)
+  })
+
+  it('updates output and supports adding/removing retirement income streams', () => {
+    const { result } = renderHook(() => useScenarioState())
+    const pension = result.current.retirementIncomeStreams[0]
+    const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
+
+    act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
+    expect(result.current.result!.retirementRows[0].retirementIncomeNet)
+      .toBe(result.current.result!.retirementRows[0].retirementIncomeGross * 0.8)
+    expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
+
+    act(() => result.current.addRetirementIncomeStream())
+    expect(result.current.retirementIncomeStreams).toHaveLength(2)
+    const added = result.current.retirementIncomeStreams[1]
+    act(() => result.current.removeRetirementIncomeStream(added.id))
+    expect(result.current.retirementIncomeStreams).toHaveLength(1)
   })
 })

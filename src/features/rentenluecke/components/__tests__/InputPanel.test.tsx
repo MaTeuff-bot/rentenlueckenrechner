@@ -11,6 +11,7 @@ import { DEFAULT_INPUT } from '../../model/defaults'
 import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import type { InputFieldName } from '../../model/inputSchema'
 import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
+import { createDefaultRetirementIncomeStreams } from '../../model/retirementIncomeStreams'
 import { InputPanel } from '../InputPanel'
 
 function inputById(id: string): HTMLInputElement {
@@ -43,6 +44,7 @@ function renderInputPanel(
       input={DEFAULT_INPUT}
       allocation={DEFAULT_ASSET_ALLOCATION}
       portfolioBuckets={buckets}
+      retirementIncomeStreams={createDefaultRetirementIncomeStreams(DEFAULT_INPUT)}
       historical={historical}
       historicalValidYears={Array.from({ length: 71 }, (_, index) => 1950 + index)}
       errors={{}}
@@ -52,6 +54,9 @@ function renderInputPanel(
       onPortfolioBucketChange={vi.fn()}
       onPortfolioBucketAdd={vi.fn()}
       onPortfolioBucketRemove={vi.fn()}
+      onRetirementIncomeStreamChange={vi.fn()}
+      onRetirementIncomeStreamAdd={vi.fn()}
+      onRetirementIncomeStreamRemove={vi.fn()}
       onInflationSourceChange={vi.fn<(sourceId: string) => void>()}
       onReset={options.onReset ?? vi.fn()}
     />,

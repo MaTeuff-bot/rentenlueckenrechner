@@ -84,4 +84,23 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
+
+  it('edits, adds, and removes retirement income streams', () => {
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByText(/Rentenbescheid/)).toBeInTheDocument()
+    const amount = inputById('retirement-income-amount-statutory-pension')
+    fireEvent.change(amount, { target: { value: '2200' } })
+    expect(amount).toHaveValue(2200)
+
+    const deduction = inputById('retirement-income-deduction-statutory-pension')
+    fireEvent.change(deduction, { target: { value: '20' } })
+    expect(deduction).toHaveValue(20)
+    expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Einkommen hinzufügen' }))
+    expect(screen.getByLabelText('Name von Weiteres Einkommen')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Weiteres Einkommen entfernen' }))
+    expect(screen.queryByLabelText('Name von Weiteres Einkommen')).not.toBeInTheDocument()
+  }, 20000)
 })

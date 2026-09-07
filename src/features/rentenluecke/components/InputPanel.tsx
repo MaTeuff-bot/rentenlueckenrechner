@@ -7,9 +7,10 @@ import { type InputFieldName } from '../model/inputSchema'
 import { calculatePortfolioBucketTotal, type PortfolioBucket } from '../model/portfolioBuckets'
 import { type AssetAllocation } from '../model/stochasticReturns'
 import { createPortfolioComponentsFromBuckets } from '../model/portfolioBuckets'
-import type { RentenlueckeInput } from '../model/types'
+import type { RentenlueckeInput, RetirementIncomeStream } from '../model/types'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
-import { PersonalDataSection, RetirementCashflowSection, SavingsSection } from './InputPanel/BasicInputSections'
+import { PersonalDataSection, RetirementSpendingSection, SavingsSection } from './InputPanel/BasicInputSections'
+import { RetirementIncomeStreamsSection } from './InputPanel/RetirementIncomeStreamsSection'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
 import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
 import { EtfProfileCatalog } from './InputPanel/EtfProfileCatalog'
@@ -19,6 +20,7 @@ type InputPanelProps = {
   input: RentenlueckeInput
   allocation: AssetAllocation
   portfolioBuckets: PortfolioBucket[]
+  retirementIncomeStreams: RetirementIncomeStream[]
   historical: {
     inflationSourceId: string
   }
@@ -30,6 +32,9 @@ type InputPanelProps = {
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
   onPortfolioBucketAdd: () => void
   onPortfolioBucketRemove: (id: string) => void
+  onRetirementIncomeStreamChange: (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => void
+  onRetirementIncomeStreamAdd: () => void
+  onRetirementIncomeStreamRemove: (id: string) => void
   onInflationSourceChange: (sourceId: string) => void
   onReset: () => void
 }
@@ -38,6 +43,7 @@ export function InputPanel({
   input,
   allocation,
   portfolioBuckets,
+  retirementIncomeStreams,
   historical,
   historicalValidYears,
   errors,
@@ -47,6 +53,9 @@ export function InputPanel({
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
   onPortfolioBucketRemove,
+  onRetirementIncomeStreamChange,
+  onRetirementIncomeStreamAdd,
+  onRetirementIncomeStreamRemove,
   onInflationSourceChange,
   onReset,
 }: InputPanelProps) {
@@ -127,7 +136,14 @@ export function InputPanel({
 
         <EtfProfileCatalog />
 
-        <RetirementCashflowSection input={input} errors={errors} onChange={onChange} />
+        <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
+
+        <RetirementIncomeStreamsSection
+          streams={retirementIncomeStreams}
+          onUpdate={onRetirementIncomeStreamChange}
+          onAdd={onRetirementIncomeStreamAdd}
+          onRemove={onRetirementIncomeStreamRemove}
+        />
 
         <fieldset className="wide-fieldset">
           <legend>Ausgewählte Quellen im Detail</legend>
