@@ -77,6 +77,7 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
                 <span className="field-label">Kategorie</span>
                 <select
                   aria-label={`Kategorie von ${label}`}
+                  aria-describedby={`retirement-income-help-${stream.id}`}
                   value={kind}
                   onChange={(event) => {
                     const nextKind = event.target.value as RetirementIncomeStreamKind
@@ -89,7 +90,6 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
                     <option key={value} value={value}>{details.label}</option>
                   ))}
                 </select>
-                <span className="field-help">{category.helper}</span>
               </label>
               <label className="field">
                 <span className="field-label">Name</span>
@@ -154,6 +154,9 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
               >
                 Entfernen
               </button>
+              <p className="field-help retirement-income-row-note" id={`retirement-income-help-${stream.id}`} aria-live="polite">
+                {category.helper}
+              </p>
             </div>
           )
         })}

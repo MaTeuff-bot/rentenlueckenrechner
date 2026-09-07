@@ -152,7 +152,7 @@ describe('InputPanel return source UX', () => {
   it('shows one inflation source selector without nominal return inputs', () => {
     renderInputPanel()
 
-    expect(screen.getByRole('group', { name: 'Inflation' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Inflation' })).toHaveClass('wide-fieldset')
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Historisch: Deutschland CPI Inflation, 1950-2020')
     expect(screen.getByText(/Zahlungsströme in heutiger Kaufkraft/)).toBeInTheDocument()
     expect(screen.getByText(/CPI-Jahrespfad zusätzlich mit den gezogenen Kalenderjahren synchronisiert/)).toBeInTheDocument()
@@ -169,6 +169,7 @@ describe('InputPanel return source UX', () => {
 
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')
     expect(inputById('annualInflationRate')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Inflation' })).toHaveClass('wide-fieldset')
   })
 
   it('renders allocation errors and delegates reset without running a scenario', () => {
@@ -214,6 +215,31 @@ describe('retirement income category selector', () => {
     expect(within(selector).getByRole('option', { name: 'Gesetzliche Rente' })).toBeInTheDocument()
     expect(within(selector).getByRole('option', { name: 'Brückeneinkommen' })).toBeInTheDocument()
     expect(screen.getByText(/Steuern, Leerstand und Instandhaltung werden nicht automatisch berechnet/)).toBeInTheDocument()
+  })
+
+  it('keeps changing category guidance below all controls and describes the selector', () => {
+    const onUpdate = vi.fn()
+    const props = { onUpdate, onAdd: vi.fn(), onRemove: vi.fn() }
+    const stream = { ...baseStream, name: 'Meine Rente', amountBasis: 'gross' as const }
+    const { rerender } = render(<RetirementIncomeStreamsSection {...props} streams={[stream]} />)
+    const selector = screen.getByLabelText('Kategorie von Meine Rente')
+    const helper = document.getElementById(selector.getAttribute('aria-describedby')!)!
+    expect(helper).toHaveClass('retirement-income-row-note')
+    expect(helper).toHaveAttribute('aria-live', 'polite')
+    expect(helper.parentElement).toBe(selector.closest('.retirement-income-stream'))
+    expect(helper.parentElement?.lastElementChild).toBe(helper)
+    expect(helper.previousElementSibling).toBe(screen.getByRole('button', { name: 'Meine Rente entfernen' }))
+    expect(selector.closest('label')).not.toContainElement(helper)
+    expect(selector).toHaveAccessibleDescription(/Wähle netto oder brutto/)
+    expect(screen.getByRole('spinbutton', { name: /Vereinfachter Abschlag/ })).toBeInTheDocument()
+
+    fireEvent.change(selector, { target: { value: 'gesetzliche-rente' } })
+    expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'gesetzliche-rente' })
+    rerender(<RetirementIncomeStreamsSection {...props} streams={[{ ...stream, kind: 'gesetzliche-rente' }]} />)
+    expect(selector).toHaveAccessibleDescription(/Rentenbescheid als Bruttobetrag in heutiger Kaufkraft/)
+    expect(helper).not.toHaveTextContent('Wähle netto oder brutto')
+    expect(helper.parentElement?.lastElementChild).toBe(helper)
+    expect(screen.getByLabelText('Betragsart von Meine Rente')).toHaveValue('gross')
   })
 
   it('updates a generic default name when the category changes', () => {

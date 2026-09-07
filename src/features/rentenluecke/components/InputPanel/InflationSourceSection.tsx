@@ -24,7 +24,7 @@ export function InflationSourceSection({
   onInflationSourceChange,
 }: InflationSourceSectionProps) {
   return (
-    <fieldset>
+    <fieldset className="wide-fieldset">
       <legend>Inflation</legend>
       <p className="field-help">
         Die Szenario-Inflation steuert Zahlungsströme in heutiger Kaufkraft und die reale Darstellung des Ledgers. Bei
