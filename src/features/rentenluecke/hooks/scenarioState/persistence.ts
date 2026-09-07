@@ -3,6 +3,7 @@ import { rentenlueckeInputSchema } from '../../model/inputSchema'
 import { getReturnSeriesCategory } from '../../model/historicalReturns'
 import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn } from '../../model/stochasticReturns'
+import { normalizeRetirementIncomeStreamKinds } from '../../model/retirementIncomeStreams'
 import { createDefaultState, withDeterministicPortfolioReturn } from './defaults'
 import { migrateV10RetirementIncome, normalizeHistoricalState } from './migrations'
 import type { PersistedHistoricalState, ScenarioState } from './types'
@@ -77,7 +78,7 @@ function stateWithDerivedReturn(persisted: {
       calculatePortfolioExpectedReturn(allocation),
     ),
     portfolioBuckets: persisted.portfolioBuckets,
-    retirementIncomeStreams: persisted.retirementIncomeStreams,
+    retirementIncomeStreams: normalizeRetirementIncomeStreamKinds(persisted.retirementIncomeStreams),
     historical: normalizeHistoricalState(persisted.historical),
   }
 }

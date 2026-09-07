@@ -132,6 +132,7 @@ export function useScenarioState() {
       retirementIncomeStreams: [...current.retirementIncomeStreams, {
         id: `retirement-income-${Date.now()}-${nextRetirementIncomeStreamId++}`,
         name: 'Weiteres Einkommen',
+        kind: 'other',
         amountMonthlyToday: 0,
         startAge: current.input.retirementAge,
         endAge: null,

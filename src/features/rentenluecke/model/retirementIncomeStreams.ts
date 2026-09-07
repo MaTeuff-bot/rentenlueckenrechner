@@ -41,6 +41,7 @@ export function createDefaultRetirementIncomeStreams(
     {
       id: 'statutory-pension',
       name: 'Gesetzliche Rente',
+      kind: 'gesetzliche-rente',
       amountMonthlyToday: input.monthlyRetirementIncomeToday,
       startAge: input.retirementAge,
       endAge: null,
@@ -59,4 +60,13 @@ export function migrateAggregateRetirementIncomeToStream<T extends AggregateReti
     retirementIncomeStreams:
       input.retirementIncomeStreams ?? createDefaultRetirementIncomeStreams(input),
   }
+}
+
+export function normalizeRetirementIncomeStreamKinds(
+  streams: readonly RetirementIncomeStream[],
+): RetirementIncomeStream[] {
+  return streams.map((stream) => ({
+    ...stream,
+    kind: stream.kind ?? (stream.id === 'statutory-pension' ? 'gesetzliche-rente' : 'other'),
+  }))
 }
