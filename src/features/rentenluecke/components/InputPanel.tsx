@@ -94,32 +94,6 @@ export function InputPanel({
       </div>
 
       <div className="input-grid">
-        <fieldset className="wide-fieldset">
-          <legend>Renditequellen</legend>
-          <div className="historical-mode-note">
-            <strong>Historischer Jahres-Bootstrap:</strong> Die Simulation mischt ganze Kalenderjahre aus den gewählten
-            Quellen und zeigt Bandbreiten statt eines einzelnen Planwerts. Historische Aktien, Anleihen und Cash teilen
-            sich dasselbe gezogene Jahr; synthetische Quellen laufen als eigene What-if-Annahmen mit.
-          </div>
-          <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
-            <span>{validYearLabel}</span>
-            <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>
-            <span>Stichprobe mit Zurücklegen</span>
-            {usesJstSource ? <span>JST: nicht kommerziell</span> : null}
-          </div>
-          {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
-            <p className="source-warning">
-              Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil sein.
-            </p>
-          ) : null}
-          {hasHistoricalSource && hasSyntheticSource ? (
-            <p className="source-mixed-note">
-              Gemischte Quellen: Historische Anlagen bestimmen den gemeinsamen Jahrespool; synthetische Anlagen ziehen
-              separat und verkleinern die historische Überlappung nicht.
-            </p>
-          ) : null}
-        </fieldset>
-
         <PersonalDataSection input={input} errors={errors} onChange={onChange} />
 
         <SavingsSection input={input} errors={errors} onChange={onChange} />
@@ -134,8 +108,6 @@ export function InputPanel({
           onRemove={onPortfolioBucketRemove}
         />
 
-        <EtfProfileCatalog />
-
         <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
 
         <RetirementIncomeStreamsSection
@@ -144,29 +116,6 @@ export function InputPanel({
           onAdd={onRetirementIncomeStreamAdd}
           onRemove={onRetirementIncomeStreamRemove}
         />
-
-        <fieldset className="wide-fieldset">
-          <legend>Ausgewählte Quellen im Detail</legend>
-          <div className="source-detail-grid">
-            {selectedReturnSources.map(({ id, label, source }) =>
-              source ? <ReturnSourceCard key={id} label={label} source={source} /> : null,
-            )}
-            {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
-          </div>
-          <details className="method-details">
-            <summary>Methode und Grenzen</summary>
-            <p>
-              Historische Quellen ziehen Jahre mit Zurücklegen: Dasselbe Jahr kann in einem Verlauf mehrfach vorkommen.
-              Historische Quellen teilen sich dabei das gezogene Kalenderjahr, damit die Jahresbeziehungen zwischen
-              Renditen und Inflation erhalten bleiben.
-            </p>
-            <p>
-              Synthetische Quellen ziehen separat je Anlageklasse und reduzieren die historische Überlappung nicht. Die
-              Bandbreite ist kein Backtest eines konkreten Zeitraums und keine Prognose. Sie ist ein Proxy, nicht die
-              exakte Rendite eines bestimmten ETF, Fonds oder EUR-Anlegers.
-            </p>
-          </details>
-        </fieldset>
 
         <InflationSourceSection
           input={input}
@@ -177,6 +126,34 @@ export function InputPanel({
           onChange={onChange}
           onInflationSourceChange={onInflationSourceChange}
         />
+
+        <fieldset className="wide-fieldset source-overview">
+          <legend>Renditequellen und Details</legend>
+          <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
+            <span>{validYearLabel}</span>
+            <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>
+            <span>Stichprobe mit Zurücklegen</span>
+            {usesJstSource ? <span>JST: nicht kommerziell</span> : null}
+          </div>
+          {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
+            <p className="source-warning">Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil sein.</p>
+          ) : null}
+          {hasHistoricalSource && hasSyntheticSource ? (
+            <p className="source-mixed-note">Gemischte Quellen: Historische Anlagen bestimmen den gemeinsamen Jahrespool; synthetische Anlagen ziehen separat und verkleinern die historische Überlappung nicht.</p>
+          ) : null}
+          <details className="method-details source-overview-details">
+            <summary>Ausgewählte Quellen im Detail</summary>
+            <div className="historical-mode-note"><strong>Historischer Jahres-Bootstrap:</strong> Die Simulation mischt ganze Kalenderjahre aus den gewählten Quellen und zeigt Bandbreiten statt eines einzelnen Planwerts. Historische Aktien, Anleihen und Cash teilen sich dasselbe gezogene Jahr; synthetische Quellen laufen als eigene What-if-Annahmen mit.</div>
+            <div className="source-detail-grid">
+              {selectedReturnSources.map(({ id, label, source }) => source ? <ReturnSourceCard key={id} label={label} source={source} /> : null)}
+              {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
+            </div>
+            <EtfProfileCatalog selectedSourceIds={selectedReturnSources.map(({ source }) => source?.id ?? '')} />
+            <h3>Methode und Grenzen</h3>
+            <p>Historische Quellen ziehen Jahre mit Zurücklegen: Dasselbe Jahr kann in einem Verlauf mehrfach vorkommen. Historische Quellen teilen sich dabei das gezogene Kalenderjahr, damit die Jahresbeziehungen zwischen Renditen und Inflation erhalten bleiben.</p>
+            <p>Synthetische Quellen ziehen separat je Anlageklasse und reduzieren die historische Überlappung nicht. Die Bandbreite ist kein Backtest eines konkreten Zeitraums und keine Prognose. Sie ist ein Proxy, nicht die exakte Rendite eines bestimmten ETF, Fonds oder EUR-Anlegers.</p>
+          </details>
+        </fieldset>
       </div>
     </section>
   )

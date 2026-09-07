@@ -69,10 +69,9 @@ describe('InputPanel return source UX', () => {
   it('shows bundled ETF metadata and offers both ETFs as return sources', () => {
     renderInputPanel()
 
-    expect(screen.getByRole('group', { name: 'ETF-Steckbriefe' })).toBeInTheDocument()
-    expect(screen.getByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).toBeInTheDocument()
-    expect(screen.getByText('iShares MSCI EM UCITS ETF USD (Acc)')).toBeInTheDocument()
-    expect(screen.getByText(/statische historische EUR-Xetra-Renditen als auswählbare Renditequellen/)).toBeInTheDocument()
+    expect(screen.queryByText('Ausgewählte ETF-Steckbriefe')).not.toBeInTheDocument()
+    expect(screen.queryByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).not.toBeInTheDocument()
+    expect(screen.queryByText('iShares MSCI EM UCITS ETF USD (Acc)')).not.toBeInTheDocument()
     expect(screen.getAllByRole('option', { name: /IUSQ\.DE/ }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('option', { name: /EUNM\.DE/ }).length).toBeGreaterThan(0)
     const sourceSelect = screen.getAllByLabelText(/Renditequelle\/Proxy von/)[0]
@@ -84,7 +83,8 @@ describe('InputPanel return source UX', () => {
   it('renders selected source details with source, license, and caveat information', () => {
     renderInputPanel()
 
-    expect(screen.getByRole('group', { name: 'Ausgewählte Quellen im Detail' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Renditequellen und Details' })).toBeInTheDocument()
+    expect(screen.getByText('Ausgewählte Quellen im Detail')).toBeInTheDocument()
     expect(screen.getAllByText('Jorda-Schularick-Taylor Macrohistory Database R.6').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/CC BY-NC-SA 4\.0; nicht für kommerzielle Nutzung freigegeben/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('ETF/EUR-Proxy').length).toBeGreaterThan(0)
@@ -97,6 +97,10 @@ describe('InputPanel return source UX', () => {
   it('shows ETF cost treatment and adjusted-close caveats in selected source details', () => {
     renderInputPanel(undefined, { etfEquity: true })
 
+    expect(screen.getByText('Ausgewählte ETF-Steckbriefe')).toBeInTheDocument()
+    expect(screen.getByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).toBeInTheDocument()
+    expect(screen.queryByText('iShares MSCI EM UCITS ETF USD (Acc)')).not.toBeInTheDocument()
+    expect(screen.getByText(/statische historische EUR-Xetra-Renditen als auswählbare Renditequellen/)).toBeInTheDocument()
     expect(screen.getAllByText(/ETF-TER\/OCF bereits in der Renditequelle berücksichtigt/).length).toBeGreaterThan(0)
     expect(screen.getByText('statischer Datenstand')).toBeInTheDocument()
     expect(screen.getByText('Adjusted Close ≠ Fonds-NAV')).toBeInTheDocument()

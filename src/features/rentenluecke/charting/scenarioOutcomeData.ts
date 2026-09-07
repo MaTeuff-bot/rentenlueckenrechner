@@ -41,7 +41,11 @@ function roundCapital(value: number): number {
 }
 
 export function toLogScaleCapital(value: number): number {
-  return Math.max(1, value)
+  return Math.log10(Math.max(0, value) + 1)
+}
+
+export function fromLogScaleCapital(value: number): number {
+  return Math.max(0, 10 ** value - 1)
 }
 
 export function capCapital(value: number, capitalDisplayCap: number): number {

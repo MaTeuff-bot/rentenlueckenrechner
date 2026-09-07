@@ -6,7 +6,9 @@ import {
   buildRiskChips,
   buildScenarioOutcomeRows,
   calculateCapitalDisplayCap,
+  fromLogScaleCapital,
   isCapitalDisplayCapped,
+  toLogScaleCapital,
   type ScenarioOutcomeChartRow,
 } from '../scenarioOutcomeData'
 
@@ -155,7 +157,7 @@ describe('scenario outcome chart data', () => {
     expect(absentFallbackRow.p50CapitalToday).toBe(100_000)
   })
 
-  it('pins zero and negative chart values to 1 for log scale without mutating true values', () => {
+  it('uses explicit transformed chart values for log scale without mutating true values', () => {
     const [row] = buildDisplayRows(
       [
         chartRow({
@@ -175,12 +177,13 @@ describe('scenario outcome chart data', () => {
       p10CapitalToday: -5,
       p50CapitalToday: 0,
       p90CapitalToday: 2,
-      chartPlanCapitalToday: 1,
-      chartP10CapitalToday: 1,
-      chartP50CapitalToday: 1,
-      chartP90CapitalToday: 2,
-      chartP10ToP90CapitalToday: [1, 2],
+      chartPlanCapitalToday: 0,
+      chartP10CapitalToday: 0,
+      chartP50CapitalToday: 0,
+      chartP90CapitalToday: toLogScaleCapital(2),
+      chartP10ToP90CapitalToday: [0, toLogScaleCapital(2)],
     })
+    expect(fromLogScaleCapital(row.chartP90CapitalToday)).toBeCloseTo(2)
   })
 
   it('caps only chart-rendered capital values at the capital display cap', () => {

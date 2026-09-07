@@ -2,15 +2,21 @@ import { getBundledEtfProfiles } from '../../model/etfProfiles'
 
 const percent = new Intl.NumberFormat('de-DE', { style: 'percent', minimumFractionDigits: 2 })
 
-export function EtfProfileCatalog() {
+export function EtfProfileCatalog({ selectedSourceIds }: { selectedSourceIds: string[] }) {
+  const profiles = getBundledEtfProfiles().filter((profile) =>
+    selectedSourceIds.some((sourceId) => sourceId.toLowerCase().includes(profile.isin.toLowerCase())),
+  )
+
+  if (profiles.length === 0) return null
+
   return (
-    <fieldset className="wide-fieldset">
-      <legend>ETF-Steckbriefe</legend>
+    <section className="selected-etf-profiles" aria-labelledby="selected-etf-profiles-title">
+      <h3 id="selected-etf-profiles-title">Ausgewählte ETF-Steckbriefe</h3>
       <p className="portfolio-note">
         Für diese ETFs sind statische historische EUR-Xetra-Renditen als auswählbare Renditequellen gebündelt.
       </p>
       <div className="source-detail-grid etf-profile-grid">
-        {getBundledEtfProfiles().map((profile) => (
+        {profiles.map((profile) => (
           <article className="source-detail-card" key={profile.isin}>
             <h3>{profile.name}</h3>
             <dl>
@@ -33,6 +39,6 @@ export function EtfProfileCatalog() {
           </article>
         ))}
       </div>
-    </fieldset>
+    </section>
   )
 }

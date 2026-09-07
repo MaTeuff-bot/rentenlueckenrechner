@@ -10,8 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { buildDisplayRows, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
-import { formatCurrency, formatPercent, formatWholeNumber } from '../model/format'
+import { buildDisplayRows, fromLogScaleCapital, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
+import { formatCurrency, formatPercent } from '../model/format'
 
 type ScenarioOutcomeChartProps = {
   rows: ScenarioOutcomeChartRow[]
@@ -94,9 +94,9 @@ export function ScenarioOutcomeChart({
           />
           <YAxis
             yAxisId="capital"
-            scale={useLogCapitalScale ? 'log' : 'auto'}
-            domain={useLogCapitalScale ? [1, 'auto'] : ['auto', 'auto']}
-            tickFormatter={(value) => formatWholeNumber(Number(value))}
+            scale="auto"
+            domain={['auto', 'auto']}
+            tickFormatter={(value) => useLogCapitalScale ? formatCurrency(fromLogScaleCapital(Number(value)), 100) : formatCurrency(Number(value), 100)}
             width={76}
             label={{
               value: useLogCapitalScale ? 'Kapital heutige Kaufkraft (log)' : 'Kapital heutige Kaufkraft',
