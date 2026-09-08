@@ -32,11 +32,43 @@ Eine logarithmische Darstellung setzt nichtpositive Kapitalwerte an den unteren 
 
 ## Aktuelle Grenzen und Speicherung
 
-- Keine automatische persönliche Steuerberechnung und keine automatische Berechnung von Kranken- und Pflegeversicherungsbeiträgen (KV/PV); Brutto-Abschläge sind lediglich manuelle Pauschalen.
+- Keine automatische persönliche Steuerberechnung oder rechtliche KV/PV-Berechnung. Optional ist eine geführte manuelle GKV-/PV-Schätzung möglich (siehe unten).
 - Keine beliebige Live-ETF-Suche oder Datenimporte und kein individueller ETF-Backtest.
 - Keine auswählbare personalisierte Entnahmestrategie; das Modell deckt die berechnete Netto-Rentenlücke aus dem Vermögen.
 
 Gültige Szenario-Eingaben werden ausschließlich lokal im Browser in `localStorage` gespeichert. Es gibt keine serverseitige Speicherung oder geräteübergreifende Synchronisierung; beim Löschen der Browserdaten gehen die gespeicherten Eingaben verloren.
+
+## Manuelle GKV-/PV-Schätzung im Ruhestand
+
+Die Schätzung ist zunächst **ausgeschaltet**. Versicherungsstatus (KVdR, freiwillige GKV, unbekannt), Zuordnungen und eigene Beitragssätze werden manuell angegeben; die App bestimmt weder Anspruch noch Beitragspflicht. „Prüfen“ wird ohne zusätzliche Versicherung gerechnet und mit einer hervorgehobenen Unvollständigkeitswarnung auch bei den Ergebnissen angezeigt.
+
+| Einkommensart | KVdR | Freiwillige GKV | Unbekannt |
+| --- | --- | --- | --- |
+| Gesetzliche Rente | Einbeziehen | Einbeziehen | Prüfen |
+| Betriebsrente | Einbeziehen | Einbeziehen | Prüfen |
+| Private Rente | Prüfen | Einbeziehen | Prüfen |
+| Mieteinnahmen | Nicht einbeziehen | Einbeziehen | Prüfen |
+| Nebenjob | Prüfen | Einbeziehen | Prüfen |
+| Brückeneinkommen | Prüfen | Prüfen | Prüfen |
+| Sonstiges | Prüfen | Prüfen | Prüfen |
+
+Diese Matrix enthält **Planungsvorschläge**, keine abschließenden Rechtsregeln. Beispielsweise kann neben der Rente erzieltes selbstständiges Arbeitseinkommen auch bei KVdR beitragspflichtig sein; die breite Kategorie Nebenjob bleibt deshalb zur Prüfung offen. Jeder Strom bietet „Warum?“ und eine sichtbare Überschreibung. Eigene Zuordnungen und Satzüberschreibungen bleiben bei Status-/Kategoriewechsel bestehen und müssen erneut geprüft werden.
+
+Referenzjahr **2026**, offizielle Seiten live geprüft am **08.09.2026**:
+
+- [BMG: Beiträge](https://www.bundesgesundheitsministerium.de/beitraege): allgemeiner KV-Satz 14,6 %, ermäßigter Satz 14 %, durchschnittlicher Zusatzbeitrag 2,9 %. Gesetzliche Renten und Versorgungsbezüge unterliegen grundsätzlich dem allgemeinen Satz. Die Rentenversicherung beteiligt sich am Rentenbeitrag einschließlich Zusatzbeitrag zur Hälfte. Freiwillige GKV berücksichtigt grundsätzlich auch weitere Einnahmen, etwa Mieten und Kapitalerträge.
+- [DRV: Kranken- und Pflegeversicherung der Rentner](https://www.deutsche-rentenversicherung.de/DRV/DE/Rente/In-der-Rente/Kranken-und-Pflegeversicherung-der-Rentner/kranken-und-pflegeversicherung-der-rentner.html): bestätigt die hälftige KV-Beteiligung; bei freiwilliger GKV erfolgt sie als Zuschuss. Pflegebeiträge tragen Rentner selbst. KVdR hängt unter anderem von Vorversicherungszeiten ab; das wird hier nicht geprüft.
+- [BMG: Finanzierung der Pflegeversicherung](https://www.bundesgesundheitsministerium.de/themen/pflege/online-ratgeber-pflege/die-pflegeversicherung/finanzierung.html): seit 2025 und weiterhin 2026 PV 3,6 %, mit Kinderlosenzuschlag von 0,6 Prozentpunkten 4,2 %. Es bestehen Ausnahmen und Kinderabschläge, die das Modell nicht automatisch bestimmt. Beide BMG-Seiten weisen den Stand 03.09.2026 aus.
+
+Daraus abgeleitete, editierbare **Eigenbelastungsannahmen**: gesetzliche Rente 8,75 % KV einschließlich angenommener Rentenbeteiligung bzw. erhaltenem Zuschuss; Betriebsrente und übrige Einkommen 17,5 % ohne fremde Beteiligung; private Rente, Miete und manuelle Portfolio-Basis 16,9 % ohne Krankengeldanspruch angenommen. Bei Nebenjobs müssen Beschäftigungsart und Arbeitgeberanteile selbst geprüft und KV/PV am Strom angepasst werden. Der kassenindividuelle Zusatzbeitrag kann vom Referenzwert abweichen. PV startet ausdrücklich bei 3,6 % ohne Kinderlosenzuschlag oder Kinderabschläge; 4,2 % kann bewusst ausgewählt oder ein anderer eigener Satz eingetragen werden. Daraus wird kein persönlicher Kinderstatus abgeleitet. Alle Sätze bleiben während der Projektion konstant.
+
+Bestehende Gesamtabzüge bleiben bei Migration von v10/v11 auf v12 unverändert. Selbst bei Aktivierung wird auf einen Bruttostrom erst zusätzliche KV/PV angewandt, wenn sein Gesamtabzug ausdrücklich ersetzt wurde. Die getrennten **sonstigen Abzüge** starten dann bei 0 % und müssen ohne KV/PV neu eingetragen werden. Der alte Gesamtabzug bleibt für den ausgeschalteten Modus gespeichert. Nettoangaben erhalten niemals zusätzliche Abzüge.
+
+Die manuelle Portfolio-Beitragsbasis gilt ab Rentenbeginn in heutiger Kaufkraft und wächst wie die Einkommen mit dem Inflationspfad. Sie erzeugt **kein Einkommen** und wird nicht aus Depotwert, Rendite oder Entnahme berechnet. 0 € setzt keine entsprechenden Kosten an; ein positiver Betrag setzt unabhängig vom angegebenen Status bewusst Kosten an. Diese reduzieren den verfügbaren Cashflow genau einmal, auch unter null. Beispiel: 1.000 € Monatsbasis verursacht bei 16,9 % KV + 3,6 % PV jährlich 2.460 € Kosten; ohne Einkommen erhöht sich der jährliche Kapitalbedarf um diese 2.460 €.
+
+Das Jahresledger trennt bisherige Gesamtabzüge, sonstige Abzüge, KV, PV, Portfolio-Basis und verfügbaren Netto-Cashflow. Sein Einkommensbetrag vor Abzügen enthält bei gemischten Eingaben Brutto- **und** bereits verfügbare Nettobeträge, keine hochgerechneten Bruttowerte. Zusammenfassungen und Entnahmelücken stammen aus dem Ledger. Deterministische Rechnung, Kapitalbedarfssuche und Bootstrap verwenden denselben Cashflow; Versicherungseinstellungen verändern nicht die gezogenen Marktpfade.
+
+Nicht enthalten: Beitragsbemessungsgrenzen, Mindestbemessung/-beiträge, Freibeträge (auch für Betriebsrenten), PKV-Formeln, Familien-/Partnerregeln, grenzüberschreitende Fälle, Steuern, Anschaffungskosten, Gewinne oder Ausschüttungsverfolgung. Portfolio-Kosten dürfen nicht nochmals angesetzt werden, wenn sie bereits in einer Nettoangabe oder Pauschale berücksichtigt wurden. Dies ist eine vereinfachte Schätzung, keine Steuer- oder Sozialversicherungsberatung.
 
 ## Lokal entwickeln
 

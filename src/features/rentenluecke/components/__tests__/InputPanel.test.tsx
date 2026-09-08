@@ -52,6 +52,7 @@ function renderInputPanel(
       errors={{}}
       allocationError={options.allocationError ?? null}
       portfolioBucketError={null}
+      onRetirementInsuranceChange={vi.fn()}
       onChange={vi.fn<(field: InputFieldName, value: number) => void>()}
       onPortfolioBucketChange={vi.fn()}
       onPortfolioBucketAdd={vi.fn()}

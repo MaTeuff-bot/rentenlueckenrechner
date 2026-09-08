@@ -1,3 +1,5 @@
+import type { RetirementInsurance } from '../../model/retirementInsurance'
+import { StreamInsuranceControls } from './StreamInsuranceControls'
 import type { ChangeEvent } from 'react'
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
 import { NumberInput } from '../../../../shared/components/NumberInput'
@@ -38,7 +40,7 @@ const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defa
   other: {
     label: 'Sonstiges Einkommen',
     defaultName: 'Weiteres Einkommen',
-    helper: 'Wähle netto oder brutto; Steuern sowie Kranken- und Pflegeversicherung werden nicht automatisch berechnet.',
+    helper: 'Wähle netto oder brutto; Steuern werden nicht automatisch berechnet; KV/PV ist nur nach manueller Aktivierung und Prüfung enthalten.',
   },
 }
 
@@ -48,13 +50,14 @@ const GENERIC_DEFAULT_NAMES = new Set([
 ])
 
 type Props = {
+  insurance?: RetirementInsurance
   streams: RetirementIncomeStream[]
   onUpdate: (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => void
   onAdd: () => void
   onRemove: (id: string) => void
 }
 
-export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRemove }: Props) {
+export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, onAdd, onRemove }: Props) {
   return (
     <fieldset className="wide-fieldset retirement-income-section">
       <legend>Einkommen im Ruhestand</legend>
@@ -133,7 +136,7 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
                   <option value="gross">Betrag ist brutto</option>
                 </select>
               </label>
-              {stream.amountBasis === 'gross' ? (
+              {stream.amountBasis === 'gross' && !(insurance?.enabled && stream.separateDeductions) ? (
                 <PercentInput
                   id={`retirement-income-deduction-${stream.id}`}
                   label="Vereinfachter Abschlag für Steuern / Kranken- und Pflegeversicherung"
@@ -146,6 +149,7 @@ export function RetirementIncomeStreamsSection({ streams, onUpdate, onAdd, onRem
                   })}
                 />
               ) : null}
+              {insurance?.enabled && <StreamInsuranceControls stream={stream} label={label} insurance={insurance} onUpdate={onUpdate} />}
               <button
                 className="secondary-button retirement-income-remove"
                 type="button"

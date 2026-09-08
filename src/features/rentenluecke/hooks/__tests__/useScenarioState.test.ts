@@ -19,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v11 scenario with income streams and annual bucket costs', () => {
+  it('roundtrips a v12 scenario with income streams and annual bucket costs', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -31,7 +31,7 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 11,
+      version: 12,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
@@ -62,7 +62,7 @@ describe('parsePersistedScenarioState', () => {
     }])
   })
 
-  it('defaults a missing category in an existing v11 stream without a storage bump', () => {
+  it('defaults a missing category in an existing v11 stream during migration', () => {
     const scenario = createDefaultState()
     const retirementIncomeStreams = scenario.retirementIncomeStreams.map((stream) => {
       const streamWithoutKind = { ...stream }

@@ -1,3 +1,4 @@
+import type { RetirementInsurance } from '../model/retirementInsurance'
 import { useEffect, useMemo, useState } from 'react'
 import {
   findInflationSourceOption,
@@ -86,6 +87,10 @@ export function useScenarioState() {
         ? scalePortfolioBucketValuesToTotal(current.portfolioBuckets, value)
         : current.portfolioBuckets,
     }))
+  }
+
+  const updateRetirementInsurance = (retirementInsurance: RetirementInsurance) => {
+    setState((current) => ({ ...current, input: { ...current.input, retirementInsurance } }))
   }
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
@@ -178,6 +183,7 @@ export function useScenarioState() {
     result,
     stochasticSummary,
     updateField,
+    updateRetirementInsurance,
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,

@@ -20,14 +20,14 @@ export function AssumptionsPanel() {
         Folgejahres.
       </p>
       <p>
-        Steuern sowie Kranken- und Pflegeversicherung werden nur über die von dir eingetragenen vereinfachten
-        pauschalen Abschläge berücksichtigt. Die tatsächlichen Kranken- und Pflegeversicherungsbeiträge hängen unter
+        Steuern werden nur über manuelle Abzüge berücksichtigt. Kranken- und Pflegeversicherung sind entweder im
+        bisherigen Gesamtabzug enthalten oder werden nach manueller Aktivierung und Prüfung separat geschätzt. Die tatsächlichen Kranken- und Pflegeversicherungsbeiträge hängen unter
         anderem vom Versicherungsstatus und den Einkommensarten ab. Dies ist keine Steuer- oder
         Sozialversicherungsberatung oder -berechnung.
       </p>
       <p>
         Darüber hinaus nicht berücksichtigt werden insbesondere: gesetzliche Rentenformel, Rentenanpassungen,
-        Renditeschwankungen, einmalige Ausgaben, Immobilien, Partner-/Haushaltssituation und individuelle
+        einmalige Ausgaben, Immobilien, Partner-/Haushaltssituation und individuelle
         Produktausgestaltung.
       </p>
       <p>

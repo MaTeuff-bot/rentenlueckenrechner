@@ -70,6 +70,7 @@ function estimateNominalGapWithoutReturns(
       scenario.retirementIncomeStreams,
       scenario.retirementAge + retirementYear,
       inflationFactor,
+      scenario.retirementInsurance,
     )
     total += Math.max(0, desiredSpending - retirementIncome.net)
   }

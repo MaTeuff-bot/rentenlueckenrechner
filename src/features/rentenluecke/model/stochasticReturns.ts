@@ -185,7 +185,6 @@ export function simulateScenarioWithReturnPath(
     getAnnualInflation,
   )
   const summary = deriveSummary(
-    scenario,
     projectedCapitalAtRetirement,
     requiredCapitalAtRetirement,
     retirementRows,

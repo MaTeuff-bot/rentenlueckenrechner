@@ -20,8 +20,14 @@ export function simulateRetirementRows(
     const ageEnd = ageStart + 1
     const inflationFactor = getInflationFactor(yearIndex)
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
-    const income = calculateRetirementIncomeForYear(scenario.retirementIncomeStreams, ageStart, inflationFactor)
+    const income = calculateRetirementIncomeForYear(scenario.retirementIncomeStreams, ageStart, inflationFactor, scenario.retirementInsurance)
     const gapWithdrawal = Math.max(0, desiredSpending - income.net)
+    // Record the uninflated cashflow using the same rules. Deflating the nominal
+    // gap introduces rounding changes to legacy summaries, including bootstrap.
+    const incomeToday = inflationFactor === 1 ? income : calculateRetirementIncomeForYear(
+      scenario.retirementIncomeStreams, ageStart, 1, scenario.retirementInsurance,
+    )
+    const gapWithdrawalToday = Math.max(0, scenario.annualDesiredSpendingToday - incomeToday.net)
     const surplusIncome = Math.max(0, income.net - desiredSpending)
     const nominalReturnRate = getAnnualReturn?.(yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
     const investmentReturn = capital * nominalReturnRate
@@ -47,9 +53,15 @@ export function simulateRetirementRows(
       retirementIncome: income.net,
       retirementIncomeGross: income.gross,
       retirementIncomeDeductions: income.deductions,
+      retirementIncomeCombinedDeductions: income.combinedDeductions,
+      retirementIncomeOtherDeductions: income.otherDeductions,
+      healthInsurance: income.kv,
+      careInsurance: income.pv,
+      portfolioContributionBase: income.portfolioBase,
       retirementIncomeNet: income.net,
       surplusIncome,
       gapWithdrawal,
+      gapWithdrawalToday,
       closingCapital,
       closingCapitalToday,
       depleted,

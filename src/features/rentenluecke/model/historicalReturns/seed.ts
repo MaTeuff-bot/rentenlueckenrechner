@@ -6,7 +6,7 @@ import type { HistoricalBootstrapSettings } from './types'
 export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings: HistoricalBootstrapSettings): number {
   return hashString(
     stableStringify({
-      input,
+      input: withoutInsuranceSettings(input),
       inflationSourceId: settings.inflationSourceId,
       simulations: settings.simulations,
       portfolioComponents: settings.portfolioComponents.map((component) => ({
@@ -53,4 +53,22 @@ function hashString(value: string): number {
   }
 
   return hash >>> 0
+}
+
+// Insurance comparisons use the same market paths. In particular, disabled settings
+// and migrated scenarios must retain the exact seed used before this feature existed.
+function withoutInsuranceSettings(input: RentenlueckeInput): RentenlueckeInput {
+  const result = { ...input }
+  delete result.retirementInsurance
+  if (input.retirementIncomeStreams) {
+    result.retirementIncomeStreams = input.retirementIncomeStreams.map((stream) => {
+      const legacy = { ...stream }
+      delete legacy.separateDeductions
+      delete legacy.insuranceTreatment
+      delete legacy.kvRateOverride
+      delete legacy.pvRateOverride
+      return legacy
+    })
+  }
+  return result
 }

@@ -1,3 +1,5 @@
+import type { InsuranceTreatment, RetirementInsurance } from './retirementInsurance'
+
 export type RetirementIncomeStreamKind =
   | 'gesetzliche-rente'
   | 'betriebsrente'
@@ -17,6 +19,11 @@ export type RetirementIncomeStream = {
   amountBasis: 'net' | 'gross'
   deductionMode: 'none' | 'effectiveHaircut'
   effectiveDeductionRate: number
+  // Explicit replacement while insurance is enabled; the original all-in haircut is retained.
+  separateDeductions?: { otherRate: number }
+  insuranceTreatment?: InsuranceTreatment
+  kvRateOverride?: number
+  pvRateOverride?: number
 }
 
 export type RentenlueckeInput = {
@@ -28,6 +35,7 @@ export type RentenlueckeInput = {
   monthlyDesiredSpendingToday: number
   monthlyRetirementIncomeToday: number
   retirementIncomeStreams?: RetirementIncomeStream[]
+  retirementInsurance?: RetirementInsurance
   annualInflationRate: number
   annualReturnBeforeRetirement: number
   annualReturnInRetirement: number
@@ -44,6 +52,7 @@ export type NormalizedScenario = {
   annualDesiredSpendingToday: number
   annualRetirementIncomeToday: number
   retirementIncomeStreams: RetirementIncomeStream[]
+  retirementInsurance: RetirementInsurance
   annualInflationRate: number
   annualReturnBeforeRetirement: number
   annualReturnInRetirement: number
@@ -64,9 +73,15 @@ export type YearlyPeriodRow = {
   retirementIncome: number
   retirementIncomeGross: number
   retirementIncomeDeductions: number
+  retirementIncomeCombinedDeductions: number
+  retirementIncomeOtherDeductions: number
+  healthInsurance: number
+  careInsurance: number
+  portfolioContributionBase: number
   retirementIncomeNet: number
   surplusIncome: number
   gapWithdrawal: number
+  gapWithdrawalToday: number
   closingCapital: number
   closingCapitalToday: number
   depleted: boolean
