@@ -22,6 +22,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
         </label>
       </div>
 
+      <p>KV und PV enthalten auch Kosten der manuellen Portfolio-Beitragsbasis. Negativer Netto-Cashflow erhöht die Entnahmelücke um Kosten oberhalb des Einkommens. Gesamtabzüge werden nicht zusätzlich als KV/PV zerlegt.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -41,9 +42,14 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Inflationsfaktor</th>
                   <th>Renditeannahme</th>
                   <th>Gewünschte Nettoausgaben</th>
-                  <th>Bruttoeinkommen</th>
-                  <th>Vereinfachte Abzüge</th>
-                  <th>Nettoeinkommen</th>
+                  <th>Einkommen vor Modellabzügen (Brutto + Nettoangaben)</th>
+                  <th>Abzüge gesamt</th>
+                  <th>Bisherige Gesamtabzüge (inkl. KV/PV)</th>
+                  <th>Sonstige Abzüge ohne KV/PV</th>
+                  <th>KV-Eigenbeitrag</th>
+                  <th>PV-Eigenbeitrag</th>
+                  <th>Portfolio-Beitragsbasis (kein Einkommen)</th>
+                  <th>Verfügbarer Netto-Cashflow</th>
                   <th>Entnahmelücke</th>
                   <th>Konsumierter Überschuss</th>
                   <th>Nicht gedeckte Entnahme</th>
@@ -68,13 +74,18 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{row.yearIndex}</td>
                     <td>{formatNumber(row.inflationFactor, 4)}</td>
                     <td>{formatPercent(row.nominalReturnRate)}</td>
-                    <td>{formatCurrency(row.desiredSpending, 100)}</td>
-                    <td>{formatCurrency(row.retirementIncomeGross, 100)}</td>
-                    <td>{formatCurrency(row.retirementIncomeDeductions, 100)}</td>
-                    <td>{formatCurrency(row.retirementIncomeNet, 100)}</td>
-                    <td>{formatCurrency(row.gapWithdrawal, 100)}</td>
-                    <td>{formatCurrency(row.surplusIncome, 100)}</td>
-                    <td>{formatCurrency(row.unfundedWithdrawal, 100)}</td>
+                    <td>{formatCurrency(row.desiredSpending)}</td>
+                    <td>{formatCurrency(row.retirementIncomeGross)}</td>
+                    <td>{formatCurrency(row.retirementIncomeDeductions)}</td>
+                    <td>{formatCurrency(row.retirementIncomeCombinedDeductions)}</td>
+                    <td>{formatCurrency(row.retirementIncomeOtherDeductions)}</td>
+                    <td>{formatCurrency(row.healthInsurance)}</td>
+                    <td>{formatCurrency(row.careInsurance)}</td>
+                    <td>{formatCurrency(row.portfolioContributionBase)}</td>
+                    <td>{formatCurrency(row.retirementIncomeNet)}</td>
+                    <td>{formatCurrency(row.gapWithdrawal)}</td>
+                    <td>{formatCurrency(row.surplusIncome)}</td>
+                    <td>{formatCurrency(row.unfundedWithdrawal)}</td>
                   </>
                 ) : null}
               </tr>

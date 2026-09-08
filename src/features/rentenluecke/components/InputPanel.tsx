@@ -1,3 +1,5 @@
+import { createDefaultRetirementInsurance, type RetirementInsurance } from '../model/retirementInsurance'
+import { RetirementInsuranceSection } from './InputPanel/RetirementInsuranceSection'
 import {
   findInflationSourceOption,
   getInflationSourceOptions,
@@ -28,6 +30,7 @@ type InputPanelProps = {
   errors: Partial<Record<InputFieldName, string>>
   allocationError: string | null
   portfolioBucketError: string | null
+  onRetirementInsuranceChange: (insurance: RetirementInsurance) => void
   onChange: (field: InputFieldName, value: number) => void
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
   onPortfolioBucketAdd: () => void
@@ -50,6 +53,7 @@ export function InputPanel({
   allocationError,
   portfolioBucketError,
   onChange,
+  onRetirementInsuranceChange,
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
   onPortfolioBucketRemove,
@@ -110,7 +114,10 @@ export function InputPanel({
 
         <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
 
+        <RetirementInsuranceSection insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} />
+
         <RetirementIncomeStreamsSection
+          insurance={input.retirementInsurance}
           streams={retirementIncomeStreams}
           onUpdate={onRetirementIncomeStreamChange}
           onAdd={onRetirementIncomeStreamAdd}

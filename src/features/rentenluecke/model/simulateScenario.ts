@@ -14,7 +14,6 @@ export function simulateScenario(input: RentenlueckeInput): SimulationResult {
   const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement)
   const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(scenario)
   const summary = deriveSummary(
-    scenario,
     projectedCapitalAtRetirement,
     requiredCapitalAtRetirement,
     retirementRows,

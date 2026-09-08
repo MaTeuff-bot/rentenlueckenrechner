@@ -1,3 +1,5 @@
+import { createDefaultRetirementInsurance } from '../model/retirementInsurance'
+import { InsuranceWarnings } from './InsuranceWarnings'
 import { AssumptionsPanel } from './AssumptionsPanel'
 import { InputPanel } from './InputPanel'
 import { ScenarioOutcomePanel } from './ScenarioOutcomePanel'
@@ -20,6 +22,7 @@ export function RentenlueckeCalculator() {
     result,
     stochasticSummary,
     updateField,
+    updateRetirementInsurance,
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
@@ -55,6 +58,7 @@ export function RentenlueckeCalculator() {
           allocationError={allocationError}
           portfolioBucketError={portfolioBucketError}
           onChange={updateField}
+          onRetirementInsuranceChange={updateRetirementInsurance}
           onPortfolioBucketChange={updatePortfolioBucket}
           onPortfolioBucketAdd={addPortfolioBucket}
           onPortfolioBucketRemove={removePortfolioBucket}
@@ -64,6 +68,8 @@ export function RentenlueckeCalculator() {
           onInflationSourceChange={updateInflationSource}
           onReset={reset}
         />
+
+        <InsuranceWarnings insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} streams={retirementIncomeStreams} />
 
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
