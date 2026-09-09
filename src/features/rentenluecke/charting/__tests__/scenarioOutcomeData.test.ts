@@ -42,7 +42,6 @@ function yearlyRow(overrides: Partial<YearlyPeriodRow> = {}): YearlyPeriodRow {
     desiredSpending: 0,
     retirementIncome: 0,
     retirementIncomeGross: 0,
-    retirementIncomeCombinedDeductions: 0,
     retirementIncomeOtherDeductions: 0,
     healthInsurance: 0,
     careInsurance: 0,

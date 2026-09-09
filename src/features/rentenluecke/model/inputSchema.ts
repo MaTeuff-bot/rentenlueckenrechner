@@ -1,8 +1,9 @@
+import { retirementInsuranceSchema } from './retirementInsurance'
 import { z } from 'zod'
 
 export const inputLabels = {
   currentAge: 'Aktuelles Alter',
-  retirementAge: 'Renteneintrittsalter',
+  retirementAge: 'Arbeitsende (Alter)',
   planningAge: 'Planung bis Alter',
   currentCapital: 'Aktuelles Altersvorsorgevermögen',
   monthlyContributionToday: 'Monatliche Sparrate bis Rentenbeginn, heutige Kaufkraft',
@@ -16,12 +17,6 @@ export const inputLabels = {
 const money = z.number().finite().min(0, 'Muss mindestens 0 sein.')
 const age = z.number().int('Muss eine ganze Zahl sein.').min(0, 'Muss mindestens 0 sein.').max(120, 'Ist zu hoch.')
 const rate = z.number().finite().min(0).max(1)
-const retirementInsurance = z.object({
-  enabled: z.boolean(),
-  status: z.enum(['kvdr', 'voluntary', 'unknown']),
-  rates: z.object({ pensionKv: rate, generalKv: rate, passiveKv: rate, pv: rate }),
-  portfolioBaseMonthlyToday: money,
-})
 const retirementIncomeStream = z
   .object({
     id: z.string(),
@@ -41,10 +36,8 @@ const retirementIncomeStream = z
     amountBasis: z.enum(['net', 'gross']),
     deductionMode: z.enum(['none', 'effectiveHaircut']),
     effectiveDeductionRate: rate,
-    separateDeductions: z.object({ otherRate: rate }).optional(),
-    insuranceTreatment: z.enum(['include', 'exclude', 'review']).optional(),
-    kvRateOverride: rate.optional(),
-    pvRateOverride: rate.optional(),
+    support: z.enum(['standard', 'unsupported']).optional(),
+    rentalAssessmentMonthlyToday: money.optional(),
   })
   .refine((stream) => stream.endAge === null || stream.endAge > stream.startAge, {
     path: ['endAge'],
@@ -61,7 +54,7 @@ export const rentenlueckeInputSchema = z
     monthlyDesiredSpendingToday: money,
     monthlyRetirementIncomeToday: money,
     retirementIncomeStreams: z.array(retirementIncomeStream).optional(),
-    retirementInsurance: retirementInsurance.optional(),
+    retirementInsurance: retirementInsuranceSchema.optional(),
     annualInflationRate: z
       .number()
       .finite()

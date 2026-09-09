@@ -5,12 +5,11 @@ import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '.
 import { calculatePortfolioExpectedReturn } from '../../model/stochasticReturns'
 import { normalizeRetirementIncomeStreamKinds } from '../../model/retirementIncomeStreams'
 import { createDefaultState, withDeterministicPortfolioReturn } from './defaults'
-import { migrateV10RetirementIncome, normalizeHistoricalState } from './migrations'
+import { normalizeHistoricalState } from './migrations'
 import type { PersistedHistoricalState, ScenarioState } from './types'
 
-export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v12'
-export const PREVIOUS_STORAGE_KEY = 'rentenlueckenrechner.scenario.v11'
-export const LEGACY_STORAGE_KEY = 'rentenlueckenrechner.scenario.v10'
+export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v13'
+export const RESET_NOTICE_KEY = 'rentenlueckenrechner.gkv-v2-reset-notice'
 const portfolioBucketSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -27,27 +26,24 @@ const persistedScenarioFields = {
     inflationSourceId: z.string(),
   }),
 }
-const persistedScenarioSchema = z.object({ version: z.literal(12), ...persistedScenarioFields })
-const persistedV11ScenarioSchema = z.object({ version: z.literal(11), ...persistedScenarioFields })
-const persistedV10ScenarioSchema = z.object({
-  version: z.literal(10),
-  input: rentenlueckeInputSchema,
-  portfolioBuckets: z.array(portfolioBucketSchema),
-  historical: z.object({ inflationSourceId: z.string().optional(), inflationSeriesId: z.string().optional() }),
-})
+const persistedScenarioSchema = z.object({ version: z.literal(13), ...persistedScenarioFields })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
-  const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(PREVIOUS_STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
-  return parsePersistedScenarioState(stored)
+  const oldKeys = Object.keys(localStorage).filter(key => /^rentenlueckenrechner\.scenario\.v(?:[1-9]|1[0-2])$/.test(key))
+  if (oldKeys.length) {
+    oldKeys.forEach(key => localStorage.removeItem(key))
+    localStorage.setItem(RESET_NOTICE_KEY, '1')
+  }
+  return parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY))
 }
 
 export function serializeScenarioState(state: ScenarioState): string {
   const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
   const input = withDeterministicPortfolioReturn(
-    { ...state.input, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets) },
+    { ...state.input, retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets) },
     calculatePortfolioExpectedReturn(allocation),
   )
-  return JSON.stringify({ version: 12, ...state, input })
+  return JSON.stringify({ version: 13, ...state, input })
 }
 
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -56,14 +52,6 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     const parsed: unknown = JSON.parse(stored)
     const persisted = persistedScenarioSchema.safeParse(parsed)
     if (persisted.success) return stateWithDerivedReturn(persisted.data)
-    const previous = persistedV11ScenarioSchema.safeParse(parsed)
-    // Additive migration: absence of insurance remains disabled; all-in haircuts retain their meaning.
-    if (previous.success) return stateWithDerivedReturn(previous.data)
-    const legacy = persistedV10ScenarioSchema.safeParse(parsed)
-    if (legacy.success) return stateWithDerivedReturn({
-      ...legacy.data,
-      retirementIncomeStreams: migrateV10RetirementIncome(legacy.data.input),
-    })
     return createDefaultState()
   } catch {
     return createDefaultState()
@@ -79,7 +67,7 @@ function stateWithDerivedReturn(persisted: {
   const allocation = calculateAllocationFromBuckets(persisted.portfolioBuckets)
   return {
     input: withDeterministicPortfolioReturn(
-      { ...persisted.input, currentCapital: calculatePortfolioBucketTotal(persisted.portfolioBuckets) },
+      { ...persisted.input, retirementIncomeStreams: normalizeRetirementIncomeStreamKinds(persisted.retirementIncomeStreams), currentCapital: calculatePortfolioBucketTotal(persisted.portfolioBuckets) },
       calculatePortfolioExpectedReturn(allocation),
     ),
     portfolioBuckets: persisted.portfolioBuckets,

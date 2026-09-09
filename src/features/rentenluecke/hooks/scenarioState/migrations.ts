@@ -5,8 +5,6 @@ import {
 } from '../../model/historicalReturns'
 import { createDefaultHistoricalState } from './defaults'
 import type { PersistedHistoricalState, ScenarioState } from './types'
-import { createDefaultRetirementIncomeStreams } from '../../model/retirementIncomeStreams'
-import type { RentenlueckeInput, RetirementIncomeStream } from '../../model/types'
 
 const PROVISIONAL_INFLATION_SERIES_ID_MIGRATIONS = {
   'fixture-de-eur-inflation-provisional': DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
@@ -19,10 +17,6 @@ export function normalizeHistoricalState(historical: PersistedHistoricalState | 
       historical.inflationSourceId ?? historical.inflationSeriesId ?? DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
     ),
   }
-}
-
-export function migrateV10RetirementIncome(input: RentenlueckeInput): RetirementIncomeStream[] {
-  return createDefaultRetirementIncomeStreams(input)
 }
 
 function migrateProvisionalInflationSeriesId(id: string): string {

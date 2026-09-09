@@ -12,7 +12,7 @@ export function simulateScenario(input: RentenlueckeInput): SimulationResult {
   const accumulationRows = simulateAccumulationRows(scenario)
   const projectedCapitalAtRetirement = accumulationRows.at(-1)?.closingCapital ?? scenario.currentCapital
   const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement)
-  const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(scenario)
+  const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(scenario, undefined, undefined, retirementRows)
   const summary = deriveSummary(
     projectedCapitalAtRetirement,
     requiredCapitalAtRetirement,

@@ -1,70 +1,21 @@
-import { getInsuranceTreatment, getStreamInsuranceRates, type RetirementInsurance } from './retirementInsurance'
+import { activeIncomeStreams, contributionForYear, type CompleteContribution } from './retirementInsurance'
 import type { RentenlueckeInput, RetirementIncomeStream } from './types'
-
-type AggregateRetirementIncomeInput = Pick<
-  RentenlueckeInput,
-  'monthlyRetirementIncomeToday' | 'retirementAge'
->
-
+type AggregateRetirementIncomeInput = Pick<RentenlueckeInput, 'monthlyRetirementIncomeToday' | 'retirementAge'>
 export type AnnualRetirementIncome = {
-  gross: number
-  deductions: number
-  combinedDeductions: number
-  otherDeductions: number
-  kv: number
-  pv: number
-  portfolioBase: number
-  net: number
+  gross: number; deductions: number; otherDeductions: number; kv: number; pv: number; portfolioBase: number; net: number; insurance: CompleteContribution
 }
-
-export function calculateRetirementIncomeForYear(
-  streams: readonly RetirementIncomeStream[],
-  ageStart: number,
-  inflationFactor: number,
-  insurance?: RetirementInsurance,
-): AnnualRetirementIncome {
-  const total: AnnualRetirementIncome = {
-    gross: 0, deductions: 0, combinedDeductions: 0, otherDeductions: 0, kv: 0, pv: 0, portfolioBase: 0, net: 0,
+export function calculateRetirementIncomeForYear(input: RentenlueckeInput, age: number, inflation: number): AnnualRetirementIncome {
+  let gross = 0, otherDeductions = 0
+  for (const s of activeIncomeStreams(input.retirementIncomeStreams ?? [], age)) {
+    const amount = s.amountMonthlyToday * 12 * inflation
+    gross += amount
+    if (s.amountBasis === 'gross') otherDeductions += amount * (s.deductionMode === 'effectiveHaircut' ? s.effectiveDeductionRate : 0)
   }
-  for (const stream of streams) {
-    if (stream.startAge > ageStart || (stream.endAge !== null && ageStart >= stream.endAge)) continue
-    const gross = stream.amountMonthlyToday * 12 * inflationFactor
-    total.gross += gross
-    if (stream.amountBasis === 'net') {
-      total.net += gross
-      continue
-    }
-    let deductions: number
-
-    if (insurance?.enabled && stream.separateDeductions) {
-      deductions = gross * stream.separateDeductions.otherRate
-      total.otherDeductions += deductions
-      if (getInsuranceTreatment(stream, insurance.status) === 'include') {
-        const rates = getStreamInsuranceRates(stream, insurance.rates)
-        const kv = gross * rates.kv
-        const pv = gross * rates.pv
-        total.kv += kv
-        total.pv += pv
-        deductions += kv + pv
-      }
-    } else {
-      // Never reinterpret an unreviewed all-in haircut as OTHER deductions.
-      deductions = gross * (stream.deductionMode === 'effectiveHaircut' ? stream.effectiveDeductionRate : 0)
-      total.combinedDeductions += deductions
-    }
-    total.net += gross - deductions
-  }
-  if (insurance?.enabled) {
-    total.portfolioBase = insurance.portfolioBaseMonthlyToday * 12 * inflationFactor
-    const kv = total.portfolioBase * insurance.rates.passiveKv
-    const pv = total.portfolioBase * insurance.rates.pv
-    total.kv += kv
-    total.pv += pv
-    total.net -= kv + pv
-  }
-  total.deductions = total.combinedDeductions + total.otherDeductions + total.kv + total.pv
-  // Negative spendable cashflow funds costs above income; do not clamp before computing the gap.
-  return total
+  const insurance = contributionForYear(input, age, inflation, (gross - otherDeductions) / 12)
+  const kv = insurance.ownKvMonthly * 12, pv = insurance.ownPvMonthly * 12
+  const phase = input.retirementInsurance![insurance.phase]
+  const portfolioBase = insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' ? phase.capitalMonthlyToday! * 12 * inflation : 0
+  return { gross, otherDeductions, kv, pv, portfolioBase, deductions: otherDeductions + kv + pv, net: insurance.availableIncomeMonthly * 12, insurance }
 }
 
 export function createDefaultRetirementIncomeStreams(

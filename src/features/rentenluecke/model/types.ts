@@ -1,4 +1,4 @@
-import type { InsuranceTreatment, RetirementInsurance } from './retirementInsurance'
+import type { RetirementInsurance } from './retirementInsurance'
 
 export type RetirementIncomeStreamKind =
   | 'gesetzliche-rente'
@@ -19,11 +19,9 @@ export type RetirementIncomeStream = {
   amountBasis: 'net' | 'gross'
   deductionMode: 'none' | 'effectiveHaircut'
   effectiveDeductionRate: number
-  // Explicit replacement while insurance is enabled; the original all-in haircut is retained.
-  separateDeductions?: { otherRate: number }
-  insuranceTreatment?: InsuranceTreatment
-  kvRateOverride?: number
-  pvRateOverride?: number
+  support?: 'standard' | 'unsupported'
+  rentalAssessmentMonthlyToday?: number
+
 }
 
 export type RentenlueckeInput = {
@@ -45,6 +43,7 @@ export type NormalizedScenario = {
   currentAge: number
   retirementAge: number
   planningAge: number
+  sourceInput: RentenlueckeInput
   yearsToRetirement: number
   retirementYears: number
   currentCapital: number
@@ -59,6 +58,7 @@ export type NormalizedScenario = {
 }
 
 export type YearlyPeriodRow = {
+  insurance?: import('./retirementInsurance').CompleteContribution
   yearIndex: number
   ageStart: number
   ageEnd: number
@@ -73,7 +73,6 @@ export type YearlyPeriodRow = {
   retirementIncome: number
   retirementIncomeGross: number
   retirementIncomeDeductions: number
-  retirementIncomeCombinedDeductions: number
   retirementIncomeOtherDeductions: number
   healthInsurance: number
   careInsurance: number

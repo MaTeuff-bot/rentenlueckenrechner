@@ -1,151 +1,211 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_INPUT } from '../defaults'
-import { calculateRetirementIncomeForYear } from '../retirementIncomeStreams'
-import { createDefaultRetirementInsurance, getInsuranceTreatment, getInsuranceWarnings, getStreamInsuranceRates, INSURANCE_REFERENCE, type InsuranceStatus, type InsuranceTreatment, type RetirementInsurance } from '../retirementInsurance'
+import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, createDefaultRetirementInsurance } from '../retirementInsurance'
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { simulateScenario } from '../simulateScenario'
 import { simulateScenarioWithReturnPath } from '../stochasticReturns'
-import type { RentenlueckeInput, RetirementIncomeStream, RetirementIncomeStreamKind } from '../types'
+import { normalizeInput } from '../normalizeInput'
+import { simulateRetirementRows } from '../simulateRetirement'
+import { automaticInsurance, insuredInput, pension } from './insuranceFixtures'
 
-function stream(patch: Partial<RetirementIncomeStream> = {}): RetirementIncomeStream {
-  return { id: 'pension', name: 'Pension', kind: 'gesetzliche-rente', amountMonthlyToday: 1000,
-    startAge: 67, endAge: null, amountBasis: 'gross', deductionMode: 'effectiveHaircut', effectiveDeductionRate: 0.2,
-    separateDeductions: { otherRate: 0.1 }, ...patch }
-}
-function insurance(patch: Partial<RetirementInsurance> = {}): RetirementInsurance {
-  return { ...createDefaultRetirementInsurance(), enabled: true, status: 'kvdr', ...patch }
-}
-function input(patch: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return { ...DEFAULT_INPUT, currentAge: 67, retirementAge: 67, planningAge: 70, currentCapital: 100_000,
-    annualInflationRate: 0, annualReturnBeforeRetirement: 0, annualReturnInRetirement: 0,
-    monthlyDesiredSpendingToday: 1000, retirementIncomeStreams: [stream()], retirementInsurance: insurance(), ...patch }
-}
-const matrix: [RetirementIncomeStreamKind, InsuranceTreatment, InsuranceTreatment, InsuranceTreatment][] = [
-  ['gesetzliche-rente', 'include', 'include', 'review'],
-  ['betriebsrente', 'include', 'include', 'review'],
-  ['private-rente', 'review', 'include', 'review'],
-  ['rental-income', 'exclude', 'include', 'review'],
-  ['side-income', 'review', 'include', 'review'],
-  ['bridge-income', 'review', 'review', 'review'],
-  ['other', 'review', 'review', 'review'],
-]
-
-describe('retirement insurance defaults and manual decisions', () => {
-  it.each(matrix)('implements all three status defaults and numerical treatment for %s', (kind, kvdr, voluntary, unknown) => {
-    for (const [status, treatment] of [['kvdr', kvdr], ['voluntary', voluntary], ['unknown', unknown]] as [InsuranceStatus, InsuranceTreatment][]) {
-      const s = stream({ kind })
-      const config = insurance({ status })
-      expect(getInsuranceTreatment(s, status)).toBe(treatment)
-      const result = calculateRetirementIncomeForYear([s], 67, 1, config)
-      expect(result.kv).toBe(treatment === 'include' ? 12_000 * getStreamInsuranceRates(s, config.rates).kv : 0)
-      expect(result.pv).toBeCloseTo(treatment === 'include' ? 432 : 0, 8)
-      expect(getInsuranceWarnings([s], config).some((warning) => warning.code === 'review-stream')).toBe(treatment === 'review')
+describe('guided insurance completeness and scope', () => {
+  it('requires genuine answers; confirmed zero is complete', () => {
+    expect(() => simulateScenario(DEFAULT_INPUT)).toThrow('KV/PV')
+    const missing = insuredInput({ retirementInsurance: createDefaultRetirementInsurance(67) })
+    expect(insuranceSetupIssues(missing)).toEqual(expect.arrayContaining([
+      'Rentenphase: Versicherungsstatus auswählen.', 'Kassenindividuellen Zusatzbeitrag angeben.',
+      'Dauerhafte PV-Elterneigenschaft angeben.',
+    ]))
+    const zero = insuredInput({ retirementIncomeStreams: [], retirementInsurance: automaticInsurance({
+      pension: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'not-received' },
+    }) })
+    expect(insuranceSetupIssues(zero)).toEqual([])
+    expect(simulateScenario(zero).retirementRows[0].insurance).toMatchObject({ selectedStatus: 'unknown', effectiveStatus: 'voluntary' })
+  })
+  it('checks explicit commencement against the earliest statutory stream, independently of work stop', () => {
+    const input = insuredInput({ retirementAge: 65, currentAge: 64 })
+    expect(insuranceSetupIssues(input)).toEqual([])
+    expect(insuranceSetupIssues({ ...input, retirementInsurance: automaticInsurance({ pensionAge: 68 }) }).join()).toContain('frühesten')
+    expect(insuranceSetupIssues(insuredInput({ currentAge: 68, retirementAge: 68 }))).toEqual([])
+  })
+  it('requires gross relevant pensions and rental assessments; excluded KVdR rent may remain net', () => {
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: [pension({ amountBasis: 'net' })] })).join()).toContain('brutto')
+    const rent = pension({ id: 'rent', kind: 'rental-income', amountBasis: 'net', support: undefined })
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: [pension(), rent] }))).toEqual([])
+    const voluntary = automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' } })
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: [pension(), rent], retirementInsurance: voluntary })).join()).toContain('Mietüberschuss')
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: [pension({ support: undefined })] })).join()).toContain('bestätigen')
+  })
+  it.each(['private-rente', 'side-income', 'bridge-income', 'other'] as const)('routes %s to whole-phase manual totals, including before a later receipt', kind => {
+    const streams = [pension(), pension({ id: 'special', kind, startAge: 69 })]
+    const i = createDefaultRetirementInsurance(67)
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i })).join()).toContain('gesamte Phase')
+    i.pension = { kvMonthlyToday: 123, pvMonthlyToday: 45 }
+    expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i }))).toEqual([])
+    const rows = simulateScenario(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i })).retirementRows
+    expect(rows.every(r => r.insurance?.status === 'manual' && r.healthInsurance === 1476 && r.careInsurance === 540)).toBe(true)
+  })
+  it.each(['unsupported', 'kvdr'] as const)('uses whole-phase manual replacement for unsupported bridge status %s', status => {
+    const i = automaticInsurance({ bridge: { status, kvMonthlyToday: 200, pvMonthlyToday: 50 } })
+    const rows = simulateScenario(insuredInput({ currentAge: 65, retirementAge: 65, retirementInsurance: i })).retirementRows
+    expect(rows[0].insurance).toMatchObject({ status: 'manual', ownKvMonthly: 200, ownPvMonthly: 50 })
+    expect(rows[2].insurance?.status).toBe('automatic')
+  })
+  it('examines declared special circumstances and pension types, even at confirmed zero income', () => {
+    for (const input of [
+      insuredInput({ retirementInsurance: automaticInsurance({ pension: { status: 'kvdr', circumstances: 'unsupported' } }) }),
+      insuredInput({ retirementIncomeStreams: [pension({ support: 'unsupported', amountMonthlyToday: 0 })] }),
+    ]) expect(insuranceSetupIssues(input).join()).toContain('gesamte Phase')
+  })
+  it('does not turn missing ordinary inputs into manual fallback', () => {
+    const issues = insuranceSetupIssues(insuredInput({ retirementInsurance: automaticInsurance({ insurerAdditionalRate: undefined, isParent: undefined }) }))
+    expect(issues.join()).not.toContain('gesamte Phase')
+    expect(issues).toHaveLength(2)
+  })
+  it('validates family contradictions, future children and duplicate income IDs before simulation', () => {
+    for (const i of [automaticInsurance({ isParent: false, childBirthYears: [2010] }), automaticInsurance({ childBirthYears: [2027] }), automaticInsurance({ childrenConfirmed: false })]) {
+      expect(insuranceSetupIssues(insuredInput({ retirementInsurance: i })).length).toBeGreaterThan(0)
     }
+    expect(() => simulateScenario(insuredInput({ retirementIncomeStreams: [pension(), pension()] }))).toThrow('Kennungen')
   })
-
-  it.each(['include', 'exclude', 'review'] as const)('honors explicit %s for every status and category', (treatment) => {
-    for (const status of ['kvdr', 'voluntary', 'unknown'] as const) {
-      for (const [kind] of matrix) {
-        const s = stream({ kind, insuranceTreatment: treatment })
-        expect(getInsuranceTreatment(s, status)).toBe(treatment)
-        const result = calculateRetirementIncomeForYear([s], 67, 1, insurance({ status }))
-        expect(result.kv > 0).toBe(treatment === 'include')
-        expect(result.pv > 0).toBe(treatment === 'include')
-      }
-    }
+  it('clears malformed hidden values on manual transitions without losing valid overrides', () => {
+    const input = insuredInput({ retirementInsurance: automaticInsurance({ insurerAdditionalRate: -1, childBirthYears: [0],
+      rates: { kvGeneralRate: 0.16 }, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0, capitalMonthlyToday: -1 },
+    }), retirementIncomeStreams: [pension({ kind: 'rental-income', rentalAssessmentMonthlyToday: -1 })] })
+    const cleaned = clearHiddenInvalidInsuranceValues(input)
+    expect(insuranceSetupIssues(cleaned)).toEqual([])
+    expect(cleaned.retirementInsurance?.rates?.kvGeneralRate).toBe(0.16)
+    expect(cleaned.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
+    expect(cleaned.retirementIncomeStreams?.[0].rentalAssessmentMonthlyToday).toBeUndefined()
+    expect(input.retirementInsurance?.childBirthYears).toEqual([0])
   })
-
-  it('warns about unknown status even with explicit inclusion and keeps net streams protected', () => {
-    const s = stream({ amountBasis: 'net', insuranceTreatment: 'include', kvRateOverride: 1, pvRateOverride: 1 })
-    const config = insurance({ status: 'unknown' })
-    expect(getInsuranceWarnings([s], config)).toEqual([{ code: 'unknown-status' }])
-    expect(calculateRetirementIncomeForYear([s], 67, 1, config)).toMatchObject({ gross: 12_000, net: 12_000, deductions: 0, kv: 0, pv: 0, otherDeductions: 0 })
-    expect(getInsuranceWarnings([stream({ insuranceTreatment: 'review' })], insurance())).toEqual([{ code: 'review-stream', streamId: 'pension' }])
-    expect(getInsuranceWarnings([s], insurance({ enabled: false }))).toEqual([])
+  describe.each(['kvGeneralRate', 'kvReducedRate', 'pvBaseRate'] as const)('%s override validation and cleanup', key => {
+    it.each([-1, NaN, Infinity, -Infinity, 0.5001])('rejects numeric invalid rate %s and clears only that override in manual mode', rate => {
+      const rates = { kvGeneralRate: 0.16, kvReducedRate: 0.15, pvBaseRate: 0.04, [key]: rate }
+      const input = insuredInput({ retirementInsurance: automaticInsurance({ rates }) })
+      expect(rentenlueckeInputSchema.safeParse(input).success).toBe(false)
+      expect(insuranceSetupIssues(clearHiddenInvalidInsuranceValues(input))).not.toEqual([])
+      const manual = { ...input, retirementInsurance: { ...input.retirementInsurance!,
+        pension: { ...input.retirementInsurance!.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      } }
+      const cleaned = clearHiddenInvalidInsuranceValues(manual)
+      expect(cleaned.retirementInsurance!.rates).toEqual({ ...rates, [key]: undefined })
+      expect(insuranceSetupIssues(cleaned)).toEqual([])
+      expect(manual.retirementInsurance.rates).toEqual(rates)
+      const automatic = { ...cleaned, retirementInsurance: { ...cleaned.retirementInsurance!,
+        pension: { ...cleaned.retirementInsurance!.pension, manual: false },
+      } }
+      expect(insuranceSetupIssues(automatic)).toEqual([])
+      expect(simulateScenario(automatic).retirementRows[0].insurance?.status).toBe('automatic')
+    })
+    it.each([0, 0.0099, 0.01, 0.5])('honors the rate boundary %s', rate => {
+      const input = insuredInput({ retirementInsurance: automaticInsurance({ rates: { [key]: rate } }) })
+      const valid = key !== 'pvBaseRate' || rate >= 0.01
+      expect(rentenlueckeInputSchema.safeParse(input).success).toBe(valid)
+      input.retirementInsurance!.pension = { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 }
+      expect(clearHiddenInvalidInsuranceValues(input).retirementInsurance!.rates?.[key]).toBe(valid ? rate : undefined)
+    })
   })
-
-  it('requires explicit replacement and restores all-in results when disabled', () => {
-    const legacy = stream({ separateDeductions: undefined })
-    const old = calculateRetirementIncomeForYear([legacy], 67, 1)
-    expect(old).toMatchObject({ net: 9600, combinedDeductions: 2400, otherDeductions: 0, kv: 0, pv: 0 })
-    expect(calculateRetirementIncomeForYear([legacy], 67, 1, insurance())).toEqual(old)
-    expect(getInsuranceWarnings([legacy], insurance())).toEqual([{ code: 'combined-haircut', streamId: 'pension' }])
-    expect(calculateRetirementIncomeForYear([stream()], 67, 1, insurance())).toMatchObject({ combinedDeductions: 0, otherDeductions: 1200, kv: 1050, pv: expect.closeTo(432, 8), net: 9318 })
-    expect(calculateRetirementIncomeForYear([stream()], 67, 1, insurance({ enabled: false, portfolioBaseMonthlyToday: 9999 }))).toEqual(old)
+  it.each([-1, NaN, Infinity, -Infinity, 0.2001])('rejects numeric invalid additional rate %s', insurerAdditionalRate => {
+    const input = insuredInput({ retirementInsurance: automaticInsurance({ insurerAdditionalRate }) })
+    expect(rentenlueckeInputSchema.safeParse(input).success).toBe(false)
+    input.retirementInsurance!.pension = { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 }
+    expect(clearHiddenInvalidInsuranceValues(input).retirementInsurance!.insurerAdditionalRate).toBeUndefined()
   })
-
-  it('uses dated own-burden rates, including half the additional pension rate, and explicit overrides', () => {
-    expect(INSURANCE_REFERENCE.year).toBe(2026)
-    expect(INSURANCE_REFERENCE.verifiedOn).toBe('2026-09-08')
-    expect(INSURANCE_REFERENCE.rates.pensionKv).toBeCloseTo((0.146 + 0.029) / 2)
-    expect(INSURANCE_REFERENCE.rates.pv).toBe(0.036)
-    expect(INSURANCE_REFERENCE.childlessPv).toBe(0.042)
-    const rates = insurance().rates
-    expect(getStreamInsuranceRates(stream({ kind: 'betriebsrente' }), rates)).toEqual({ kv: 0.175, pv: 0.036 })
-    expect(getStreamInsuranceRates(stream({ kind: 'rental-income' }), rates)).toEqual({ kv: 0.169, pv: 0.036 })
-    expect(getStreamInsuranceRates(stream({ kind: 'side-income' }), rates).kv).toBe(0.175)
-    expect(getStreamInsuranceRates(stream({ kvRateOverride: 0, pvRateOverride: 0.042 }), rates)).toEqual({ kv: 0, pv: 0.042 })
+  it.each([-1, NaN, Infinity])('rejects malformed assessment %s', capitalMonthlyToday => {
+    expect(rentenlueckeInputSchema.safeParse(insuredInput({ retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', capitalMonthlyToday } }) })).success).toBe(false)
   })
 })
 
-describe('ledger cashflow and funding', () => {
-  it('separates mixed net, reviewed gross and legacy deductions without taxing net inputs', () => {
-    const result = simulateScenario(input({ retirementIncomeStreams: [
-      stream(), stream({ id: 'net', amountBasis: 'net', kvRateOverride: 1, pvRateOverride: 1 }),
-      stream({ id: 'legacy', separateDeductions: undefined }),
-    ] }))
-    expect(result.retirementRows[0]).toMatchObject({ retirementIncomeGross: 36_000, retirementIncomeCombinedDeductions: 2400,
-      retirementIncomeOtherDeductions: 1200, healthInsurance: 1050, careInsurance: expect.closeTo(432, 8), retirementIncomeNet: 30_918 })
-  })
-
-  it.each([0, 50, 1000])('counts portfolio costs exactly once with monthly income %i, even above income', (amountMonthlyToday) => {
-    const config = insurance({ portfolioBaseMonthlyToday: 1000 })
-    const result = simulateScenario(input({ retirementIncomeStreams: [stream({ amountBasis: 'net', amountMonthlyToday })], retirementInsurance: config }))
-    const income = amountMonthlyToday * 12
-    const costs = 12_000 * (0.169 + 0.036)
+describe('authoritative contribution ledger', () => {
+  it('reconciles the independently calculated mixed KVdR fixture with one occupational allowance', () => {
+    const result = simulateScenario(insuredInput({ retirementIncomeStreams: [pension({ effectiveDeductionRate: 0.1 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 500 })] }))
     const row = result.retirementRows[0]
-    expect(row.portfolioContributionBase).toBe(12_000)
-    expect(row.retirementIncomeGross).toBe(income)
-    expect(row.healthInsurance).toBeCloseTo(2028, 8)
-    expect(row.careInsurance).toBeCloseTo(432, 8)
-    expect(row.retirementIncomeNet).toBeCloseTo(income - costs)
-    expect(row.gapWithdrawal).toBeCloseTo(12_000 - income + costs)
-    expect(row.closingCapital).toBeCloseTo(100_000 - row.gapWithdrawal)
+    expect(row.retirementIncomeGross).toBe(30_000)
+    expect(row.retirementIncomeOtherDeductions).toBe(2400)
+    expect(row.healthInsurance / 12).toBeCloseTo(227.89375, 8)
+    expect(row.careInsurance / 12).toBeCloseTo(90, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(1982.10625, 8)
+    expect(row.retirementIncomeDeductions).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeNet)
     expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(row.gapWithdrawal * 3, 0)
-    expect(result.summary.annualGapToday).toBe(row.gapWithdrawal)
   })
-
-  it('does not skip capital search when insurance turns an apparent surplus into a gap', () => {
-    const result = simulateScenario(input({ monthlyDesiredSpendingToday: 500, retirementIncomeStreams: [stream({ amountBasis: 'net' })],
-      retirementInsurance: insurance({ portfolioBaseMonthlyToday: 5000 }) }))
-    expect(result.retirementRows[0].gapWithdrawal).toBe(6300)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(18_900, 0)
+  it('turns an apparent income surplus into a funded gap after insurance', () => {
+    const input = insuredInput({ monthlyDesiredSpendingToday: 1900 })
+    const result = simulateScenario(input)
+    const row = result.retirementRows[0]
+    expect(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.desiredSpending).toBe(1200)
+    expect(row.healthInsurance).toBeCloseTo(175 * 12)
+    expect(row.careInsurance).toBeCloseTo(72 * 12)
+    expect(row.retirementIncomeNet).toBeCloseTo(1753 * 12)
+    expect(row.surplusIncome).toBe(0)
+    expect(row.gapWithdrawal).toBeCloseTo(147 * 12)
+    expect(row.closingCapital).toBeCloseTo(row.openingCapital - row.gapWithdrawal)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(147 * 12 * 3, 0)
   })
-
-  it('uses the same constant rates and inflation-adjusted bases with deterministic and stochastic paths', () => {
-    const scenario = input({ currentAge: 66, annualInflationRate: 0.02, retirementIncomeStreams: [stream({ startAge: 68, endAge: 69 })], retirementInsurance: insurance({ portfolioBaseMonthlyToday: 1000 }) })
-    const deterministic = simulateScenario(scenario)
-    const fixedPath = simulateScenarioWithReturnPath(scenario, [0, 0, 0, 0], [0.02, 0.02, 0.02, 0.02])
-    expect(fixedPath).toEqual(deterministic)
-    expect(deterministic.accumulationRows[0]).toMatchObject({ healthInsurance: 0, careInsurance: 0, portfolioContributionBase: 0 })
-    const variable = simulateScenarioWithReturnPath(scenario, [0, 0.1, -0.2, 0], [0.03, 0.04, -0.01, 0.02])
+  it('keeps rental cash separate from its pre-tax assessment and never adds capital basis as cash', () => {
+    const input = insuredInput({ retirementIncomeStreams: [pension({ amountMonthlyToday: 4000 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 1000 }), pension({ id: 'rent', kind: 'rental-income', amountMonthlyToday: 600, effectiveDeductionRate: 0.25, rentalAssessmentMonthlyToday: 600 })], retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'confirmed' } }) })
+    const row = simulateScenario(input).retirementRows[0]
+    expect(row.retirementIncomeGross / 12).toBe(5600)
+    expect(row.portfolioContributionBase / 12).toBe(600)
+    expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5812.5, pvAssessmentMonthly: 5812.5, drvSubsidyMonthly: 350 })
+    expect(row.healthInsurance / 12).toBeCloseTo(662.3125, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(4578.4375, 8)
+  })
+  it('preserves negative available cash and funds insurance once even with zero income', () => {
+    const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 67, retirementIncomeStreams: [] })
+    const result = simulateScenario(input)
+    const row = result.retirementRows[0]
+    expect(row.retirementIncomeGross).toBe(0)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(-270.25765, 8)
+    expect(row.gapWithdrawal).toBeCloseTo(24_000 + 270.25765 * 12)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(row.gapWithdrawal * 2, 0)
+    const scenario = normalizeInput(input)
+    expect(simulateRetirementRows(scenario, result.summary.requiredCapitalAtRetirement).every(r => !r.depleted)).toBe(true)
+    expect(simulateRetirementRows(scenario, result.summary.requiredCapitalAtRetirement - 2).some(r => r.depleted)).toBe(true)
+  })
+  it('indexes bases and thresholds with path inflation; phase and stream boundaries use row start age', () => {
+    const input = insuredInput({ currentAge: 64, retirementAge: 65, planningAge: 70, annualInflationRate: 0.02,
+      retirementIncomeStreams: [pension({ endAge: 69 })], retirementInsurance: automaticInsurance({
+        bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 },
+        pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 3000, drvSubsidy: 'confirmed' },
+      }) })
+    const fixed = simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02))
+    expect(fixed).toEqual(simulateScenario(input))
+    const variable = simulateScenarioWithReturnPath(input, Array(6).fill(0), [0.03, 0.04, -0.01, 0.02, 0.05, 0])
+    expect(variable.retirementRows.map(r => r.insurance?.phase)).toEqual(['bridge', 'bridge', 'pension', 'pension', 'pension'])
     for (const row of variable.retirementRows) {
-      const active = row.ageStart === 68
-      expect(row.healthInsurance / row.inflationFactor).toBeCloseTo(2028 + (active ? 1050 : 0))
-      expect(row.careInsurance / row.inflationFactor).toBeCloseTo(432 + (active ? 432 : 0))
-      expect(row.retirementIncomeOtherDeductions / row.inflationFactor).toBeCloseTo(active ? 1200 : 0)
-      expect(row.gapWithdrawal).toBeCloseTo(row.desiredSpending - row.retirementIncomeNet)
+      const pensionActive = row.ageStart >= 67 && row.ageStart < 69
+      const capital = row.ageStart < 67 ? 2000 : 3000
+      expect(row.portfolioContributionBase / row.inflationFactor).toBeCloseTo(capital * 12)
+      expect(row.retirementIncomeGross / row.inflationFactor).toBeCloseTo(pensionActive ? 24000 : 0)
+      expect(row.healthInsurance / row.inflationFactor / 12).toBeCloseTo(capital * 0.169 + (pensionActive ? 175 : 0), 8)
+      expect(row.careInsurance / row.inflationFactor / 12).toBeCloseTo((capital + (pensionActive ? 2000 : 0)) * 0.036, 8)
+      expect(row.gapWithdrawalToday).toBeCloseTo(row.gapWithdrawal / row.inflationFactor)
     }
-    expect(variable.summary.annualGapToday).toBeCloseTo(variable.retirementRows[0].gapWithdrawal / variable.retirementRows[0].inflationFactor)
+    expect(variable.accumulationRows[0]).toMatchObject({ healthInsurance: 0, careInsurance: 0 })
   })
-
-  it.each([-0.01, 1.01, Number.NaN, Infinity])('rejects invalid rates %s', (rate) => {
-    expect(rentenlueckeInputSchema.safeParse(input({ retirementInsurance: insurance({ rates: { ...insurance().rates, pensionKv: rate } }) })).success).toBe(false)
-    expect(rentenlueckeInputSchema.safeParse(input({ retirementIncomeStreams: [stream({ pvRateOverride: rate })] })).success).toBe(false)
-    expect(rentenlueckeInputSchema.safeParse(input({ retirementIncomeStreams: [stream({ separateDeductions: { otherRate: rate } })] })).success).toBe(false)
+  it('ages children out on Jan 1 of turning-25 year but preserves permanent parenthood', () => {
+    const input = insuredInput({ currentAge: 44, retirementAge: 44, planningAge: 47, retirementIncomeStreams: [],
+      retirementInsurance: automaticInsurance({ pensionAge: 67, childBirthYears: [2002, 2004], bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 } }) })
+    const rows = simulateScenario(input).retirementRows
+    expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([expect.closeTo(0.0335, 10), 0.036, 0.036])
+    expect(rows.map(r => r.careInsurance / 12)).toEqual([expect.closeTo(67, 10), 72, 72])
   })
-
-  it.each([-1, Number.NaN, Infinity])('rejects invalid portfolio bases %s', (portfolioBaseMonthlyToday) => {
-    expect(rentenlueckeInputSchema.safeParse(input({ retirementInsurance: insurance({ portfolioBaseMonthlyToday }) })).success).toBe(false)
+  it('starts childless surcharge in turning-23 year', () => {
+    const rows = simulateScenario(insuredInput({ currentAge: 22, retirementAge: 22, planningAge: 25, retirementIncomeStreams: [], retirementInsurance: automaticInsurance({ isParent: false }) })).retirementRows
+    expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([0.036, expect.closeTo(0.042, 10), expect.closeTo(0.042, 10)])
+  })
+  it('uses advanced total rates consistently for own KV and DRV subsidy; manual replaces all rules', () => {
+    const i = automaticInsurance({ rates: { kvGeneralRate: 0.16, kvReducedRate: 0.15, pvBaseRate: 0.04 } })
+    const row = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
+    expect(row.healthInsurance / 12).toBeCloseTo(189)
+    expect(row.careInsurance / 12).toBeCloseTo(80)
+    i.pension = { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' }
+    expect(simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0].healthInsurance).toBeCloseTo(row.healthInsurance)
+    i.pension = { ...i.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 7 }
+    const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 })).retirementRows[1]
+    expect(manual.healthInsurance).toBe(0)
+    expect(manual.careInsurance).toBeCloseTo(7 * 12 * 1.1)
+    expect(manual.insurance).toMatchObject({ status: 'manual', assessment: null })
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUT } from '../defaults'
+import { cashOnlyInput } from './insuranceFixtures'
 import {
   calculateRetirementIncomeForYear,
   createDefaultRetirementIncomeStreams,
@@ -23,8 +23,7 @@ function stream(overrides: Partial<RetirementIncomeStream> = {}): RetirementInco
 }
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return {
-    ...DEFAULT_INPUT,
+  return cashOnlyInput({
     currentAge: 67,
     retirementAge: 67,
     planningAge: 70,
@@ -35,7 +34,7 @@ function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
     annualReturnBeforeRetirement: 0,
     annualReturnInRetirement: 0,
     ...overrides,
-  }
+  })
 }
 
 describe('retirement income streams', () => {
@@ -84,7 +83,7 @@ describe('retirement income streams', () => {
 
   it('ignores haircut settings for a net stream', () => {
     const income = calculateRetirementIncomeForYear(
-      [stream({ amountBasis: 'net', effectiveDeductionRate: 0.5 })],
+      input({ retirementIncomeStreams: [stream({ amountBasis: 'net', effectiveDeductionRate: 0.5 })] }),
       67,
       1.1,
     )

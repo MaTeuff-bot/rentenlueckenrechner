@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { DEFAULT_INPUT } from '../defaults'
+import { cashOnlyInput } from './insuranceFixtures'
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { normalizeInput } from '../normalizeInput'
 import { simulateAccumulationRows } from '../simulateAccumulation'
@@ -9,7 +9,7 @@ import { simulateScenario } from '../simulateScenario'
 import type { RentenlueckeInput } from '../types'
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return { ...DEFAULT_INPUT, ...overrides }
+  return cashOnlyInput(overrides)
 }
 
 describe('Rentenluecke model', () => {

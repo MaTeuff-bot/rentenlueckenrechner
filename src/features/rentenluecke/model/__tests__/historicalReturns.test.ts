@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUT } from '../defaults'
+import { cashOnlyInput } from './insuranceFixtures'
+const DEFAULT_INPUT = cashOnlyInput()
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
