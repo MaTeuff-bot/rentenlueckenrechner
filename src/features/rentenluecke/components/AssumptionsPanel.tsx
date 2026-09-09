@@ -20,10 +20,10 @@ export function AssumptionsPanel() {
         Folgejahres.
       </p>
       <p>
-        Steuern werden nur über manuelle Abzüge berücksichtigt. Kranken- und Pflegeversicherung sind entweder im
-        bisherigen Gesamtabzug enthalten oder werden nach manueller Aktivierung und Prüfung separat geschätzt. Die tatsächlichen Kranken- und Pflegeversicherungsbeiträge hängen unter
+        Steuern werden nur über sonstige Abzüge berücksichtigt. KV/PV wird nach den bestätigten Angaben
+        automatisch geschätzt oder durch eigene Gesamtbeträge für die jeweilige Phase ersetzt. Die tatsächlichen Beiträge hängen unter
         anderem vom Versicherungsstatus und den Einkommensarten ab. Dies ist keine Steuer- oder
-        Sozialversicherungsberatung oder -berechnung.
+        Sozialversicherungsberatung und kein Beitragsbescheid.
       </p>
       <p>
         Darüber hinaus nicht berücksichtigt werden insbesondere: gesetzliche Rentenformel, Rentenanpassungen,

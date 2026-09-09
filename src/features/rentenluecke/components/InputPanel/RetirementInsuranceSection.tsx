@@ -1,59 +1,69 @@
-import { getInsuranceBaseError, getInsuranceRateError } from '../../model/inputSchema'
-import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
-import { PercentInput } from '../../../../shared/components/PercentInput'
-import {
-  INSURANCE_REFERENCE, type InsuranceRates, type RetirementInsurance,
-} from '../../model/retirementInsurance'
+import { useId } from 'react'
+import type { RentenlueckeInput } from '../../model/types'
+import { phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
 
-const RATE_LABELS: Record<keyof InsuranceRates, string> = {
-  pensionKv: 'KV-Eigenanteil gesetzliche Rente',
-  generalKv: 'KV-Eigenanteil Betriebsrente / übrige Einkommen',
-  passiveKv: 'KV-Eigenanteil private Rente / Miete / manuelle Portfolio-Basis',
-  pv: 'PV-Eigenanteil im Ruhestand',
-}
-
-export function RetirementInsuranceSection({ insurance, onChange }: {
-  insurance: RetirementInsurance
-  onChange: (insurance: RetirementInsurance) => void
+export function OptionalNumber({ label, value, onChange, max, min = 0, step = 'any' }: {
+  label: string; value?: number; onChange: (value: number | undefined) => void; max?: number; min?: number; step?: string
 }) {
-  return (
-    <fieldset className="wide-fieldset">
-      <legend>Kranken- und Pflegeversicherung im Ruhestand</legend>
-      <label className="toggle">
-        <input type="checkbox" checked={insurance.enabled}
-          onChange={(event) => onChange({ ...insurance, enabled: event.target.checked })} />
-        Geführte manuelle GKV-/PV-Schätzung aktivieren
-      </label>
-      <p>Freiwillige Planungshilfe für GKV. Nettoangaben sind vollständig verfügbar. Ohne Aktivierung gelten die bisherigen pauschalen Gesamtabzüge.</p>
-      {insurance.enabled && <>
-        <label className="field">
-          <span className="field-label">Mein angegebener Versicherungsstatus im Ruhestand</span>
-          <select value={insurance.status} onChange={(event) => onChange({ ...insurance, status: event.target.value as RetirementInsurance['status'] })}>
-            <option value="unknown">Unbekannt / noch zu klären</option>
-            <option value="kvdr">KVdR (pflichtversichert)</option>
-            <option value="voluntary">Freiwillig gesetzlich versichert</option>
-          </select>
-        </label>
-        <p>Deine Angabe ist eine Annahme. Die Krankenkasse prüft den Status; die App ermittelt keine KVdR-Berechtigung.</p>
-        <p>Stand {INSURANCE_REFERENCE.verifiedOn}: Bei KVdR zählen insbesondere gesetzliche Rente, Versorgungsbezüge und nebenher erzieltes selbstständiges Arbeitseinkommen. Bei freiwilliger GKV zählen grundsätzlich auch weitere Einnahmen wie Mieten und Kapitalerträge. Die Kategorien unten sind vereinfachte, änderbare Planungsvorschläge.</p>
-        <details>
-          <summary>Referenzsätze {INSURANCE_REFERENCE.year} prüfen und ändern</summary>
-          <p>Offizielle Quellen geprüft am {INSURANCE_REFERENCE.verifiedOn}. Alle Sätze sind deine eigene Belastung und bleiben über die gesamte Projektion konstant.</p>
-          <p>Gesetzliche Rente: (14,6 % + 2,9 % durchschnittlicher Zusatzbeitrag) / 2 = 8,75 %. Der hälftige Anteil einschließlich Zusatzbeitrag des Rentenversicherungsträgers ist bereits berücksichtigt; bei freiwilliger GKV wird der entsprechende Zuschuss als erhalten angenommen. Der kassenindividuelle Zusatzbeitrag kann abweichen.</p>
-          <p>Betriebsrente und übrige Einkommen: zunächst 17,5 % ohne fremde Beteiligung. Private Rente, Miete und Portfolio-Basis: zunächst 16,9 % (14 % ermäßigt + 2,9 %) ohne Krankengeldanspruch angenommen. Bei Nebenjobs insbesondere Beschäftigungsart, Arbeitgeberanteil und PV-Eigenanteil selbst prüfen und am Strom überschreiben. Die Rentenbeteiligung wird nur für gesetzliche Renten angenommen.</p>
-          <p>PV: Referenz 3,6 % ohne Kinderlosenzuschlag und ohne Kinderabschläge, im Ruhestand selbst getragen. Für Kinderlose mit Zuschlag: 4,2 %. Die Ausgangsannahme sagt nichts über deine Kinder aus; wähle den passenden eigenen Satz. Keine automatische Kinderanpassung oder Ableitung aus dem Alter.</p>
-          {Object.entries(RATE_LABELS).map(([key, label]) => <PercentInput step={0.01} key={key} id={`insurance-${key}`} label={label}
-            value={insurance.rates[key as keyof InsuranceRates]} error={getInsuranceRateError(insurance.rates[key as keyof InsuranceRates])} min={0} max={100}
-            onChange={(value) => onChange({ ...insurance, rates: { ...insurance.rates, [key]: value } })} />)}
-          <button type="button" className="secondary-button" onClick={() => onChange({ ...insurance, rates: { ...insurance.rates, pv: INSURANCE_REFERENCE.childlessPv } })}>PV-Annahme: kinderlos mit Zuschlag (4,2 %)</button>
-          <p><a href={INSURANCE_REFERENCE.sources.bmgContributions}>BMG: Beiträge und Einkommensarten</a> · <a href={INSURANCE_REFERENCE.sources.bmgCare}>BMG: Pflegebeiträge und Ausnahmen</a> · <a href={INSURANCE_REFERENCE.sources.drv}>DRV: Status, Rentenbeteiligung und Pflegeversicherung</a></p>
-        </details>
-        <p>Aktuelle PV-Annahme: {(insurance.rates.pv * 100).toLocaleString('de-DE')} % eigener Beitrag. Bitte ausdrücklich prüfen; der Startwert 3,6 % enthält keinen Kinderlosenzuschlag.</p>
-        <CurrencyInput id="insurance-portfolio-base" label="Manuelle monatliche Portfolio-Beitragsbasis, heutige Kaufkraft" value={insurance.portfolioBaseMonthlyToday} error={getInsuranceBaseError(insurance.portfolioBaseMonthlyToday)}
-          onChange={(portfolioBaseMonthlyToday) => onChange({ ...insurance, portfolioBaseMonthlyToday })} />
-        <p>Nur eine selbst geschätzte Beitragsbasis ab Rentenbeginn, kein zusätzliches Einkommen. 0 € bedeutet: keine Portfolio-Beiträge angesetzt. Positive Beträge werden unabhängig vom Status mit den Sätzen für die Portfolio-Basis und PV belastet. Nicht aus Depotwert, Gesamtrendite oder Entnahme abgeleitet. Trage hier keine bereits in Nettobeträgen oder Pauschalen enthaltenen Versicherungskosten ein.</p>
-        <p>Grenzen: keine Beitragsbemessungsgrenzen, Mindestbeiträge oder Freibeträge; keine PKV-Formeln, Familien-/Partnerregeln, grenzüberschreitenden Fälle, Steuern oder Anschaffungskosten-/Gewinnverfolgung. PKV kann weiterhin über Nettoangaben oder manuelle Gesamtabzüge abgebildet werden. Keine rechtliche Feststellung oder Sozialversicherungsberatung.</p>
+  const id = useId()
+  const invalid = value !== undefined && (!Number.isFinite(value) || value < min || (max !== undefined && value > max) || (step === '1' && !Number.isInteger(value)))
+  return <label className="field" htmlFor={id}><span className="field-label" id={`${id}-label`}>{label}</span><input aria-labelledby={`${id}-label`} id={id} type="number" inputMode={step === '1' ? 'numeric' : 'decimal'} min={min} max={max} step={step} value={Number.isNaN(value) ? '' : value ?? ''} aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined} onChange={e => onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />{invalid && <span className="field-error" id={`${id}-error`}>Bitte {step === '1' ? 'eine ganze Zahl' : 'einen Wert'} ab {min}{max !== undefined ? ` bis ${max}` : ''} eingeben.</span>}</label>
+}
+export function RetirementInsuranceSection({ insurance: i, input, onChange }: {
+  insurance: RetirementInsurance; input: RentenlueckeInput; onChange: (insurance: RetirementInsurance) => void
+}) {
+  const phases = (['bridge', 'pension'] as const).filter(phase => phase === 'bridge' ? i.pensionAge !== undefined && input.retirementAge < i.pensionAge : i.pensionAge === undefined || i.pensionAge < input.planningAge)
+  const reasonsFor = (phase: 'bridge' | 'pension') => phaseManualReasons(i, phase, phaseStreams(input.retirementIncomeStreams ?? [], i, phase, input.retirementAge, input.planningAge))
+  const automatic = phases.some(phase => !reasonsFor(phase).length)
+  return <fieldset className="wide-fieldset"><legend>Kranken- und Pflegeversicherung</legend>
+    <OptionalNumber label="Beginn der gesetzlichen Rentenphase (Alter)" value={i.pensionAge} max={120} step="1" onChange={pensionAge => onChange({ ...i, pensionAge })} />
+    <p>Vom Arbeitsende unabhängig. Aus der frühesten gesetzlichen Rente vorbelegt, separat änderbar. Bei Abweichung bitte Beginn oder Einkommensstrom korrigieren.</p>
+    {phases.map(phase => {
+      const p = i[phase], label = phase === 'bridge' ? 'Brücke' : 'Rentenphase'
+      const update = (patch: Partial<InsurancePhase>) => onChange({ ...i, [phase]: { ...p, ...patch } })
+      const reasons = reasonsFor(phase)
+      return <fieldset key={phase}><legend>{label}</legend>
+        <label className="field"><span className="field-label">Versicherungsstatus – {label}</span><select value={p.status ?? ''} onChange={e => update({ status: (e.target.value || undefined) as InsurancePhase['status'] })}>
+          <option value="">Bitte auswählen</option><option value="kvdr">KVdR (selbst gewählt)</option><option value="voluntary">Freiwillige GKV</option><option value="unknown">Unbekannt – freiwillige GKV annehmen</option><option value="unsupported">Anderer Status / PKV / Familienversicherung</option>
+        </select></label>
+        {p.status === 'unknown' && <p>Konservative Annahme: freiwillige GKV. Kein garantierter Höchstbeitrag. Die App prüft keine KVdR-Berechtigung.</p>}
+        {!p.manual && p.status !== 'unsupported' && !(phase === 'bridge' && p.status === 'kvdr') && <label className="field"><span className="field-label">Versicherungsumstände – {label}</span><select value={p.circumstances ?? ''} onChange={e => update({ circumstances: (e.target.value || undefined) as InsurancePhase['circumstances'] })}>
+          <option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische GKV, keine Sonderumstände</option><option value="unsupported">Sonderumstände / noch ungeklärt</option>
+        </select></label>}
+        <details><summary>Welche Umstände sind unterstützt?</summary><p>Automatisch unterstützt: eine Person ohne Beschäftigung, Selbstständigkeit, Krankengeld, Partner-/Haushaltsbemessung oder besondere Mindestbeitragsregeln. In der Brücke außerdem keine Rentenantragsteller-, Familien- oder Sozialleistungsregelung. Ungeklärte Kinderanerkennung zählt als Sonderumstand.</p></details>
+        <details><summary>Erweitert – eigene Gesamtannahme</summary><label><input type="checkbox" checked={p.manual ?? false} onChange={e => update({ manual: e.target.checked })} />Gesamte {label} manuell berechnen</label></details>
+        {reasons.length ? <>
+          <p className="source-warning">{reasons.join('; ')}. Für die gesamte {label} ersetzen eigene KV/PV-Gesamtbeträge die Automatik. Keine automatische Bemessung oder zusätzlichen Zuschüsse.</p>
+          <OptionalNumber label={`Eigene KV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.kvMonthlyToday} onChange={kvMonthlyToday => update({ kvMonthlyToday })} />
+          <OptionalNumber label={`Eigene PV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.pvMonthlyToday} onChange={pvMonthlyToday => update({ pvMonthlyToday })} />
+          <p>Beträge für die ganze Phase, einschließlich aller Einkommen. Auch 0 ausdrücklich eintragen. Einkommen vor diesen Versicherungsabzügen erfassen.</p>
+        </> : p.status && p.status !== 'kvdr' && <>
+          <OptionalNumber label={`Beitragsrelevante Kapitalerträge – ${label} (€/Monat heute)`} value={p.capitalMonthlyToday} onChange={capitalMonthlyToday => update({ capitalMonthlyToday })} />
+          <p>Vor Steuern, nach beitragsrechtlichen Kosten. Schätzung oder ausdrücklich 0. Kein Depotwert, keine Gesamtrendite oder Entnahme; kein zusätzliches auszahlbares Einkommen. Bleibt in heutiger Kaufkraft konstant.</p>
+          {phase === 'pension' && <label className="field"><span className="field-label">DRV-Zuschuss – Rentenphase</span><select value={p.drvSubsidy ?? ''} onChange={e => update({ drvSubsidy: (e.target.value || undefined) as InsurancePhase['drvSubsidy'] })}><option value="">Bitte auswählen</option><option value="confirmed">Erhalt bestätigt</option><option value="not-received">Nicht erhalten / nicht angesetzt</option></select></label>}
+        </>}
+      </fieldset>
+    })}
+    {automatic && <>
+      <OptionalNumber label="Kassenindividueller Zusatzbeitrag (%)" value={i.insurerAdditionalRate === undefined ? undefined : i.insurerAdditionalRate * 100} max={20} onChange={v => onChange({ ...i, insurerAdditionalRate: v === undefined ? undefined : v / 100 })} />
+      <label className="field"><span className="field-label">Dauerhafte anerkannte PV-Elterneigenschaft</span><select value={i.isParent === undefined ? '' : String(i.isParent)} onChange={e => onChange({ ...i, isParent: e.target.value === '' ? undefined : e.target.value === 'true', childBirthYears: [], childrenConfirmed: undefined })}><option value="">Bitte auswählen</option><option value="true">Ja, dauerhaft anerkannt</option><option value="false">Nein, kinderlos</option></select></label>
+      {i.isParent && <>
+        <p>Alle anerkannten Kinder einzeln erfassen, Zwillinge zweimal; ältere Kinder dürfen in der Liste bleiben. Keine zukünftigen Geburten. Bei ungeklärter Anerkennung Sonderumstände wählen.</p>
+        {i.childBirthYears.map((year, index) => <div key={index}>
+          <OptionalNumber label={`Geburtsjahr Kind ${index + 1}`} value={year || undefined} min={1800} max={i.referenceYear} step="1" onChange={value => onChange({ ...i, childrenConfirmed: false, childBirthYears: i.childBirthYears.map((y, n) => n === index ? value ?? 0 : y) })} />
+          <button type="button" className="secondary-button" onClick={() => onChange({ ...i, childrenConfirmed: false, childBirthYears: i.childBirthYears.filter((_, n) => n !== index) })}>Kind {index + 1} entfernen</button>
+        </div>)}
+        <button type="button" className="secondary-button" onClick={() => onChange({ ...i, childrenConfirmed: false, childBirthYears: [...i.childBirthYears, 0] })}>Anerkanntes Kind hinzufügen</button>
+        <label className="field"><span><input type="checkbox" checked={i.childrenConfirmed ?? false} onChange={e => onChange({ ...i, childrenConfirmed: e.target.checked })} />Kinderliste vollständig bestätigt (auch ohne Kinder unter 25)</span></label>
       </>}
-    </fieldset>
-  )
+      {i.rates && Object.values(i.rates).some(value => value !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter „Erweitert“ prüfen oder auf Standards zurücksetzen.</p>}
+      <details><summary>Erweitert – gesetzliche Satzannahmen ändern</summary>
+        <p>Gesamtsätze vor Zusatzbeitrag und DRV-Beteiligung. Ein gemeinsamer Satz je Beitragsart; PV-Kinderregeln bleiben aktiv. Keine separaten Eigenanteils-Sätze.</p>
+        {([['kvGeneralRate', 'Allgemeiner KV-Satz', 14.6], ['kvReducedRate', 'Ermäßigter KV-Satz', 14], ['pvBaseRate', 'PV-Basissatz', 3.6]] as const).map(([key, label, standard]) => <OptionalNumber key={key} label={`${label} (%; Standard ${standard})`} value={i.rates?.[key] === undefined ? undefined : i.rates[key]! * 100} min={key === 'pvBaseRate' ? 1 : 0} max={50} onChange={value => onChange({ ...i, rates: { ...i.rates, [key]: value === undefined ? undefined : value / 100 } })} />)}
+        <button type="button" className="secondary-button" onClick={() => onChange({ ...i, rates: undefined })}>Gesetzliche Standards verwenden</button>
+      </details>
+    </>}
+    <details><summary>Jahresmodell und Rechenregeln</summary><p>Jahresmodell: Arbeitsende, Einkommensbeginn/-ende und Rentenphase gelten ab dem jeweiligen Zeilen-Startalter, ohne Teiljahre. Basisjahr {i.referenceYear}; Alter = Kalenderjahr minus Geburtsjahr. PV: Kinder zählen ab 1. Januar ihres 25. Geburtstagsjahres nicht mehr; Kinderlosenzuschlag ab dem Jahr des 23. Geburtstags. Elterneigenschaft bleibt dauerhaft. Näherung ohne Monatsgenauigkeit.</p>
+    <p>Grenzen und Geldbeträge steigen mit der Inflation des jeweiligen Simulationspfads; Prozentsätze bleiben konstant. Regeln 2026, keine Bescheid- oder Centgenauigkeit.</p></details>
+  </fieldset>
 }

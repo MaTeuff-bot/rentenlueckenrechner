@@ -73,6 +73,7 @@ button {
 
 .content-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   padding: 28px 0 56px;
 }
@@ -86,6 +87,7 @@ button {
 }
 
 .panel {
+  min-width: 0;
   padding: 22px;
 }
 
@@ -711,6 +713,28 @@ tr:last-child td {
     height: 320px;
   }
 
+  .chart-controls,
+  .chart-controls .toggle,
+  .chart-sex-field,
+  .chart-sex-field select {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .chart-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chart-controls .toggle {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .chart-controls .toggle input {
+    flex-shrink: 0;
+  }
+
   .outcome-risk-grid,
   .outcome-controls {
     grid-template-columns: 1fr;
@@ -741,3 +765,18 @@ tr:last-child td {
 .retirement-income-note { margin-top: 0; color: #52606d; }
 .retirement-income-add, .retirement-income-remove { justify-self: start; }
 @media (max-width: 760px) { .retirement-income-stream { grid-template-columns: 1fr; } }
+
+/* Guided insurance controls and the ledger's monthly reconciliation. */
+.insurance-breakdown .field { max-width: 32rem; margin-bottom: 12px; }
+.insurance-reconciliation { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 24px; margin: 20px 0; }
+.insurance-reconciliation dt { color: #425466; }
+.insurance-reconciliation dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.insurance-breakdown details { margin-top: 16px; }
+.wide-fieldset > details, .wide-fieldset > fieldset > details { margin: 12px 0; }
+.wide-fieldset > .field > input { border: 1px solid #9fb0c0; border-radius: 6px; }
+summary { cursor: pointer; }
+summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #21714c; outline-offset: 3px; }
+@media (max-width: 560px) {
+  .insurance-reconciliation { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .insurance-reconciliation dd { text-align: left; margin-bottom: 12px; font-weight: 600; }
+}

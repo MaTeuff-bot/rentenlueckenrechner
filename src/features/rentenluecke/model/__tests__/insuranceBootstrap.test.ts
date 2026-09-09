@@ -1,8 +1,6 @@
 import { generateHistoricalInflationPath, sampleHistoricalYearsForPath } from '../historicalReturns/bootstrapSampling'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUT } from '../defaults'
-import { createDefaultRetirementInsurance } from '../retirementInsurance'
-import { createDefaultRetirementIncomeStreams } from '../retirementIncomeStreams'
+import { automaticInsurance, insuredInput, pension } from './insuranceFixtures'
 import { createPortfolioComponents, createSeededRandom, simulateScenarioWithReturnPath } from '../stochasticReturns'
 import { createHistoricalBootstrapSeed, DEFAULT_HISTORICAL_INFLATION_SERIES_ID, DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
   findInflationSourceOption, generateHistoricalReturnPath, getValidHistoricalYears,
@@ -14,25 +12,27 @@ const settings = {
   inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   simulations: 5,
 }
-const legacy: RentenlueckeInput = {
-  ...DEFAULT_INPUT, currentAge: 66, retirementAge: 67, planningAge: 71,
-  retirementIncomeStreams: createDefaultRetirementIncomeStreams(DEFAULT_INPUT).map((stream) => ({ ...stream, effectiveDeductionRate: 0.2 })),
-}
-const insured: RentenlueckeInput = {
-  ...legacy,
-  retirementInsurance: { ...createDefaultRetirementInsurance(), enabled: true, status: 'kvdr', portfolioBaseMonthlyToday: 20_000 },
-  retirementIncomeStreams: legacy.retirementIncomeStreams!.map((stream) => ({ ...stream, separateDeductions: { otherRate: 0.05 } })),
-}
+const insured: RentenlueckeInput = insuredInput({
+  currentAge: 66, retirementAge: 66, planningAge: 71,
+  retirementIncomeStreams: [pension({ amountMonthlyToday: 50, effectiveDeductionRate: 0.05 })],
+  retirementInsurance: automaticInsurance({
+    bridge: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 20000 },
+    pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 20000, drvSubsidy: 'confirmed' },
+  }),
+})
 
 describe('insurance bootstrap and reference consistency', () => {
-  it('preserves legacy seeds, reference rows and distributions while disabled', () => {
-    const disabled: RentenlueckeInput = { ...insured, retirementInsurance: { ...insured.retirementInsurance!, enabled: false } }
-    expect(createHistoricalBootstrapSeed(disabled, settings)).toBe(createHistoricalBootstrapSeed(legacy, settings))
-    expect(simulateHistoricalBootstrapReferenceScenario(disabled, settings)).toEqual(simulateHistoricalBootstrapReferenceScenario(legacy, settings))
-    expect(runHistoricalBootstrapSimulation(disabled, settings)).toEqual(runHistoricalBootstrapSimulation(legacy, settings))
-    // Unreviewed combined haircuts also stay untouched after opt-in.
-    const unreviewed = { ...legacy, retirementInsurance: { ...insured.retirementInsurance!, portfolioBaseMonthlyToday: 0 } }
-    expect(simulateHistoricalBootstrapReferenceScenario(unreviewed, settings)).toEqual(simulateHistoricalBootstrapReferenceScenario(legacy, settings))
+  it('keeps market seeds stable for insurance-only edits and repeats identical summaries', () => {
+    const manual = { ...insured, retirementInsurance: automaticInsurance({
+      bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+    }) }
+    expect(createHistoricalBootstrapSeed(insured, settings)).toBe(createHistoricalBootstrapSeed(manual, settings))
+    expect(runHistoricalBootstrapSimulation(insured, settings)).toEqual(runHistoricalBootstrapSimulation(insured, settings))
+    expect(simulateHistoricalBootstrapScenario(insured, settings).metadata.sampledYears)
+      .toEqual(simulateHistoricalBootstrapScenario(manual, settings).metadata.sampledYears)
+    expect(simulateHistoricalBootstrapScenario(insured, settings).retirementRows[0].gapWithdrawal)
+      .toBeGreaterThan(simulateHistoricalBootstrapScenario(manual, settings).retirementRows[0].gapWithdrawal)
   })
 
   it('uses the same cashflow in bootstrap and reference ledgers, including costs above income', () => {

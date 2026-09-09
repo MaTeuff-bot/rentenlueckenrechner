@@ -55,20 +55,15 @@ function hashString(value: string): number {
   return hash >>> 0
 }
 
-// Insurance comparisons use the same market paths. In particular, disabled settings
-// and migrated scenarios must retain the exact seed used before this feature existed.
+// Insurance-only changes share market paths for meaningful scenario comparisons.
 function withoutInsuranceSettings(input: RentenlueckeInput): RentenlueckeInput {
   const result = { ...input }
   delete result.retirementInsurance
-  if (input.retirementIncomeStreams) {
-    result.retirementIncomeStreams = input.retirementIncomeStreams.map((stream) => {
-      const legacy = { ...stream }
-      delete legacy.separateDeductions
-      delete legacy.insuranceTreatment
-      delete legacy.kvRateOverride
-      delete legacy.pvRateOverride
-      return legacy
-    })
-  }
+  if (input.retirementIncomeStreams) result.retirementIncomeStreams = input.retirementIncomeStreams.map(stream => {
+    const cash = { ...stream }
+    delete cash.support
+    delete cash.rentalAssessmentMonthlyToday
+    return cash
+  })
   return result
 }

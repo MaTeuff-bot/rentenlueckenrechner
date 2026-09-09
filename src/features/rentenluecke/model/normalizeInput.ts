@@ -1,9 +1,13 @@
-import { createDefaultRetirementInsurance } from './retirementInsurance'
+import { createDefaultRetirementInsurance, insuranceSetupIssues } from './retirementInsurance'
 import type { NormalizedScenario, RentenlueckeInput } from './types'
 import { createDefaultRetirementIncomeStreams } from './retirementIncomeStreams'
 
-export function normalizeInput(input: RentenlueckeInput): NormalizedScenario {
+export function normalizeInput(rawInput: RentenlueckeInput): NormalizedScenario {
+  const input = { ...rawInput, retirementIncomeStreams: rawInput.retirementIncomeStreams ?? createDefaultRetirementIncomeStreams(rawInput) }
+  const issues = insuranceSetupIssues(input)
+  if (issues.length) throw new Error(issues.join(' '))
   return {
+    sourceInput: input,
     currentAge: input.currentAge,
     retirementAge: input.retirementAge,
     planningAge: input.planningAge,

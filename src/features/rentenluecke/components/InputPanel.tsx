@@ -114,9 +114,10 @@ export function InputPanel({
 
         <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
 
-        <RetirementInsuranceSection insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} />
+        <RetirementInsuranceSection input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} />
 
         <RetirementIncomeStreamsSection
+          input={input}
           insurance={input.retirementInsurance}
           streams={retirementIncomeStreams}
           onUpdate={onRetirementIncomeStreamChange}

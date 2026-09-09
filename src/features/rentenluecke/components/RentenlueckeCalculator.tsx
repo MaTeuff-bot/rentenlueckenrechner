@@ -1,5 +1,6 @@
-import { createDefaultRetirementInsurance } from '../model/retirementInsurance'
-import { InsuranceWarnings } from './InsuranceWarnings'
+import { useState } from 'react'
+import { RESET_NOTICE_KEY } from '../hooks/scenarioState/persistence'
+import { InsuranceBreakdown } from './InsuranceBreakdown'
 import { AssumptionsPanel } from './AssumptionsPanel'
 import { InputPanel } from './InputPanel'
 import { ScenarioOutcomePanel } from './ScenarioOutcomePanel'
@@ -10,6 +11,7 @@ import { useScenarioState } from '../hooks/useScenarioState'
 export function RentenlueckeCalculator() {
   const {
     input,
+    insuranceIssues,
     allocation,
     portfolioBuckets,
     retirementIncomeStreams,
@@ -33,6 +35,7 @@ export function RentenlueckeCalculator() {
     reset,
   } = useScenarioState()
 
+  const [resetNotice, setResetNotice] = useState(() => localStorage.getItem(RESET_NOTICE_KEY) === '1')
   return (
     <main>
       <header className="hero">
@@ -47,6 +50,7 @@ export function RentenlueckeCalculator() {
       </header>
 
       <div className="page-shell content-stack">
+        {resetNotice && <section className="panel" role="status">Die bisherigen Eingaben wurden für die neue KV/PV-Berechnung zurückgesetzt. Bitte neu ergänzen. <button type="button" className="secondary-button" onClick={() => { localStorage.removeItem(RESET_NOTICE_KEY); setResetNotice(false) }}>Hinweis schließen</button></section>}
         <InputPanel
           input={input}
           allocation={allocation}
@@ -69,7 +73,7 @@ export function RentenlueckeCalculator() {
           onReset={reset}
         />
 
-        <InsuranceWarnings insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} streams={retirementIncomeStreams} />
+        {insuranceIssues.length > 0 && <section className="panel source-warning" aria-label="KV/PV-Angaben ergänzen" role="status"><strong>KV/PV-Angaben fehlen oder widersprechen sich. Noch keine Prognose.</strong><ul>{insuranceIssues.map(issue => <li key={issue}>{issue}</li>)}</ul></section>}
 
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
@@ -78,6 +82,7 @@ export function RentenlueckeCalculator() {
           </section>
         ) : (
           <>
+            <InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} />
             <SummaryCards result={result} stochasticSummary={stochasticSummary} />
             <ScenarioOutcomePanel
               result={result}

@@ -1,3 +1,4 @@
+import { createDefaultRetirementInsurance, earliestPensionAge } from '../../model/retirementInsurance'
 import { DEFAULT_INPUT } from '../../model/defaults'
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
@@ -12,7 +13,7 @@ import type { ScenarioState } from './types'
 export function createDefaultState(): ScenarioState {
   const baseInput = withDeterministicPortfolioReturn(DEFAULT_INPUT, calculatePortfolioExpectedReturn(DEFAULT_ASSET_ALLOCATION))
   const retirementIncomeStreams = createDefaultRetirementIncomeStreams(baseInput)
-  const input = { ...baseInput, retirementIncomeStreams }
+  const input = { ...baseInput, retirementIncomeStreams, retirementInsurance: createDefaultRetirementInsurance(earliestPensionAge(retirementIncomeStreams)) }
   return {
     input,
     retirementIncomeStreams,

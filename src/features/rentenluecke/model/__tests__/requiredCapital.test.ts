@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUT } from '../defaults'
+import { cashOnlyInput } from './insuranceFixtures'
+const DEFAULT_INPUT = cashOnlyInput()
 import { normalizeInput } from '../normalizeInput'
 import { calculateRequiredCapitalAtRetirement } from '../requiredCapital'
 import { simulateRetirementRows } from '../simulateRetirement'

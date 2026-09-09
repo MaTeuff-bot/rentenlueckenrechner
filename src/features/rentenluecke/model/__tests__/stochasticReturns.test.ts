@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUT } from '../defaults'
+import { cashOnlyInput } from './insuranceFixtures'
 import { simulateScenario } from '../simulateScenario'
 import {
   ASSET_CLASS_ASSUMPTIONS,
@@ -16,7 +16,7 @@ import {
 import type { RentenlueckeInput } from '../types'
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return { ...DEFAULT_INPUT, ...overrides }
+  return cashOnlyInput(overrides)
 }
 
 function settings(overrides: Partial<StochasticSettings> = {}): StochasticSettings {

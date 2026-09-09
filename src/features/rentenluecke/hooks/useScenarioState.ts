@@ -1,4 +1,4 @@
-import type { RetirementInsurance } from '../model/retirementInsurance'
+import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, type RetirementInsurance } from '../model/retirementInsurance'
 import { useEffect, useMemo, useState } from 'react'
 import {
   findInflationSourceOption,
@@ -36,11 +36,11 @@ export function useScenarioState() {
   const allocation = useMemo(() => calculateAllocationFromBuckets(portfolioBuckets), [portfolioBuckets])
   const input = useMemo(() => {
     const annualReturn = calculatePortfolioExpectedReturn(allocation)
-    return withDeterministicPortfolioReturn({
+    return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
       retirementIncomeStreams,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
-    }, annualReturn)
+    }), annualReturn)
   }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
@@ -49,7 +49,8 @@ export function useScenarioState() {
   const fieldErrors = useMemo<Partial<Record<InputFieldName, string>>>(() => {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
-  const isValid = parsedInput.success && !portfolioBucketError && !allocationError
+  const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
+  const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
     () => ({
       portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets),
@@ -72,10 +73,10 @@ export function useScenarioState() {
   }, [historicalSettings, isValid, parsedInput])
 
   useEffect(() => {
-    if (!isValid || !parsedInput.success) return
+    if (!parsedInput.success) return
     localStorage.setItem(
       STORAGE_KEY,
-      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, retirementIncomeStreams, historical }),
+      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, retirementIncomeStreams: parsedInput.data.retirementIncomeStreams ?? [], historical }),
     )
   }, [historical, isValid, parsedInput, portfolioBuckets, retirementIncomeStreams])
 
@@ -170,6 +171,7 @@ export function useScenarioState() {
 
   return {
     input,
+    insuranceIssues,
     allocation,
     portfolioBuckets,
     retirementIncomeStreams,

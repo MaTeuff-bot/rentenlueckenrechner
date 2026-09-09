@@ -3,9 +3,9 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_INPUT } from '../../model/defaults'
-import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS, SYNTHETIC_RETURN_SERIES_IDS, simulateHistoricalBootstrapReferenceScenario } from '../../model/historicalReturns'
+import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS, SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
 import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
-import { calculatePortfolioExpectedReturn, createPortfolioComponents, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
+import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import { useScenarioState } from '../useScenarioState'
 import { createDefaultState } from '../scenarioState/defaults'
 import { parsePersistedScenarioState, serializeScenarioState } from '../scenarioState/persistence'
@@ -19,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v12 scenario with income streams and annual bucket costs', () => {
+  it('roundtrips a v13 scenario with income streams and annual bucket costs', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -31,7 +31,7 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 12,
+      version: 13,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
@@ -39,46 +39,7 @@ describe('parsePersistedScenarioState', () => {
     expect(JSON.parse(serializeScenarioState(scenario)).portfolioBuckets.every((bucket: object) => !('role' in bucket))).toBe(true)
   })
 
-  it('migrates v10 aggregate retirement income into one gross statutory pension stream', () => {
-    const legacy = createDefaultState()
-    const input = { ...legacy.input, monthlyRetirementIncomeToday: 2_345, retirementIncomeStreams: undefined }
-    const migrated = parsePersistedScenarioState(persistedJson({
-      version: 10,
-      input,
-      portfolioBuckets: legacy.portfolioBuckets,
-      historical: legacy.historical,
-    }))
-
-    expect(migrated.retirementIncomeStreams).toEqual([{
-      id: 'statutory-pension',
-      name: 'Gesetzliche Rente',
-      kind: 'gesetzliche-rente',
-      amountMonthlyToday: 2_345,
-      startAge: input.retirementAge,
-      endAge: null,
-      amountBasis: 'gross',
-      deductionMode: 'effectiveHaircut',
-      effectiveDeductionRate: 0,
-    }])
-  })
-
-  it('defaults a missing category in an existing v11 stream during migration', () => {
-    const scenario = createDefaultState()
-    const retirementIncomeStreams = scenario.retirementIncomeStreams.map((stream) => {
-      const streamWithoutKind = { ...stream }
-      delete streamWithoutKind.kind
-      return streamWithoutKind
-    })
-    const parsed = parsePersistedScenarioState(persistedJson({
-      version: 11,
-      ...scenario,
-      retirementIncomeStreams,
-    }))
-
-    expect(parsed.retirementIncomeStreams[0].kind).toBe('gesetzliche-rente')
-  })
-
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])('falls back to defaults for a v%i shape', (version) => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])('falls back to defaults for a v%i shape', (version) => {
     expect(parsePersistedScenarioState(persistedJson({
       version,
       input: { ...DEFAULT_INPUT, currentCapital: 123_456 },
@@ -106,16 +67,11 @@ describe('createDefaultState', () => {
 })
 
 describe('useScenarioState', () => {
-  it('keeps the default scenario output unchanged', () => {
-    const { result } = renderHook(() => useScenarioState())
-    const defaults = createDefaultState()
-    const expectedSettings = {
-      portfolioComponents: createPortfolioComponents(DEFAULT_ASSET_ALLOCATION, DEFAULT_HISTORICAL_RETURN_SERIES_IDS),
-      inflationSourceId: defaults.historical.inflationSourceId,
-      simulations: result.current.historicalSettings.simulations,
-    }
-
-    expect(result.current.result).toEqual(simulateHistoricalBootstrapReferenceScenario(defaults.input, expectedSettings))
+  it('keeps new scenarios incomplete until insurance questions are answered', () => {
+    const { result } = renderHook(useScenarioState)
+    expect(result.current.result).toBeNull()
+    expect(result.current.stochasticSummary).toBeNull()
+    expect(result.current.insuranceIssues.length).toBeGreaterThan(0)
   })
 
   it('derives input, allocation, and historical components from persisted buckets', () => {
@@ -129,8 +85,8 @@ describe('useScenarioState', () => {
       { id: 'zero', name: 'Zero', value: 0, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
     ]
     localStorage.setItem(
-      'rentenlueckenrechner.scenario.v10',
-      JSON.stringify({ version: 10, ...persisted }),
+      'rentenlueckenrechner.scenario.v13',
+      serializeScenarioState(persisted),
     )
 
     const { result } = renderHook(() => useScenarioState())
@@ -174,13 +130,17 @@ describe('useScenarioState', () => {
   })
 
   it('updates output and supports adding/removing retirement income streams', () => {
+    const state = createDefaultState()
+    state.input = { ...state.input, currentAge: 65, planningAge: 70 }
+    localStorage.setItem('rentenlueckenrechner.scenario.v13', serializeScenarioState(state))
     const { result } = renderHook(() => useScenarioState())
+    act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
     const pension = result.current.retirementIncomeStreams[0]
     const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
 
     act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
     expect(result.current.result!.retirementRows[0].retirementIncomeNet)
-      .toBe(result.current.result!.retirementRows[0].retirementIncomeGross * 0.8)
+      .toBeCloseTo(result.current.result!.retirementRows[0].retirementIncomeGross * 0.8)
     expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
 
     act(() => result.current.addRetirementIncomeStream())

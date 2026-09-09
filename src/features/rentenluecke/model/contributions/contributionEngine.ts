@@ -36,6 +36,11 @@ const automaticSchema = z.strictObject({
     monthlyOccupationalThreshold: money.positive(),
   }),
   insurerAdditionalRate: z.number().finite().min(0).max(0.2),
+  rateOverrides: z.strictObject({
+    kvGeneralRate: z.number().min(0).max(0.5).optional(),
+    kvReducedRate: z.number().min(0).max(0.5).optional(),
+    pvBaseRate: z.number().min(0.01).max(0.5).optional(),
+  }).optional(),
   insuredBirthYear: year,
   family: z.strictObject({
     // Confirmed legal PV parenthood; permanent even after all children age out/die.
@@ -98,6 +103,9 @@ export type ContributionResult =
   | (CashResult & {
     status: 'automatic'
     ruleSnapshotId: string
+    thresholds: AutomaticContributionInput['thresholds']
+    rentalAssessmentMonthly: number
+    capitalAssessmentMonthly: number
     selectedStatus: AutomaticContributionInput['status']
     effectiveStatus: 'kvdr' | 'voluntary'
     assessment: AssessmentLine[]
@@ -173,9 +181,9 @@ export function calculateContributions(input: unknown): ContributionResult {
   const childrenUnder25 = p.family.childBirthYears.filter(y => p.calendarYear - y < 25).length
   const surcharge = !p.family.isParent && p.insuredBirthYear >= 1940 && p.calendarYear - p.insuredBirthYear >= 23
   const discount = p.family.isParent ? Math.max(0, Math.min(5, childrenUnder25) - 1) * rules.pvDiscountPerChild : 0
-  const pvRate = rules.pvBaseRate + (surcharge ? rules.pvChildlessSurcharge : 0) - discount
-  const general = rules.kvGeneralRate + p.insurerAdditionalRate
-  const reduced = rules.kvReducedRate + p.insurerAdditionalRate
+  const pvRate = (p.rateOverrides?.pvBaseRate ?? rules.pvBaseRate) + (surcharge ? rules.pvChildlessSurcharge : 0) - discount
+  const general = (p.rateOverrides?.kvGeneralRate ?? rules.kvGeneralRate) + p.insurerAdditionalRate
+  const reduced = (p.rateOverrides?.kvReducedRate ?? rules.kvReducedRate) + p.insurerAdditionalRate
   const pension = p.statutoryPensions.reduce((sum, s) => sum + s.grossMonthly, 0)
   const occupational = p.occupationalPensions.reduce((sum, s) => sum + s.grossMonthly, 0)
   const threshold = p.thresholds.monthlyOccupationalThreshold
@@ -213,6 +221,7 @@ export function calculateContributions(input: unknown): ContributionResult {
   const ownKv = totalKv - participation - subsidy
   return {
     ...commonResult, status: 'automatic', ruleSnapshotId: rules.id,
+    thresholds: p.thresholds, rentalAssessmentMonthly: rental, capitalAssessmentMonthly: capital,
     selectedStatus: p.status, effectiveStatus: voluntary ? 'voluntary' : 'kvdr', assessment,
     kvAssessmentMonthly: sum('kvAssessmentMonthly'), pvAssessmentMonthly: sum('pvAssessmentMonthly'),
     totalKvContributionMonthly: totalKv, totalPvContributionMonthly: totalPv,

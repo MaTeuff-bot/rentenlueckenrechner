@@ -1,10 +1,10 @@
-import type { RetirementInsurance } from '../../model/retirementInsurance'
-import { StreamInsuranceControls } from './StreamInsuranceControls'
+import { phaseManualReasons, phaseStreams, type RetirementInsurance } from '../../model/retirementInsurance'
+import { OptionalNumber } from './RetirementInsuranceSection'
 import type { ChangeEvent } from 'react'
 import { CurrencyInput } from '../../../../shared/components/CurrencyInput'
 import { NumberInput } from '../../../../shared/components/NumberInput'
 import { PercentInput } from '../../../../shared/components/PercentInput'
-import type { RetirementIncomeStream, RetirementIncomeStreamKind } from '../../model/types'
+import type { RentenlueckeInput, RetirementIncomeStream, RetirementIncomeStreamKind } from '../../model/types'
 
 const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defaultName: string; helper: string }> = {
   'gesetzliche-rente': {
@@ -15,12 +15,12 @@ const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defa
   betriebsrente: {
     label: 'Betriebsrente',
     defaultName: 'Betriebsrente',
-    helper: 'Prüfe, ob deine Angabe brutto oder bereits netto ist, und bilde Abzüge bei Bedarf nur pauschal ab.',
+    helper: 'Gewöhnliche inländische Bezüge bestätigen; besondere Vertragsarten brauchen eine manuelle Gesamtannahme.',
   },
   'private-rente': {
     label: 'Private Rente',
     defaultName: 'Private Rente',
-    helper: 'Prüfe, ob deine Angabe brutto oder bereits netto ist, und bilde Abzüge bei Bedarf nur pauschal ab.',
+    helper: 'Die Vertragsart wird hier nicht automatisch eingeordnet. Bitte eigene KV/PV-Gesamtbeträge für die betroffene Phase angeben. Das bedeutet nicht, dass jede private Rente beitragspflichtig ist.',
   },
   'rental-income': {
     label: 'Mieteinnahmen',
@@ -30,7 +30,7 @@ const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defa
   'side-income': {
     label: 'Nebenjob',
     defaultName: 'Nebenjob',
-    helper: 'Steuern und Sozialabgaben werden nicht automatisch berechnet. Nutze dafür bei Bruttoangaben den pauschalen Abschlag.',
+    helper: 'Steuern und Sozialabgaben werden nicht automatisch berechnet. KV/PV benötigt eine manuelle Gesamtannahme für die Phase.',
   },
   'bridge-income': {
     label: 'Brückeneinkommen',
@@ -40,7 +40,7 @@ const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defa
   other: {
     label: 'Sonstiges Einkommen',
     defaultName: 'Weiteres Einkommen',
-    helper: 'Wähle netto oder brutto; Steuern werden nicht automatisch berechnet; KV/PV ist nur nach manueller Aktivierung und Prüfung enthalten.',
+    helper: 'Wähle netto oder brutto; Steuern werden nicht automatisch berechnet; KV/PV benötigt eine manuelle Gesamtannahme für die Phase.',
   },
 }
 
@@ -50,6 +50,7 @@ const GENERIC_DEFAULT_NAMES = new Set([
 ])
 
 type Props = {
+  input?: RentenlueckeInput
   insurance?: RetirementInsurance
   streams: RetirementIncomeStream[]
   onUpdate: (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => void
@@ -57,7 +58,7 @@ type Props = {
   onRemove: (id: string) => void
 }
 
-export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, onAdd, onRemove }: Props) {
+export function RetirementIncomeStreamsSection({ streams, insurance, input, onUpdate, onAdd, onRemove }: Props) {
   return (
     <fieldset className="wide-fieldset retirement-income-section">
       <legend>Einkommen im Ruhestand</legend>
@@ -70,6 +71,10 @@ export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, o
           const label = stream.name.trim() || `Einkommen ${index + 1}`
           const kind = stream.kind ?? 'other'
           const category = CATEGORY_DETAILS[kind]
+          const automaticPhases = insurance ? (['bridge', 'pension'] as const).filter(phase => {
+            const relevant = phaseStreams(streams, insurance, phase, input?.retirementAge ?? 0, input?.planningAge ?? 120)
+            return relevant.some(s => s.id === stream.id) && !phaseManualReasons(insurance, phase, relevant).length
+          }) : []
           const endAgeError = stream.endAge !== null &&
             (!Number.isInteger(stream.endAge) || stream.endAge <= stream.startAge || stream.endAge > 120)
               ? 'Muss größer als das Startalter und höchstens 120 sein.'
@@ -86,7 +91,7 @@ export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, o
                     const nextKind = event.target.value as RetirementIncomeStreamKind
                     const nextName = CATEGORY_DETAILS[nextKind].defaultName
                     const mayReplaceName = stream.name.trim() === '' || GENERIC_DEFAULT_NAMES.has(stream.name.trim())
-                    onUpdate(stream.id, { kind: nextKind, ...(mayReplaceName ? { name: nextName } : {}) })
+                    onUpdate(stream.id, { kind: nextKind, support: undefined, ...(mayReplaceName ? { name: nextName } : {}) })
                   }}
                 >
                   {Object.entries(CATEGORY_DETAILS).map(([value, details]) => (
@@ -136,10 +141,10 @@ export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, o
                   <option value="gross">Betrag ist brutto</option>
                 </select>
               </label>
-              {stream.amountBasis === 'gross' && !(insurance?.enabled && stream.separateDeductions) ? (
+              {stream.amountBasis === 'gross' ? (
                 <PercentInput
                   id={`retirement-income-deduction-${stream.id}`}
-                  label="Vereinfachter Abschlag für Steuern / Kranken- und Pflegeversicherung"
+                  label="Sonstige Abzüge / Steuern ohne KV/PV"
                   value={stream.effectiveDeductionRate}
                   min={0}
                   max={100}
@@ -149,7 +154,10 @@ export function RetirementIncomeStreamsSection({ streams, insurance, onUpdate, o
                   })}
                 />
               ) : null}
-              {insurance?.enabled && <StreamInsuranceControls stream={stream} label={label} insurance={insurance} onUpdate={onUpdate} />}
+              {['gesetzliche-rente', 'betriebsrente'].includes(kind) && (automaticPhases.length > 0 || stream.support === 'unsupported') && <label className="field"><span className="field-label">Art bestätigen – {label}</span><select value={stream.support ?? ''} onChange={e => onUpdate(stream.id, { support: (e.target.value || undefined) as RetirementIncomeStream['support'] })}><option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische {kind === 'betriebsrente' ? 'laufende Betriebsrente' : 'gesetzliche Altersrente'}</option><option value="unsupported">Sonderfall / ungeklärt (z. B. Ausland, Einmalzahlung)</option></select></label>}
+              {kind === 'rental-income' && automaticPhases.some(phase => insurance?.[phase].status && insurance[phase].status !== 'kvdr') && <OptionalNumber label={`Beitragsrelevanter Mietüberschuss vor Steuern – ${label} (€/Monat heute)`} value={stream.rentalAssessmentMonthlyToday} onChange={rentalAssessmentMonthlyToday => onUpdate(stream.id, { rentalAssessmentMonthlyToday })} />}
+              {kind === 'rental-income' && <p className="retirement-income-row-note">Monatsbetrag = verfügbarer Mietzufluss vor KV/PV; sonstige Abzüge separat. Die Beitragsbasis ist der Überschuss vor Steuern nach beitragsrechtlichen Kosten, unabhängig vom verfügbaren Geld. Bei KVdR ist gewöhnliche Miete beitragsfrei und darf netto bleiben.</p>}
+              <p className="retirement-income-row-note">Netto nur für beitragsfreie Einnahmen oder bei manueller Phase, jeweils vor der separat erfassten KV/PV. Beitragsrelevante automatische Einkommen benötigen Brutto; keine Rückrechnung.</p>
               <button
                 className="secondary-button retirement-income-remove"
                 type="button"

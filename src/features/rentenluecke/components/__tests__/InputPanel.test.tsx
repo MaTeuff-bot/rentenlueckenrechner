@@ -232,7 +232,7 @@ describe('retirement income category selector', () => {
     expect(helper.previousElementSibling).toBe(screen.getByRole('button', { name: 'Meine Rente entfernen' }))
     expect(selector.closest('label')).not.toContainElement(helper)
     expect(selector).toHaveAccessibleDescription(/Wähle netto oder brutto/)
-    expect(screen.getByRole('spinbutton', { name: /Vereinfachter Abschlag/ })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: /Sonstige Abzüge \/ Steuern ohne KV\/PV/ })).toBeInTheDocument()
 
     fireEvent.change(selector, { target: { value: 'gesetzliche-rente' } })
     expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'gesetzliche-rente' })

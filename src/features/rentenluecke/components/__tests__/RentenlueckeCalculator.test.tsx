@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { automaticInsurance } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../../hooks/scenarioState/defaults'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 
@@ -34,6 +35,10 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear()
+  const state = createDefaultState()
+  state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
+  state.retirementIncomeStreams = state.retirementIncomeStreams.map(stream => ({ ...stream, support: 'standard' }))
+  localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
 })
 
 function inputById(id: string): HTMLInputElement {
@@ -45,7 +50,7 @@ function inputById(id: string): HTMLInputElement {
 }
 
 describe('RentenlueckeCalculator', () => {
-  it('renders core result, simulation, table, and assumptions content by default', async () => {
+  it('renders core results after completed setup', async () => {
     render(<RentenlueckeCalculator />)
 
     expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
@@ -57,7 +62,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/Rentenbescheid/)).not.toHaveLength(0)
     expect(screen.getAllByText(/behandelt ihn als Bruttobetrag in heutiger Kaufkraft/)).not.toHaveLength(0)
     expect(screen.getByText(/Versicherungsstatus und den Einkommensarten/)).toBeInTheDocument()
-    expect(screen.getByText(/keine Steuer- oder Sozialversicherungsberatung oder -berechnung/)).toBeInTheDocument()
+    expect(screen.getByText(/Sozialversicherungsberatung und kein Beitragsbescheid/)).toBeInTheDocument()
   }, 20000)
 
   it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
@@ -101,7 +106,7 @@ describe('RentenlueckeCalculator', () => {
   it('hides results for an empty portfolio', () => {
     render(<RentenlueckeCalculator />)
 
-    for (const button of screen.getAllByRole('button', { name: /entfernen$/ })) fireEvent.click(button)
+    for (const button of screen.getAllByRole('button', { name: /entfernen$/ }).filter(button => !button.getAttribute('aria-label')?.includes('Rente'))) fireEvent.click(button)
     expect(screen.getByRole('status')).toHaveTextContent('Gesamtwert des Portfolios muss größer als 0')
     expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
@@ -127,25 +132,18 @@ describe('RentenlueckeCalculator', () => {
   }, 20000)
 })
 
-it('wires manual insurance decisions through persistence into the displayed ledger', () => {
-  const state = createDefaultState()
-  state.input = { ...state.input, currentAge: 67, retirementAge: 67, planningAge: 68 }
-  state.retirementIncomeStreams = [{ ...state.retirementIncomeStreams[0], amountMonthlyToday: 1000, effectiveDeductionRate: 0.2 }]
-  localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
+it('requires answers on clean load, announces the owned reset, and dismisses its notice persistently', () => {
+  localStorage.clear()
+  localStorage.setItem('rentenlueckenrechner.scenario.v12', 'old')
+  localStorage.setItem('unrelated', 'keep')
+  const { unmount } = render(<RentenlueckeCalculator />)
+  expect(screen.getByText(/bisherigen Eingaben wurden/)).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('KV/PV-Angaben ergänzen')).toHaveTextContent('Noch keine Prognose')
+  fireEvent.click(screen.getByRole('button', { name: 'Hinweis schließen' }))
+  expect(localStorage.getItem('unrelated')).toBe('keep')
+  unmount()
   render(<RentenlueckeCalculator />)
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Geführte manuelle GKV-/PV-Schätzung aktivieren' }))
-  expect(screen.getByRole('alert')).toHaveTextContent('KV/PV-Schätzung unvollständig')
-  fireEvent.change(screen.getByLabelText('Mein angegebener Versicherungsstatus im Ruhestand'), { target: { value: 'kvdr' } })
-  fireEvent.click(screen.getByRole('button', { name: /Gesamtabzug für Gesetzliche Rente geprüft:/ }))
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Details anzeigen' }))
-  expect(screen.getByRole('columnheader', { name: 'KV-Eigenbeitrag' })).toBeInTheDocument()
-  expect(screen.getByRole('columnheader', { name: 'PV-Eigenbeitrag' })).toBeInTheDocument()
-  expect(screen.getByRole('columnheader', { name: 'Sonstige Abzüge ohne KV/PV' })).toBeInTheDocument()
-  expect(screen.getByRole('cell', { name: '1.050 €' })).toBeInTheDocument()
-  expect(screen.getByRole('cell', { name: '432 €' })).toBeInTheDocument()
-  expect(screen.getByRole('cell', { name: '10.518 €' })).toBeInTheDocument()
-  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
-  expect(saved.input.retirementInsurance).toMatchObject({ enabled: true, status: 'kvdr' })
-  expect(saved.retirementIncomeStreams[0]).toMatchObject({ effectiveDeductionRate: 0.2, separateDeductions: { otherRate: 0 } })
-}, 20000)
+  expect(screen.queryByText(/bisherigen Eingaben wurden/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+})

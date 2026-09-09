@@ -1,115 +1,73 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createDefaultRetirementInsurance } from '../../model/retirementInsurance'
-import { simulateScenario } from '../../model/simulateScenario'
-import { simulateHistoricalBootstrapReferenceScenario, DEFAULT_HISTORICAL_RETURN_SERIES_IDS } from '../../model/historicalReturns'
-import { createPortfolioComponents } from '../../model/stochasticReturns'
+import { automaticInsurance } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../scenarioState/defaults'
-import { loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY } from '../scenarioState/persistence'
+import { loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY, RESET_NOTICE_KEY } from '../scenarioState/persistence'
 import { useScenarioState } from '../useScenarioState'
-import legacyResults from './fixtures/insuranceLegacyResults.json'
-import { runHistoricalBootstrapSimulation } from '../../model/historicalReturns'
-import type { HistoricalBootstrapSettings } from '../../model/historicalReturns'
 
 beforeEach(() => localStorage.clear())
 
-function oldState() {
-  const state = createDefaultState()
-  state.input = { ...state.input, currentAge: 67, retirementAge: 67, planningAge: 70 }
-  state.retirementIncomeStreams = [
-    { ...state.retirementIncomeStreams[0], amountMonthlyToday: 1234.56, effectiveDeductionRate: 0.2345 },
-    { ...state.retirementIncomeStreams[0], id: 'second', name: 'Second', amountMonthlyToday: 789.12, effectiveDeductionRate: 0.175 },
-    { ...state.retirementIncomeStreams[0], id: 'net', name: 'Net', amountMonthlyToday: 333.33, amountBasis: 'net' },
-  ]
-  state.input.retirementIncomeStreams = state.retirementIncomeStreams
-  return state
-}
-
-describe('insurance persistence and migration', () => {
-  // Captured by running HEAD d15baba86468cfc6210956a55e59687c9242e982 before the insurance changes, not by
-  // comparing two inputs through the new implementation.
-  it.each(legacyResults)('preserves the pre-insurance v$stored.version results and seeds exactly', (fixture) => {
-    const state = parsePersistedScenarioState(JSON.stringify(fixture.stored))
-    const input = { ...state.input, retirementIncomeStreams: state.retirementIncomeStreams }
-    const settings = fixture.settings as HistoricalBootstrapSettings
-    expect(simulateScenario(input)).toMatchObject(fixture.deterministic)
-    expect(simulateHistoricalBootstrapReferenceScenario(input, settings)).toMatchObject(fixture.reference)
-    expect(runHistoricalBootstrapSimulation(input, settings)).toEqual(fixture.bootstrap)
+describe('guided insurance persistence and app-owned reset', () => {
+  it('discards every owned old scenario version, preserves unrelated storage and records one reset notice', () => {
+    for (let version = 1; version <= 12; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
+    localStorage.setItem('another-app.scenario.v12', 'keep')
+    localStorage.setItem('rentenlueckenrechner.preferences', 'keep')
+    localStorage.setItem('rentenlueckenrechner.scenario.v14', 'future')
+    expect(loadInitialState()).toEqual(createDefaultState())
+    expect(Object.keys(localStorage).sort()).toEqual(['another-app.scenario.v12', 'rentenlueckenrechner.preferences', 'rentenlueckenrechner.scenario.v14', RESET_NOTICE_KEY].sort())
+    expect(localStorage.getItem(RESET_NOTICE_KEY)).toBe('1')
+    localStorage.removeItem(RESET_NOTICE_KEY)
+    loadInitialState()
+    expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
   })
-
-  it('migrates v11 without changing numeric ledgers, capital search or sampled reference results', () => {
-    const old = oldState()
-    const legacyInput = { ...old.input, retirementIncomeStreams: old.retirementIncomeStreams }
-    const settings = { portfolioComponents: createPortfolioComponents({ equity: 0.7, bonds: 0.2, fixed: 0.1 }, DEFAULT_HISTORICAL_RETURN_SERIES_IDS), inflationSourceId: old.historical.inflationSourceId, simulations: 3 }
-    const before = simulateScenario(legacyInput)
-    localStorage.setItem('rentenlueckenrechner.scenario.v11', JSON.stringify({ version: 11, ...old }))
-    const migrated = loadInitialState()
-    expect(migrated.retirementIncomeStreams).toEqual(old.retirementIncomeStreams)
-    expect(migrated.input.retirementInsurance).toBeUndefined()
-    const afterInput = { ...migrated.input, retirementIncomeStreams: migrated.retirementIncomeStreams }
-    expect(simulateScenario(afterInput)).toEqual(before)
-    expect(simulateHistoricalBootstrapReferenceScenario(afterInput, settings)).toEqual(simulateHistoricalBootstrapReferenceScenario(legacyInput, settings))
-    for (const row of before.retirementRows) {
-      // Independent legacy arithmetic: preserve per-stream rounding and summation order.
-      const expectedNet = old.retirementIncomeStreams.reduce((sum, stream) => {
-        const amount = stream.amountMonthlyToday * 12 * row.inflationFactor
-        return sum + (stream.amountBasis === 'net' ? amount : amount - amount * stream.effectiveDeductionRate)
-      }, 0)
-      expect(row.retirementIncomeNet).toBe(expectedNet)
-      expect(row.healthInsurance).toBe(0)
-      expect(row.careInsurance).toBe(0)
-      expect(row.retirementIncomeOtherDeductions).toBe(0)
-    }
-    const saved = serializeScenarioState(migrated)
-    expect(JSON.parse(saved).version).toBe(12)
-    expect(parsePersistedScenarioState(saved)).toEqual(migrated)
-  })
-
-  it('roundtrips rates, zero overrides, review decisions and both deduction modes', () => {
-    const state = oldState()
-    state.input.retirementInsurance = { ...createDefaultRetirementInsurance(), enabled: true, status: 'voluntary', portfolioBaseMonthlyToday: 800,
-      rates: { pensionKv: 0.09, generalKv: 0.18, passiveKv: 0.17, pv: 0.042 } }
-    state.retirementIncomeStreams[0] = { ...state.retirementIncomeStreams[0], separateDeductions: { otherRate: 0.05 }, insuranceTreatment: 'exclude', kvRateOverride: 0, pvRateOverride: 0.02 }
-    state.retirementIncomeStreams[1] = { ...state.retirementIncomeStreams[1], insuranceTreatment: 'review' }
-    const parsed = parsePersistedScenarioState(serializeScenarioState(state))
-    expect(parsed.retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
-    expect(parsed.input.retirementInsurance).toEqual(state.input.retirementInsurance)
-    expect(parsed.retirementIncomeStreams[0].effectiveDeductionRate).toBe(0.2345)
-    expect(parsed.retirementIncomeStreams[1].separateDeductions).toBeUndefined()
-  })
-
-  it('loads v12 before legacy storage and falls back safely for malformed insurance', () => {
-    const state = oldState()
+  it('preserves v13 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
+    const state = createDefaultState()
+    state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002], rates: { kvGeneralRate: 0, kvReducedRate: 0.15, pvBaseRate: 0.04 },
+      bridge: { status: 'unsupported', kvMonthlyToday: 200, pvMonthlyToday: 0 },
+      pension: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'not-received' },
+    })
+    state.retirementIncomeStreams[0] = { ...state.retirementIncomeStreams[0], support: 'standard', effectiveDeductionRate: 0.15 }
+    state.retirementIncomeStreams.push({ ...state.retirementIncomeStreams[0], id: 'rent', kind: 'rental-income', rentalAssessmentMonthlyToday: 123 })
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
-    localStorage.setItem('rentenlueckenrechner.scenario.v11', JSON.stringify({ version: 11, ...createDefaultState() }))
-    expect(loadInitialState().retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
-    const malformed = JSON.parse(serializeScenarioState(state))
-    malformed.input.retirementInsurance = { ...createDefaultRetirementInsurance(), status: 'guessed' }
-    expect(parsePersistedScenarioState(JSON.stringify(malformed))).toEqual(createDefaultState())
+    localStorage.setItem('rentenlueckenrechner.scenario.v12', 'old')
+    const loaded = loadInitialState()
+    expect(loaded.input.retirementInsurance).toEqual(state.input.retirementInsurance)
+    expect(loaded.retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
+    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(13)
   })
-
-  it('persists explicit opt-in/replacement, restores disabled results and rejects invalid updates', () => {
-    localStorage.setItem(STORAGE_KEY, serializeScenarioState(oldState()))
+  it('roundtrips unanswered fields without fabricating confirmed zeros', () => {
+    const state = createDefaultState()
+    const loaded = parsePersistedScenarioState(serializeScenarioState(state))
+    expect(loaded.input.retirementInsurance?.pension).toEqual({})
+    expect(loaded.input.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
+    expect(loaded.retirementIncomeStreams[0].support).toBeUndefined()
+    expect(parsePersistedScenarioState('{broken')).toEqual(state)
+  })
+  it('persists valid incomplete transitions and hides results, then restores the completed forecast', () => {
+    const state = createDefaultState()
+    state.input = { ...state.input, currentAge: 65, planningAge: 70 }
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
     const { result, unmount } = renderHook(useScenarioState)
-    const baseline = result.current.result
-    const config = { ...createDefaultRetirementInsurance(), enabled: true, status: 'kvdr' as const }
-    act(() => result.current.updateRetirementInsurance(config))
-    expect(result.current.result).toEqual(baseline)
-    act(() => result.current.updateRetirementIncomeStream('statutory-pension', { separateDeductions: { otherRate: 0.03 } }))
-    expect(result.current.result!.retirementRows[0].healthInsurance).toBeGreaterThan(0)
-    expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance).toEqual(config)
-    act(() => result.current.updateRetirementInsurance({ ...config, enabled: false }))
-    expect(result.current.result).toEqual(baseline)
-    const validStored = localStorage.getItem(STORAGE_KEY)
-    act(() => result.current.updateRetirementInsurance({ ...config, rates: { ...config.rates, pv: Number.NaN } }))
     expect(result.current.isValid).toBe(false)
+    act(() => result.current.updateRetirementIncomeStream('statutory-pension', { support: 'standard' }))
+    act(() => result.current.updateRetirementInsurance(automaticInsurance()))
+    expect(result.current.isValid).toBe(true)
+    const complete = result.current.result
+    act(() => result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: undefined })))
     expect(result.current.result).toBeNull()
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(validStored)
+    expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
     unmount()
     const reloaded = renderHook(useScenarioState)
-    expect(reloaded.result.current.input.retirementInsurance?.enabled).toBe(false)
-    expect(reloaded.result.current.retirementIncomeStreams[0].separateDeductions).toEqual({ otherRate: 0.03 })
-    expect(reloaded.result.current.result).toEqual(baseline)
-  })
+    expect(reloaded.result.current.result).toBeNull()
+    act(() => reloaded.result.current.updateRetirementInsurance(automaticInsurance()))
+    expect(reloaded.result.current.result).toEqual(complete)
+    const validStored = localStorage.getItem(STORAGE_KEY)
+    act(() => reloaded.result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: NaN })))
+    expect(reloaded.result.current.isValid).toBe(false)
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(validStored)
+    act(() => reloaded.result.current.reset())
+    expect(reloaded.result.current.result).toBeNull()
+    expect(reloaded.result.current.input.retirementInsurance?.pension).toEqual({})
+  }, 20000)
 })
