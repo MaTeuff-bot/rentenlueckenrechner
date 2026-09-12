@@ -39,6 +39,7 @@ export function useScenarioState() {
     return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
       retirementIncomeStreams,
+      estimatorPortfolio: portfolioBuckets,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }), annualReturn)
   }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input])
@@ -63,14 +64,16 @@ export function useScenarioState() {
     const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
     return inflationSource ? getValidHistoricalYears(historicalSettings.portfolioComponents, inflationSource) : []
   }, [historical.inflationSourceId, historicalSettings.portfolioComponents, input.annualInflationRate])
-  const result = useMemo(() => {
-    if (!isValid || !parsedInput.success) return null
-    return simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
+  const calculation = useMemo(() => {
+    if (!isValid || !parsedInput.success) return { result: null, stochasticSummary: null, calculationError: null }
+    try {
+      const result = simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
+      return { result, stochasticSummary: runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings), calculationError: null }
+    } catch (error) {
+      return { result: null, stochasticSummary: null, calculationError: `Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)} Automatische Kapitalbasis prüfen oder ausdrücklich manuelle Kapitalertragsschätzung wählen.` }
+    }
   }, [historicalSettings, isValid, parsedInput])
-  const stochasticSummary = useMemo(() => {
-    if (!isValid || !parsedInput.success) return null
-    return runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings)
-  }, [historicalSettings, isValid, parsedInput])
+  const { result, stochasticSummary, calculationError } = calculation
 
   useEffect(() => {
     if (!parsedInput.success) return
@@ -172,6 +175,7 @@ export function useScenarioState() {
   return {
     input,
     insuranceIssues,
+    calculationError,
     allocation,
     portfolioBuckets,
     retirementIncomeStreams,

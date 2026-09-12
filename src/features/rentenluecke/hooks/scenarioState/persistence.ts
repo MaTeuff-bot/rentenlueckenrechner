@@ -1,3 +1,4 @@
+import { holdingSchema } from '../../model/capitalIncome/schema'
 import { z } from 'zod'
 import { rentenlueckeInputSchema } from '../../model/inputSchema'
 import { getReturnSeriesCategory } from '../../model/historicalReturns'
@@ -11,6 +12,7 @@ import type { PersistedHistoricalState, ScenarioState } from './types'
 export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v13'
 export const RESET_NOTICE_KEY = 'rentenlueckenrechner.gkv-v2-reset-notice'
 const portfolioBucketSchema = z.object({
+  holding: holdingSchema.optional(),
   id: z.string(),
   name: z.string(),
   value: z.number().finite().min(0),

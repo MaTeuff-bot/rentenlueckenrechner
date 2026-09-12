@@ -3,6 +3,7 @@ import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS } from './historicalReturns/consta
 import { getReturnSeriesCategory, type ReturnSeriesCategory } from './historicalReturns/sourceOptions'
 
 export type PortfolioBucket = {
+  holding?: 'accumulating-equity-fund' | 'ordinary-bank-deposit' | 'unsupported'
   id: string
   name: string
   value: number

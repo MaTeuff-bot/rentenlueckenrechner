@@ -71,3 +71,35 @@ describe('guided insurance persistence and app-owned reset', () => {
     expect(reloaded.result.current.input.retirementInsurance?.pension).toEqual({})
   }, 20000)
 })
+
+describe('additive insurance estimator persistence', () => {
+  it('keeps legacy manual amounts and unrelated state without a new reset', () => {
+    const state = createDefaultState()
+    state.input.retirementInsurance = automaticInsurance({
+      pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 321, drvSubsidy: 'not-received' },
+    })
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
+    localStorage.setItem('unrelated', 'keep')
+    const loaded = loadInitialState()
+    expect(loaded.input.retirementInsurance!.pension.capitalMonthlyToday).toBe(321)
+    expect(loaded.input.retirementInsurance!.pension.capitalMode).toBeUndefined()
+    expect(loaded.portfolioBuckets).toEqual(state.portfolioBuckets)
+    expect(loaded.historical).toEqual(state.historical)
+    expect(localStorage.getItem('unrelated')).toBe('keep')
+    expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
+  })
+  it('roundtrips classifications, confirmed zero cost, projected rate and independent phase modes', () => {
+    const state = createDefaultState()
+    state.portfolioBuckets[0].holding = 'accumulating-equity-fund'
+    state.input.retirementInsurance = automaticInsurance({
+      capitalEstimator: { fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
+      bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', capitalMonthlyToday: 123 },
+      pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 456, drvSubsidy: 'not-received' },
+    })
+    const loaded = parsePersistedScenarioState(serializeScenarioState(state))
+    expect(loaded.input.retirementInsurance).toEqual(state.input.retirementInsurance)
+    expect(loaded.portfolioBuckets).toEqual(state.portfolioBuckets)
+    delete state.input.retirementInsurance.capitalEstimator!.fundAcquisitionCost
+    expect(parsePersistedScenarioState(serializeScenarioState(state)).input.retirementInsurance!.capitalEstimator!.fundAcquisitionCost).toBeUndefined()
+  })
+})

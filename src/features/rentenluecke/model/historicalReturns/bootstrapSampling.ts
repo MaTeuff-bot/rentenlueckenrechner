@@ -100,7 +100,7 @@ function requiresSampledCalendarYear(components: PortfolioComponent[], inflation
   })
 }
 
-function resolveComponentNominalReturn(
+export function resolveComponentNominalReturn(
   component: PortfolioComponent,
   year: number,
   inflation: number,
@@ -132,7 +132,7 @@ function deductAnnualCosts(annualReturn: number, annualCostRate = 0): number {
   return Math.max(-1, annualReturn - annualCostRate)
 }
 
-function applySourceCostTreatment(annualReturn: number, returnSeriesId?: string, annualCostRate = 0): number {
+export function applySourceCostTreatment(annualReturn: number, returnSeriesId?: string, annualCostRate = 0): number {
   const source = returnSeriesId
     ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId)
     : undefined

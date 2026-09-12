@@ -26,6 +26,24 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
       <dt>Eigene PV</dt><dd>{monthly(row.careInsurance)}</dd>
       <dt>Verfügbares Einkommen nach KV/PV</dt><dd><strong>{monthly(row.retirementIncomeNet)}</strong></dd>
     </dl>
+    {row.unfundedWithdrawal > 0 && <p role="alert">Vermögenslücke: {formatCurrency(row.unfundedWithdrawal)} im Jahr nicht finanzierbar, einschließlich KV/PV.</p>}
+    {row.capitalAssessment && <details><summary>Automatische Kapitalbasis – Jahreswerte</summary>
+      <p>Kontoführung aus derselben Jahresrechnung; für KVdR bleibt diese Kapitalbasis beitragsfrei. Eine gewählte manuelle Phasenbasis ersetzt die automatische Bemessung, nicht die Anlagen.</p>
+      <dl className="insurance-reconciliation">
+        <dt>Brutto-Bankzinsen (bereits in Rendite enthalten)</dt><dd>{formatCurrency(row.capitalAssessment.bankInterest)}</dd>
+        <dt>Zugeflossene Vorabpauschale aus dem Vorjahr</dt><dd>{formatCurrency(row.capitalAssessment.receivedVorabpauschale)}</dd>
+        <dt>Bereinigter Fondsgewinn aus Finanzierungsverkäufen</dt><dd>{formatCurrency(row.capitalAssessment.sale.adjustedFundSaleGain)}</dd>
+        <dt>Bereinigter Fondsgewinn aus Allokationsverkäufen</dt><dd>{formatCurrency(row.capitalAssessment.movement.adjustedFundSaleGain)}</dd>
+        <dt>Fondseinkommen nach 30 % Teilfreistellung</dt><dd>{formatCurrency(row.capitalAssessment.assessment.fundIncomeAfterExemption)}</dd>
+        <dt>Berücksichtigter jährlicher Kostenpauschbetrag</dt><dd>{formatCurrency(row.capitalAssessment.assessment.expenseAllowance)}</dd>
+        <dt>Simulierte verbleibende Kapitalverluste</dt><dd>{formatCurrency(row.capitalAssessment.assessment.closingSimulatedLoss)}</dd>
+        <dt>Automatisch geschätzte Kapitalbasis</dt><dd>{formatCurrency(row.capitalAssessment.assessment.annualAssessment)}</dd>
+        <dt>Für diese Phase verwendete Kapitalbasis</dt><dd>{formatCurrency(row.portfolioContributionBase)}</dd>
+        <dt>Vorabpauschale für Zufluss im Folgejahr</dt><dd>{formatCurrency(row.capitalAssessment.pendingVorabpauschale)}</dd>
+        <dt>Finanzierungsentnahme einschließlich KV/PV</dt><dd>{formatCurrency(row.capitalAssessment.paidWithdrawal)}</dd>
+      </dl>
+      <p>Jährliche Planungsnäherung, keine exakte Versicherungsabrechnung. Investmentsteuern werden nicht automatisch berechnet; keine vollständig nach Steuern verfügbare Kaufkraft.</p>
+    </details>}
     {row.retirementIncomeNet < 0 && <p>Die Beiträge übersteigen das Einkommen. Der negative Betrag erhöht die nötige Entnahme aus dem Vermögen.</p>}
     {c.status === 'manual' ? <p>Gesamte Phase manuell nach allen Zuschüssen. Automatische Grenzen, Freibeträge und Kinderanpassungen sind ersetzt; Bemessungsdetails liegen nicht vor.</p> : <>
       <p>PV-Satz {(c.pvRate * 100).toLocaleString('de-DE')} %; {c.childrenUnder25} anerkannte Kinder unter 25 nach der 1.-Januar-Näherung.</p>

@@ -1,4 +1,5 @@
-import { ASSET_CLASS_ASSUMPTIONS, type AssetClassAssumption } from '../stochasticReturns'
+import { ASSET_CLASS_ASSUMPTIONS } from '../stochasticAssumptions'
+import type { AssetClassAssumption } from '../stochasticReturns'
 import { HISTORICAL_PRODUCTION_RETURN_SERIES } from '../returnData/historicalProductionData'
 import { BUNDLED_ETF_HISTORICAL_RETURN_SERIES } from '../returnData/bundledEtfHistoricalReturnData'
 import {

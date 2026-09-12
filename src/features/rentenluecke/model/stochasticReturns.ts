@@ -1,3 +1,7 @@
+import { ASSET_CLASS_ASSUMPTIONS } from './stochasticAssumptions'
+export { ASSET_CLASS_ASSUMPTIONS, DEFAULT_ASSET_ALLOCATION, DEFAULT_STOCHASTIC_SETTINGS } from './stochasticAssumptions'
+import { needsEstimator } from './capitalIncome/setup'
+import { simulateCapitalLedger, type BucketReturnPath } from './capitalIncome/ledger'
 import { deriveSummary } from './deriveSummary'
 import { rentenlueckeInputSchema } from './inputSchema'
 import { normalizeInput } from './normalizeInput'
@@ -48,24 +52,6 @@ export type StochasticSimulationSummary = {
   simulations: number
   successProbability: number
   rows: StochasticPercentileRow[]
-}
-
-export const ASSET_CLASS_ASSUMPTIONS: AssetClassAssumption[] = [
-  { key: 'equity', label: 'Aktien', expectedAnnualReturn: 0.07, annualVolatility: 0.18 },
-  { key: 'bonds', label: 'Anleihen', expectedAnnualReturn: 0.03, annualVolatility: 0.07 },
-  { key: 'fixed', label: 'Cash', expectedAnnualReturn: 0.02, annualVolatility: 0.01 },
-]
-
-export const DEFAULT_ASSET_ALLOCATION: AssetAllocation = {
-  equity: 0.7,
-  bonds: 0.2,
-  fixed: 0.1,
-}
-
-export const DEFAULT_STOCHASTIC_SETTINGS: StochasticSettings = {
-  allocation: DEFAULT_ASSET_ALLOCATION,
-  simulations: 1_000,
-  seed: 24_681_357,
 }
 
 export function createPortfolioComponents(
@@ -168,6 +154,7 @@ export function simulateScenarioWithReturnPath(
   input: RentenlueckeInput,
   returnPath: number[],
   inflationPath?: number[],
+  bucketPath?: BucketReturnPath,
 ): SimulationResult {
   const parsed = rentenlueckeInputSchema.parse(input)
   const scenario = normalizeInput(parsed)
@@ -176,6 +163,10 @@ export function simulateScenarioWithReturnPath(
   const getAnnualInflation = inflationPath
     ? (yearIndex: number) => inflationPath[yearIndex] ?? scenario.annualInflationRate
     : undefined
+  if (needsEstimator(parsed)) {
+    if (returnPath.length && !bucketPath) throw new Error('Automatische Kapitalbasis benötigt Renditen je Anlage, keinen aggregierten Pfad.')
+    return simulateCapitalLedger(scenario, bucketPath, getAnnualInflation)
+  }
   const accumulationRows = simulateAccumulationRows(scenario, getAnnualReturn, getAnnualInflation)
   const projectedCapitalAtRetirement = accumulationRows.at(-1)?.closingCapital ?? scenario.currentCapital
   const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement, getAnnualReturn, getAnnualInflation)
