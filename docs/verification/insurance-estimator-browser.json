@@ -1,0 +1,52 @@
+{
+  "testedAt": "2026-09-12T04:58:11.918Z",
+  "baseURL": "http://127.0.0.1:5175",
+  "evidence": [
+    {
+      "width": 1440,
+      "passed": true,
+      "errors": [],
+      "overflow": false,
+      "unrelatedPreserved": true,
+      "checks": [
+        "missing classification/cost",
+        "explicit zero",
+        "scope declarations",
+        "automatic forecast",
+        "unknown label",
+        "phase navigation",
+        "basis rate",
+        "manual phase independence",
+        "unsupported portfolio intact",
+        "reload persistence",
+        "assessment breakdown",
+        "funding shortfall",
+        "bank source gate",
+        "negative gross bank path error"
+      ]
+    },
+    {
+      "width": 390,
+      "passed": true,
+      "errors": [],
+      "overflow": false,
+      "unrelatedPreserved": true,
+      "checks": [
+        "missing classification/cost",
+        "explicit zero",
+        "scope declarations",
+        "automatic forecast",
+        "unknown label",
+        "phase navigation",
+        "basis rate",
+        "manual phase independence",
+        "unsupported portfolio intact",
+        "reload persistence",
+        "assessment breakdown",
+        "funding shortfall",
+        "bank source gate",
+        "negative gross bank path error"
+      ]
+    }
+  ]
+}

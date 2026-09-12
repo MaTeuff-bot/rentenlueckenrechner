@@ -52,6 +52,11 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                   ))}
                 </select>
               </label>
+              <label className="field"><span className="field-label">Tatsächliche Anlageart (unabhängig vom Proxy)</span>
+                <select aria-label={`Tatsächliche Anlageart von ${label}`} value={bucket.holding ?? ''} onChange={e => onUpdate(bucket.id, { holding: (e.target.value || undefined) as PortfolioBucket['holding'] })}>
+                  <option value="">Bitte klassifizieren</option><option value="accumulating-equity-fund">Thesaurierender Aktienfonds / Aktien-ETF</option><option value="ordinary-bank-deposit">Gewöhnliche Bankeinlage</option><option value="unsupported">Andere / nicht unterstützte Anlage</option>
+                </select>
+              </label>
               <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
               <div className="portfolio-cost-field">
                 <PercentInput

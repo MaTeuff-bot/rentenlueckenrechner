@@ -1,3 +1,5 @@
+import { CapitalEstimatorSetup } from './CapitalEstimatorSetup'
+import { capitalMode, needsEstimator } from '../../model/capitalIncome/setup'
 import { useId } from 'react'
 import type { RentenlueckeInput } from '../../model/types'
 import { phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
@@ -38,12 +40,14 @@ export function RetirementInsuranceSection({ insurance: i, input, onChange }: {
           <OptionalNumber label={`Eigene PV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.pvMonthlyToday} onChange={pvMonthlyToday => update({ pvMonthlyToday })} />
           <p>Beträge für die ganze Phase, einschließlich aller Einkommen. Auch 0 ausdrücklich eintragen. Einkommen vor diesen Versicherungsabzügen erfassen.</p>
         </> : p.status && p.status !== 'kvdr' && <>
-          <OptionalNumber label={`Beitragsrelevante Kapitalerträge – ${label} (€/Monat heute)`} value={p.capitalMonthlyToday} onChange={capitalMonthlyToday => update({ capitalMonthlyToday })} />
-          <p>Vor Steuern, nach beitragsrechtlichen Kosten. Schätzung oder ausdrücklich 0. Kein Depotwert, keine Gesamtrendite oder Entnahme; kein zusätzliches auszahlbares Einkommen. Bleibt in heutiger Kaufkraft konstant.</p>
+          <label className="field"><span className="field-label">Kapitalbasis – {label}</span><select value={capitalMode(p)} onChange={e => update({ capitalMode: e.target.value as 'automatic' | 'manual' })}><option value="automatic">Automatisch aus dem Portfolio schätzen</option><option value="manual">Manuelle Kapitalertragsschätzung</option></select></label>
+          {capitalMode(p) === 'manual' && <><OptionalNumber label={`Beitragsrelevante Kapitalerträge – ${label} (€/Monat heute)`} value={p.capitalMonthlyToday} onChange={capitalMonthlyToday => update({ capitalMode: 'manual', capitalMonthlyToday })} />
+          <p>Vor Steuern, nach beitragsrechtlichen Kosten. Schätzung oder ausdrücklich 0. Kein Depotwert, keine Gesamtrendite oder Entnahme; kein zusätzliches auszahlbares Einkommen. Bleibt in heutiger Kaufkraft konstant.</p></>}
           {phase === 'pension' && <label className="field"><span className="field-label">DRV-Zuschuss – Rentenphase</span><select value={p.drvSubsidy ?? ''} onChange={e => update({ drvSubsidy: (e.target.value || undefined) as InsurancePhase['drvSubsidy'] })}><option value="">Bitte auswählen</option><option value="confirmed">Erhalt bestätigt</option><option value="not-received">Nicht erhalten / nicht angesetzt</option></select></label>}
         </>}
       </fieldset>
     })}
+    {needsEstimator(input) && <CapitalEstimatorSetup insurance={i} onChange={onChange} />}
     {automatic && <>
       <OptionalNumber label="Kassenindividueller Zusatzbeitrag (%)" value={i.insurerAdditionalRate === undefined ? undefined : i.insurerAdditionalRate * 100} max={20} onChange={v => onChange({ ...i, insurerAdditionalRate: v === undefined ? undefined : v / 100 })} />
       <label className="field"><span className="field-label">Dauerhafte anerkannte PV-Elterneigenschaft</span><select value={i.isParent === undefined ? '' : String(i.isParent)} onChange={e => onChange({ ...i, isParent: e.target.value === '' ? undefined : e.target.value === 'true', childBirthYears: [], childrenConfirmed: undefined })}><option value="">Bitte auswählen</option><option value="true">Ja, dauerhaft anerkannt</option><option value="false">Nein, kinderlos</option></select></label>

@@ -1,3 +1,5 @@
+import { DEFAULT_PROJECTED_BASIS_RATE, estimatorSetupSchema } from './capitalIncome/schema'
+import { capitalMode, needsEstimator, estimatorSetupIssues } from './capitalIncome/setup'
 import { z } from 'zod'
 import { calculateContributions, type ContributionResult } from './contributions/contributionEngine'
 import { indexedContributionThresholds } from './contributions/rules2026'
@@ -11,9 +13,11 @@ export const insurancePhaseSchema = z.object({
   kvMonthlyToday: optionalMoney,
   pvMonthlyToday: optionalMoney,
   capitalMonthlyToday: optionalMoney,
+  capitalMode: z.enum(['automatic', 'manual']).optional(),
   drvSubsidy: z.enum(['confirmed', 'not-received']).optional(),
 })
 export const retirementInsuranceSchema = z.object({
+  capitalEstimator: estimatorSetupSchema.optional(),
   pensionAge: z.number().int().min(0).max(120).optional(),
   referenceYear: z.number().int().min(2026).max(9999),
   insurerAdditionalRate: z.number().finite().min(0).max(0.2).optional(),
@@ -87,7 +91,7 @@ export function insuranceSetupIssues(input: RentenlueckeInput): string[] {
     if (!p.status) issues.push(`${label}: Versicherungsstatus auswählen.`)
     if (!p.circumstances) issues.push(`${label}: Versicherungsumstände bestätigen.`)
     if (p.status && p.status !== 'kvdr') {
-      if (p.capitalMonthlyToday === undefined) issues.push(`${label}: Kapitalertragsbasis schätzen oder 0 eintragen.`)
+      if (capitalMode(p) === 'manual' && p.capitalMonthlyToday === undefined) issues.push(`${label}: Kapitalertragsbasis schätzen oder 0 eintragen.`)
       if (phase === 'pension' && !p.drvSubsidy) issues.push(`${label}: Erhalt des DRV-Zuschusses angeben.`)
     }
     for (const s of relevant) {
@@ -103,10 +107,10 @@ export function insuranceSetupIssues(input: RentenlueckeInput): string[] {
     if (!i.isParent && i.childBirthYears.length) issues.push('Kinderliste widerspricht fehlender Elterneigenschaft.')
     if (i.childBirthYears.some(y => y > i.referenceYear || y < i.referenceYear - input.currentAge)) issues.push('Kindergeburtsjahre müssen zwischen eigenem Geburtsjahr und Basisjahr liegen.')
   }
-  return [...new Set(issues)]
+  return [...new Set([...issues, ...estimatorSetupIssues(input)])]
 }
 export type CompleteContribution = Extract<ContributionResult, { status: 'automatic' | 'manual' }>
-export function contributionForYear(input: RentenlueckeInput, age: number, inflation: number, cash: number): CompleteContribution {
+export function contributionForYear(input: RentenlueckeInput, age: number, inflation: number, cash: number, annualCapitalAssessment?: number): CompleteContribution {
   const i = input.retirementInsurance!
   const phase = age < i.pensionAge! ? 'bridge' : 'pension'
   const p = i[phase]
@@ -124,7 +128,7 @@ export function contributionForYear(input: RentenlueckeInput, age: number, infla
     statutoryPensions: active.filter(s => s.kind === 'gesetzliche-rente').map(s => ({ id: s.id, grossMonthly: s.amountMonthlyToday * inflation })),
     occupationalPensions: active.filter(s => s.kind === 'betriebsrente').map(s => ({ id: s.id, grossMonthly: s.amountMonthlyToday * inflation })),
     rentalAssessmentMonthly: active.filter(s => s.kind === 'rental-income').reduce((sum, s) => sum + (s.rentalAssessmentMonthlyToday ?? 0) * inflation, 0),
-    capitalAssessmentMonthly: p.status === 'kvdr' ? undefined : p.capitalMonthlyToday! * inflation,
+    capitalAssessmentMonthly: p.status === 'kvdr' ? undefined : (annualCapitalAssessment === undefined ? p.capitalMonthlyToday! * inflation : annualCapitalAssessment / 12),
     drvSubsidy: phase === 'pension' ? p.drvSubsidy : undefined,
   })
   if (result.status !== 'automatic' && result.status !== 'manual') throw new Error(`KV/PV nicht vollständig: ${JSON.stringify(result)}`)
@@ -151,9 +155,15 @@ export function clearHiddenInvalidInsuranceValues(input: RentenlueckeInput): Ren
       if (!optionalMoney.safeParse(i[phase].kvMonthlyToday).success) i[phase].kvMonthlyToday = undefined
       if (!optionalMoney.safeParse(i[phase].pvMonthlyToday).success) i[phase].pvMonthlyToday = undefined
     }
-    if (!active || manual || !i[phase].status || i[phase].status === 'kvdr') {
+    if (!active || manual || capitalMode(i[phase]) === 'automatic' || !i[phase].status || i[phase].status === 'kvdr') {
       if (!optionalMoney.safeParse(i[phase].capitalMonthlyToday).success) i[phase].capitalMonthlyToday = undefined
     }
+  }
+  if (!needsEstimator({ ...input, retirementInsurance: i }) && i.capitalEstimator) {
+    const setup = { ...i.capitalEstimator }
+    if (!estimatorSetupSchema.shape.fundAcquisitionCost.safeParse(setup.fundAcquisitionCost).success) setup.fundAcquisitionCost = undefined
+    if (!estimatorSetupSchema.shape.projectedBasisRate.safeParse(setup.projectedBasisRate).success) setup.projectedBasisRate = DEFAULT_PROJECTED_BASIS_RATE
+    i.capitalEstimator = setup
   }
   if (!automaticPhases.length) {
     if (!retirementInsuranceSchema.shape.insurerAdditionalRate.safeParse(i.insurerAdditionalRate).success) i.insurerAdditionalRate = undefined

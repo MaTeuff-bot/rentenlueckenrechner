@@ -12,6 +12,7 @@ export function RentenlueckeCalculator() {
   const {
     input,
     insuranceIssues,
+    calculationError,
     allocation,
     portfolioBuckets,
     retirementIncomeStreams,
@@ -77,7 +78,7 @@ export function RentenlueckeCalculator() {
 
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
-            {portfolioBucketError ?? allocationError ??
+            {calculationError ?? portfolioBucketError ?? allocationError ??
               'Bitte korrigiere die markierten Eingaben. Ergebnisse, Diagramm und Tabelle werden erst mit gültigen Annahmen berechnet.'}
           </section>
         ) : (

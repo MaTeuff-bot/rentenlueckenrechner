@@ -1,3 +1,4 @@
+import { estimatorPortfolioSchema } from './capitalIncome/schema'
 import { retirementInsuranceSchema } from './retirementInsurance'
 import { z } from 'zod'
 
@@ -46,6 +47,7 @@ const retirementIncomeStream = z
 
 export const rentenlueckeInputSchema = z
   .object({
+    estimatorPortfolio: estimatorPortfolioSchema.optional(),
     currentAge: age.max(100, 'Darf höchstens 100 sein.'),
     retirementAge: age.max(100, 'Darf höchstens 100 sein.'),
     planningAge: age.max(120, 'Darf höchstens 120 sein.'),

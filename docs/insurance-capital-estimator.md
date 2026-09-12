@@ -1,15 +1,53 @@
-# PR1: inactive insurance capital-income accounting foundation
+# Insurance capital-income estimator: integrated annual planning model
 
-Rule verification date: **2026-09-10**. This module is not imported by the application,
-scenario simulator, capital search, bootstrap paths, persistence, or UI. Only tests
-use it. It computes an annual capital assessment estimate and portfolio funding;
-it does not calculate or fund investment taxes. No saved-state reset or distribution
-input is included. No annual target rebalancing policy is introduced.
+PR2 activates the PR1 estimator in the shared yearly ledger. Deterministic results,
+required-capital search and historical bootstrap use the same fund/bank accounting,
+income and KV/PV calculation. React only edits inputs and displays ledger outputs.
+Investment taxes are neither calculated nor funded.
+
+## Setup and persistence
+
+New voluntary/unknown phases start with automatic capital assessment. Existing
+explicit monthly capital estimates, including zero, retain manual mode. Bridge and
+pension choices are independent. A manual capital estimate leaves the portfolio and
+otherwise supported automatic KV/PV intact; whole-phase manual KV/PV remains reserved
+for unsupported insurance circumstances or explicit selection.
+
+Every holding must be classified independently from its return proxy, including
+zero-value holdings. Only accumulating qualifying equity funds and ordinary bank
+deposits are supported. Unclassified/unsupported holdings block automatic estimation
+until removed/replaced or an explicit manual capital estimate is selected. No partial
+coverage, automatic switching or liquidation occurs. Fund acquisition cost is required
+in euros (zero is explicit); it excludes bank principal. Scope and eligible loss-pool
+declarations are required. Missing values do not produce a complete forecast.
+An all-zero opening portfolio is incomplete for automatic estimation because no
+allocation weights can be derived; an explicit manual capital estimate remains
+available. Depletion after a valid opening allocation is supported and retains that
+allocation for hypothetical required-capital searches.
+
+Persistence stays at version/key v13. Classification, setup and phase modes are
+additive optional fields; valid existing amounts, income streams, allocation and
+other inputs survive. The older GKV release's v1–v12 cleanup is unchanged; this PR
+introduces no reset or unrelated storage deletion.
+
+## Projected Basiszins and calendar convention
+
+The [BMF letter of 13 January 2026](https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Investmentsteuer/2026-01-13-basiszins-berechnung-vorabpauschale.html)
+publishes **3.20% for 2026** (official PDF rechecked 2026-09-11).
+This is the Advanced-editable default, held **nominally constant independently of
+inflation**. Carrying it forward is a planning assumption, not a forecast. Each year's
+VP is recomputed from that year's values, gains, retained holdings and purchases.
+The pure API still requires an explicit annual basis rate.
+
+Each age row maps to a full calendar year: insurance reference year + row index.
+Transactions/receipts use the annual ordering below; monthly breakdowns divide the
+annual ledger. Same-year insurance funding does not replicate evidenced-year insurer
+billing under §5(2). Opening assessed and pending VP are zero, with the omitted-history
+distortion prominently disclosed; acquisition costs are never inferred or zeroed.
 
 ## Source register and implemented rules
 
-The preserved `.source-1.txt` through `.source-6.txt` in this worktree were read;
-these pre-existing research files are not modified by PR1. The URLs below are the
+PR1 verified the preserved `.source-1.txt` through `.source-6.txt` research extracts in its engine worktree. PR2 retains that rule snapshot and rechecked the official §18/§19 texts on 2026-09-11 for allocation movements. The URLs below are the
 canonical provenance, so the documentation remains useful without those local files.
 
 | Source / snapshot | Rule used and implementation boundary |
@@ -31,8 +69,7 @@ a nonnegative finite amount within the monetary range. Simulation callers must i
 that snapshot along scenario inflation, as required by the insurance plan for monetary
 thresholds, and pass it explicitly each year. Basis rate is
 a required explicit decimal parameter each year, including confirmed zero or a
-negative rate. There is no default or latest-published-rate constant. The insurance
-basis-rate UI assumption remains undecided and is unnecessary for this pure API.
+negative rate. The integration supplies the nominal projected rate described above; the pure API does not infer it.
 
 ## Coverage and opening balances
 
@@ -42,15 +79,14 @@ qualifying equity funds and ordinary deposits. Unknown/distributing funds, bonds
 individual securities, money-market funds merely named “cash”, legacy holdings,
 changes in fund classification, wrappers, business assets, foreign/special events,
 and joint holdings are outside this engine's automatic contract. There is no partial
-coverage or automatic manual-mode switch. PR2 must offer explicit manual capital
+coverage or automatic manual-mode switch. The UI offers explicit manual capital
 assessment or removal/replacement of unsupported holdings; whole-phase manual
 KV/PV is not required merely by this portfolio gate.
 
 The scope declaration means one person's domestic private standard holdings,
 acquired after 2017, with opening holdings already owned before the first modelled
 calendar year. Current-year opening acquisitions need timing information this MVP
-does not have. The year parameterisation assumes whole calendar years. PR2 must
-disclose its mapping from age-based simulation years to those years.
+does not have. The year parameterisation assumes whole calendar years. The mapping from age rows to full calendar years is disclosed above and in setup.
 
 One required euro acquisition cost covers **funds only**, may exceed market value,
 and may explicitly be zero. Bank principal is the deposit balance, not fund cost.
@@ -86,9 +122,7 @@ Rate products are validated before statutory caps can hide out-of-range intermed
 2. Apply each bucket's supplied annual total return to opening capital, once. Fund
    internal reinvestment stays inside that return, with no acquisition-cost increment.
    Ordinary deposit return is credited interest: record that income and the increased
-   bank principal without adding another cashflow. Negative bank returns are rejected
-   because fees/impairments cannot silently become negative interest. A caller must
-   supply an ordinary gross credited-interest return; a cost-net proxy is not enough.
+   bank principal without adding another cashflow. Negative gross bank returns are rejected because fees/impairments cannot silently become negative interest. Integration passes gross return separately from bucket costs: e.g. +2% gross less 5% costs produces −3% wealth return but +2% interest assessment. Costs are not automatically declared legally deductible. Sources already net of fund costs and non-cash return proxies cannot establish bank interest and block automatic setup.
 3. At year end, before new contributions, solve the withdrawal required for net spending
    plus **total own** KV/PV. Every trial withdraws the same value fraction from all
    current fund and deposit buckets. Fund cost and assessed VP decrease by the sold
@@ -142,9 +176,9 @@ The supported callback contract is deterministic with a continuous, increasing
 below the full marginal funding gain satisfy this). It supports minima, ceilings,
 loss/exemption kinks and negative spending gaps. Arbitrary nonmonotone callbacks are
 not guaranteed to find all roots. A negative residual at full liquidation reports a
-shortfall including the insurance on that actual sale. Bisection stops at the absolute
+shortfall including the insurance on that actual sale. Bracketed interpolation with periodic bisection stops at the absolute
 EUR tolerance (default 0.000001) or at most 100 iterations, configurable to 256. Endpoint
-evaluations are additional; `iterations` counts bisection trials (1 for an endpoint
+evaluations are additional; `iterations` counts interior trials (1 for an endpoint
 result). Invalid/nonfinite callback burdens throw. Discontinuity or exhausted budget
 returns `nonconverged`, signed residual and diagnostic amounts, with `closingState:
 null`; callers must not carry trial state forward. Each trial starts from the same
@@ -153,36 +187,40 @@ immutable opening balances so expenses, losses and VP are not repeatedly consume
 This is a same-receipt-year annual planning feedback approximation. It does not claim
 that insurance is billed immediately on a sale, or reproduce §5(2)'s evidenced-year
 rules. Monthly smoothing, phase splits, evidence timing and current vs past billing
-must be disclosed and resolved in PR2, not represented as legal rules here.
+are disclosed by integration as annual planning conventions, not represented as legal rules.
 
-## Existing simulator interaction / PR2 gates
+## Fixed-weight return reconciliation and search
 
-`simulateAccumulationRows` and `fundRetirementYear` operate on scalar capital. Their
-return → cashflow arithmetic matches the accounting above, but they cannot recover
-fund/bank composition from an aggregate return. The deterministic expected-return
-and bootstrap sampling resolvers combine component returns using fixed component
-weights each year. This has allocation-maintenance economics, but **no trades** are
-recorded. Treating it as a transaction-free fund/bank transfer would lose assessable
-sale gains and corrupt pooled cost/VP balances; adding interest on top of that scalar
-return would overstate wealth.
+The existing return model maintains initial component weights each year. Integration
+makes the necessary movements explicit after proportional spending/insurance funding
+and before end-year contributions, preserving that return and savings arithmetic.
+Overweight funds sell; underweight funds buy. Fund sales release their proportional
+share of pooled euro cost and assessed VP and recognize gains. Purchases add euro
+cost; bank principal transfers are not income. Fund-to-fund sales also recognize gains.
+Pending VP is calculated on retained units and December purchases per bucket, so
+opposite fund returns cannot cancel each other's gain caps. Contributions follow the
+same fixed weights and earn no current-year return. These movements implement the
+existing allocation-maintenance economics, not a new selectable tax/rebalancing policy.
 
-PR1 accepts explicit per-bucket annual returns and contributions and never changes
-existing return paths. It deliberately does not rebalance. For PR2, preserve each
-path's overall return and make any implied fund/bank movements explicit or surface
-an unsupported path. A fund→bank movement needs fund-sale gain recognition and
-proportional cost/VP release; a bank→fund movement adds fund acquisition cost but not
-income merely by moving principal. Fund→fund trades can also realise gains despite
-shared pooled cost. Selective moves cannot use `withdrawProportionally` over the whole
-portfolio; that helper is for the approved spending/insurance sale allocation only.
-Do not rewrite bucket values to targets or rescale cost to hide these transactions.
-The later tax release's annual-target-rebalancing decision is not authorization to
-add that policy here. Integration of these movements remains an explicit PR2 gate.
+The funding callback includes both proportional financing-sale gains and allocation-sale
+gains when computing total own KV/PV. Bank interest stays inside total return, assessment
+income never becomes cash, and insurance is deducted exactly once. KVdR ignores the
+capital assessment while accumulation and bridge accounting remain coherent.
+Nonconvergence has no next state and is displayed as an incomplete calculation;
+insufficient assets retain an explicit unfunded amount, including insurance on actual sales.
+A failed bootstrap path blocks the combined forecast rather than silently omitting it.
+Explicit bucket-return paths must cover every model year and identify each valued
+opening bucket exactly once; missing years never fall back to expected returns.
+Allocation purchases after a −100% fund return are rejected explicitly as zero-NAV
+purchases, just like savings purchases; this does not recognize a disposal or loss.
 
-The supported pure annual model has no remaining legal blocker within the stated
-bounds. Full UI activation still requires the explicit insurance basis-rate UI choice,
-coverage and approximation disclosures, movement/return reconciliation, phase-specific
-manual overrides, and one shared authoritative ledger across deterministic, search
-and bootstrap modes. No approval is re-requested for zero opening VP.
+Required-capital search uses the same retirement ledger and a €1 bracket. Hypothetical
+starting portfolios scale the projected per-euro acquisition cost, assessed/pending VP
+and simulated loss history. This is an explicit search assumption, not a transaction
+or mutation of the actual portfolio. When projected assets are zero, hypothetical new
+funds are acquired at cost with no prior adjustments. Bootstrap percentile trials
+calculate the same actual ledger without running unused required-capital searches;
+the reference result still performs the complete search.
 
 ## Verification
 
@@ -190,18 +228,16 @@ and bootstrap modes. No approval is re-requested for zero opening VP.
 months, per-fund caps despite pooled cost, bank-only/fund-only/mixed portfolios,
 contributions and zero NAV, multi-year receipt/sale balances, losses and expenses,
 funding feedback/minima/ceilings/surplus/depletion, invalid input, nonconvergence,
-immutability and a reproducible mixed-return/funding conservation grid. Existing
-integration tests must continue to pass because PR1 remains inactive. No browser
-verification is required for this unexposed pure module.
+immutability and a reproducible mixed-return/funding conservation grid. PR2 adds integration, component and additive-persistence regressions and desktop/mobile browser interactions. See the PR2 verification record below.
 
-Final validation on 2026-09-10 in the isolated worktree:
+Historical PR1 validation on 2026-09-10 (not a PR2 gate result):
 
 - Independent final `npm test -- --run`: **19 files, 374 tests passed**, 67.78 seconds.
 - Estimator coverage: **110 tests**, including three real contribution-engine callbacks,
   indexed allowance forwarding, aggregate range and pre-callback overflow regressions.
 - `npm run lint`: passed (exit 0).
 - `npm run build`: passed (exit 0); includes `tsc -b` typecheck and Vite production build.
-- Only the estimator test imports the new module; production integration remains inactive.
+- PR1 was inactive at that point; PR2 now imports the engine in production.
 
 An initial build found an intentionally malformed test-input cast; it was corrected
 before the successful final build and full test run. No commit, push or merge performed.

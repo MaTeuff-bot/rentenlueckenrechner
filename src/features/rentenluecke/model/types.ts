@@ -25,6 +25,7 @@ export type RetirementIncomeStream = {
 }
 
 export type RentenlueckeInput = {
+  estimatorPortfolio?: import('zod').infer<typeof import('./capitalIncome/schema').estimatorPortfolioSchema>
   currentAge: number
   retirementAge: number
   planningAge: number
@@ -58,6 +59,7 @@ export type NormalizedScenario = {
 }
 
 export type YearlyPeriodRow = {
+  capitalAssessment?: ReturnType<typeof import('./capitalIncome/insuranceEstimator').simulateEstimatorYear>
   insurance?: import('./retirementInsurance').CompleteContribution
   yearIndex: number
   ageStart: number

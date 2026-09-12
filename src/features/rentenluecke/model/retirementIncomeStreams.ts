@@ -4,17 +4,17 @@ type AggregateRetirementIncomeInput = Pick<RentenlueckeInput, 'monthlyRetirement
 export type AnnualRetirementIncome = {
   gross: number; deductions: number; otherDeductions: number; kv: number; pv: number; portfolioBase: number; net: number; insurance: CompleteContribution
 }
-export function calculateRetirementIncomeForYear(input: RentenlueckeInput, age: number, inflation: number): AnnualRetirementIncome {
+export function calculateRetirementIncomeForYear(input: RentenlueckeInput, age: number, inflation: number, annualCapitalAssessment?: number): AnnualRetirementIncome {
   let gross = 0, otherDeductions = 0
   for (const s of activeIncomeStreams(input.retirementIncomeStreams ?? [], age)) {
     const amount = s.amountMonthlyToday * 12 * inflation
     gross += amount
     if (s.amountBasis === 'gross') otherDeductions += amount * (s.deductionMode === 'effectiveHaircut' ? s.effectiveDeductionRate : 0)
   }
-  const insurance = contributionForYear(input, age, inflation, (gross - otherDeductions) / 12)
+  const insurance = contributionForYear(input, age, inflation, (gross - otherDeductions) / 12, annualCapitalAssessment)
   const kv = insurance.ownKvMonthly * 12, pv = insurance.ownPvMonthly * 12
   const phase = input.retirementInsurance![insurance.phase]
-  const portfolioBase = insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' ? phase.capitalMonthlyToday! * 12 * inflation : 0
+  const portfolioBase = insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' ? (annualCapitalAssessment ?? phase.capitalMonthlyToday! * 12 * inflation) : 0
   return { gross, otherDeductions, kv, pv, portfolioBase, deductions: otherDeductions + kv + pv, net: insurance.availableIncomeMonthly * 12, insurance }
 }
 
