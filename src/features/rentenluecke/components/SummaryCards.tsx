@@ -28,8 +28,8 @@ export function SummaryCards({ result, stochasticSummary }: SummaryCardsProps) {
       : null
 
   return (
-    <section aria-labelledby="results-title">
-      <h2 id="results-title">Ergebnis</h2>
+    <section aria-labelledby="capital-answer-title">
+      <h3 id="capital-answer-title">Dein Kapitalbedarf</h3>
       <div className="summary-grid">
         <article className="result-card result-card-primary">
           <span>Benötigtes Kapital zum Rentenbeginn, heutige Kaufkraft</span>

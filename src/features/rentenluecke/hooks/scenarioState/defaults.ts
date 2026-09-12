@@ -16,6 +16,7 @@ export function createDefaultState(): ScenarioState {
   const input = { ...baseInput, retirementIncomeStreams, retirementInsurance: createDefaultRetirementInsurance(earliestPensionAge(retirementIncomeStreams)) }
   return {
     input,
+    childrenAnswer: { kind: 'missing' },
     retirementIncomeStreams,
     portfolioBuckets: createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION),
     historical: createDefaultHistoricalState(),

@@ -780,3 +780,14 @@ summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-v
   .insurance-reconciliation { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .insurance-reconciliation dd { text-align: left; margin-bottom: 12px; font-weight: 600; }
 }
+
+.flow-navigation { display: flex; flex-wrap: wrap; gap: .65rem 1rem; margin-block: 1rem; }
+.flow-navigation a { padding: .5rem .7rem; border: 1px solid currentColor; border-radius: .4rem; }
+.flow-section { grid-column: 1 / -1; min-width: 0; scroll-margin-top: 1rem; }
+.flow-section > header { margin-bottom: 1rem; }
+.flow-section > fieldset { margin-block: 1rem; }
+.section-status { display: inline-block; font-size: .8rem; font-weight: 500; border: 1px solid currentColor; border-radius: 1rem; padding: .15rem .6rem; }
+.validation-summary { border-left: 3px solid #916529; padding: .5rem 1rem; }
+.validation-summary li { margin-block: .5rem; }
+.results-section { display: grid; gap: 1rem; scroll-margin-top: 1rem; }
+:focus-visible { outline: 3px solid #227c9d; outline-offset: 3px; }

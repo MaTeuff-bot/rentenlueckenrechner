@@ -1,3 +1,5 @@
+import { childrenEngineFields, type ChildrenAnswer } from '../../model/childrenAnswer'
+import { InsuranceRateAssumptions } from '../InputPanel/InsuranceRateAssumptions'
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { useState } from 'react'
@@ -16,13 +18,15 @@ function Harness({ initial = pension({ support: undefined }), config = createDef
   initial?: RetirementIncomeStream; config?: RetirementInsurance; workStop?: number
 }) {
   const [rawInsurance, setInsurance] = useState(config)
+  const [childrenAnswer, setChildrenAnswer] = useState<ChildrenAnswer>(config.isParent === undefined ? { kind: 'missing' } : config.isParent ? { kind: 'children', rows: [{ id: 'older', year: 1980 }] } : { kind: 'none' })
   const [streams, setStreams] = useState([initial])
-  const input = clearHiddenInvalidInsuranceValues(insuredInput({ currentAge: workStop, retirementAge: workStop, planningAge: 70, retirementIncomeStreams: streams, retirementInsurance: rawInsurance }))
+  const input = clearHiddenInvalidInsuranceValues(insuredInput({ currentAge: workStop, retirementAge: workStop, planningAge: 70, retirementIncomeStreams: streams, retirementInsurance: { ...rawInsurance, ...childrenEngineFields(childrenAnswer) } }))
   const insurance = input.retirementInsurance!
   const issues = insuranceSetupIssues(input)
   const valid = rentenlueckeInputSchema.safeParse(input).success && !issues.length
   return <>
-    <RetirementInsuranceSection insurance={insurance} input={input} onChange={setInsurance} />
+    <RetirementInsuranceSection insurance={insurance} input={input} onChange={setInsurance} childrenAnswer={childrenAnswer} onChildrenChange={setChildrenAnswer} />
+    <details><summary>Rechenannahmen</summary><InsuranceRateAssumptions insurance={insurance} onChange={setInsurance} /></details>
     <RetirementIncomeStreamsSection input={input} streams={streams} insurance={insurance}
       onUpdate={(id, patch) => setStreams(current => current.map(stream => stream.id === id ? { ...stream, ...patch } : stream))}
       onAdd={() => {}} onRemove={id => setStreams(current => current.filter(stream => stream.id !== id))} />
@@ -37,7 +41,7 @@ function confirmKvdr() {
   change('Versicherungsumstände – Rentenphase', 'standard')
   change('Art bestätigen – Pension', 'standard')
   change('Kassenindividueller Zusatzbeitrag (%)', '2.9')
-  change('Dauerhafte anerkannte PV-Elterneigenschaft', 'false')
+  fireEvent.click(screen.getByRole('button', { name: 'Keine anerkannten Kinder' }))
 }
 
 describe('guided insurance fields and ledger breakdown', () => {
@@ -50,7 +54,7 @@ describe('guided insurance fields and ledger breakdown', () => {
     expect(breakdown()).toBeInTheDocument()
     change('Kassenindividueller Zusatzbeitrag (%)', '')
     expect(breakdown()).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Zusatzbeitrag angeben')
+    expect(screen.getAllByRole('status').some(node => node.textContent?.includes('Zusatzbeitrag angeben'))).toBe(true)
     change('Kassenindividueller Zusatzbeitrag (%)', '0')
     expect(breakdown()).toBeInTheDocument()
     change('Kassenindividueller Zusatzbeitrag (%)', '-1')
@@ -79,23 +83,19 @@ describe('guided insurance fields and ledger breakdown', () => {
     expect(screen.getByLabelText('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)')).toHaveValue(null)
     expect(breakdown()).not.toBeInTheDocument()
   })
-  it('lets users correct child years, confirm the list, and edit consistent total rate assumptions', () => {
-    render(<Harness config={automaticInsurance()} initial={pension()} />)
+  it('answers through birth years and returns to missing when the final row is removed', () => {
+    render(<Harness config={automaticInsurance({ isParent: undefined })} initial={pension()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Anerkanntes Kind hinzufügen' }))
     expect(screen.getByLabelText('Geburtsjahr Kind 1')).toHaveValue(null)
     expect(breakdown()).not.toBeInTheDocument()
     change('Geburtsjahr Kind 1', '2002')
-    fireEvent.click(screen.getByLabelText('Kinderliste vollständig bestätigt (auch ohne Kinder unter 25)'))
     expect(breakdown()).toBeInTheDocument()
     change('Geburtsjahr Kind 1', '')
     expect(breakdown()).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Kind 1 entfernen' }))
-    fireEvent.click(screen.getByLabelText('Kinderliste vollständig bestätigt (auch ohne Kinder unter 25)'))
-    fireEvent.click(screen.getByText('Erweitert – gesetzliche Satzannahmen ändern'))
-    change(/Allgemeiner KV-Satz/, '16')
-    expect(screen.getAllByText('189 €').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Gesetzliche Standards verwenden' }))
-    expect(screen.getAllByText('175 €').length).toBeGreaterThan(0)
+    expect(breakdown()).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Keine anerkannten Kinder' }))
+    expect(breakdown()).toBeInTheDocument()
   })
   it('requires only manual totals for unsupported phases and allows returning to automatic coverage', () => {
     render(<Harness initial={pension({ kind: 'private-rente' })} />)
@@ -136,20 +136,20 @@ describe('guided insurance fields and ledger breakdown', () => {
   })
   it('preserves valid rate overrides when an invalid rate is hidden by manual mode and returns to automatic', () => {
     render(<Harness initial={pension()} config={automaticInsurance()} />)
-    fireEvent.click(screen.getByText('Erweitert – gesetzliche Satzannahmen ändern'))
+    fireEvent.click(screen.getByText('Rechenannahmen'))
     change(/Allgemeiner KV-Satz/, '16')
     change(/PV-Basissatz/, '4')
     change(/Ermäßigter KV-Satz/, '-1')
     expect(breakdown()).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Erweitert – eigene Gesamtannahme'))
     fireEvent.click(screen.getByLabelText('Gesamte Rentenphase manuell berechnen'))
-    expect(screen.queryByLabelText(/Allgemeiner KV-Satz/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Allgemeiner KV-Satz/)).toHaveValue(16)
     change('Eigene KV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '100')
     change('Eigene PV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '20')
     expect(breakdown()).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Gesamte Rentenphase manuell berechnen'))
     expect(breakdown()).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Erweitert – gesetzliche Satzannahmen ändern'))
+    fireEvent.click(screen.getByText('Rechenannahmen'))
     expect(screen.getByLabelText(/Allgemeiner KV-Satz/)).toHaveValue(16)
     expect(screen.getByLabelText(/PV-Basissatz/)).toHaveValue(4)
     expect(screen.getByLabelText(/Ermäßigter KV-Satz/)).toHaveValue(null)

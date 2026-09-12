@@ -30,45 +30,29 @@ Optional lässt sich die Überlebenswahrscheinlichkeit aus der gebündelten Dest
 
 Eine logarithmische Darstellung setzt nichtpositive Kapitalwerte an den unteren Achsenrand; sehr hohe P90-Werte können zur Lesbarkeit begrenzt werden. Diese Darstellung ändert die zugrunde liegenden Werte in Tooltips und Risikokarten nicht.
 
-## Aktuelle Grenzen und Speicherung
+## Eingabeführung und Speicherung
 
-- Keine automatische persönliche Steuerberechnung oder rechtliche KV/PV-Berechnung. Optional ist eine geführte manuelle GKV-/PV-Schätzung möglich (siehe unten).
-- Keine beliebige Live-ETF-Suche oder Datenimporte und kein individueller ETF-Backtest.
-- Keine auswählbare personalisierte Entnahmestrategie; das Modell deckt die berechnete Netto-Rentenlücke aus dem Vermögen.
+Die frei erreichbaren Abschnitte sind **Zeitplan → Ausgaben → Einkommen → Vermögen & Sparen → Versicherung → Ergebnis**. „Offen“ kennzeichnet fehlende Antworten, „Prüfen“ ungültige Angaben und „Vollständig“ einen abgeschlossenen Abschnitt. Fehlerlinks öffnen gegebenenfalls Rechenannahmen oder weitere Details und fokussieren das betroffene Feld. Unvollständige Eingaben zeigen keine aktuelle Prognose.
 
-Gültige Szenario-Eingaben werden ausschließlich lokal im Browser in `localStorage` gespeichert. Es gibt keine serverseitige Speicherung oder geräteübergreifende Synchronisierung; beim Löschen der Browserdaten gehen die gespeicherten Eingaben verloren.
+Der Zeitplan enthält aktuelles Alter, Arbeitsende, alle gesetzlichen Rentenbeginne und den Planungshorizont. Der früheste gesetzliche Strom bestimmt die Versicherungsphasengrenze, auch bei einem Betrag von null oder einem Sonderfall. Spätere Renten bleiben eigenständig. Ohne gesetzliche Rente ist ein ausdrücklicher Übergang der Versicherungsplanung erforderlich; das Entfernen der letzten gesetzlichen Rente bestätigt keinen Übergang. Die Brücke gilt vor der Grenze, die spätere Phase ab der Grenze. Sparbeiträge enden am Arbeitsende.
 
-## Manuelle GKV-/PV-Schätzung im Ruhestand
+Die Kinderliste enthält ausschließlich Geburtsjahre aller für die Pflegeversicherung anerkannten Kinder. Auch ältere Kinder begründen dauerhafte Elterneigenschaft; Zwillinge erhalten zwei Zeilen. „Keine anerkannten Kinder“ ist eine ausdrückliche Antwort. Eine unberührte Liste oder das Entfernen des letzten Kindes bleibt unbeantwortet. Das Jahresmodell zählt Kinder ab 1. Januar des 25. Geburtstagsjahres nicht mehr als unter 25; die Elterneigenschaft bleibt erhalten.
 
-Die Schätzung ist zunächst **ausgeschaltet**. Versicherungsstatus (KVdR, freiwillige GKV, unbekannt), Zuordnungen und eigene Beitragssätze werden manuell angegeben; die App bestimmt weder Anspruch noch Beitragspflicht. „Prüfen“ wird ohne zusätzliche Versicherung gerechnet und mit einer hervorgehobenen Unvollständigkeitswarnung auch bei den Ergebnissen angezeigt.
+Eingaben einschließlich unvollständiger Entwürfe werden ausschließlich lokal unter `rentenlueckenrechner.scenario.v14` gespeichert. Für UX PR1 werden ausschließlich die app-eigenen Szenarioversionen v1–v13 entfernt, ohne Migration. Betroffene Nutzer erhalten einen dauerhaft schließbaren Hinweis. Fremde Einträge und gültige v14-Daten bleiben erhalten. Es gibt keine serverseitige Speicherung oder Synchronisierung. Nicht endliche Zahlen werden als Entwurfsmarker gespeichert und blockieren weiterhin die Berechnung.
 
-| Einkommensart | KVdR | Freiwillige GKV | Unbekannt |
-| --- | --- | --- | --- |
-| Gesetzliche Rente | Einbeziehen | Einbeziehen | Prüfen |
-| Betriebsrente | Einbeziehen | Einbeziehen | Prüfen |
-| Private Rente | Prüfen | Einbeziehen | Prüfen |
-| Mieteinnahmen | Nicht einbeziehen | Einbeziehen | Prüfen |
-| Nebenjob | Prüfen | Einbeziehen | Prüfen |
-| Brückeneinkommen | Prüfen | Prüfen | Prüfen |
-| Sonstiges | Prüfen | Prüfen | Prüfen |
+## Kranken- und Pflegeversicherung im Modell
 
-Diese Matrix enthält **Planungsvorschläge**, keine abschließenden Rechtsregeln. Beispielsweise kann neben der Rente erzieltes selbstständiges Arbeitseinkommen auch bei KVdR beitragspflichtig sein; die breite Kategorie Nebenjob bleibt deshalb zur Prüfung offen. Jeder Strom bietet „Warum?“ und eine sichtbare Überschreibung. Eigene Zuordnungen und Satzüberschreibungen bleiben bei Status-/Kategoriewechsel bestehen und müssen erneut geprüft werden.
+Die Versicherungsangaben sind erforderlich. Für jede aktive Phase werden Status und gewöhnliche Versicherungsumstände ausdrücklich beantwortet. KVdR wird vom Nutzer gewählt; die App prüft keine Berechtigung und überträgt KVdR niemals automatisch auf die Brücke. „Unbekannt“ verwendet die bestehende freiwillige GKV-Annahme. Zusatzbeitrag und Kinderangaben sind bei automatischen Phasen erforderlich.
 
-Referenzjahr **2026**, offizielle Seiten live geprüft am **08.09.2026**:
+Die vorhandene Beitragsrechnung berücksichtigt ihre jährlichen Mindest-/Höchstbemessungen, Betriebsrentenregeln, Kinderregeln und bestätigte DRV-Zuschüsse. Beitragsrelevante automatische Einkommen müssen brutto erfasst werden; gewöhnliche Miete kann bei KVdR netto bleiben. Sonstige Abzüge und verfügbare Zuflüsse bleiben getrennt von der Beitragsbemessung.
 
-- [BMG: Beiträge](https://www.bundesgesundheitsministerium.de/beitraege): allgemeiner KV-Satz 14,6 %, ermäßigter Satz 14 %, durchschnittlicher Zusatzbeitrag 2,9 %. Gesetzliche Renten und Versorgungsbezüge unterliegen grundsätzlich dem allgemeinen Satz. Die Rentenversicherung beteiligt sich am Rentenbeitrag einschließlich Zusatzbeitrag zur Hälfte. Freiwillige GKV berücksichtigt grundsätzlich auch weitere Einnahmen, etwa Mieten und Kapitalerträge.
-- [DRV: Kranken- und Pflegeversicherung der Rentner](https://www.deutsche-rentenversicherung.de/DRV/DE/Rente/In-der-Rente/Kranken-und-Pflegeversicherung-der-Rentner/kranken-und-pflegeversicherung-der-rentner.html): bestätigt die hälftige KV-Beteiligung; bei freiwilliger GKV erfolgt sie als Zuschuss. Pflegebeiträge tragen Rentner selbst. KVdR hängt unter anderem von Vorversicherungszeiten ab; das wird hier nicht geprüft.
-- [BMG: Finanzierung der Pflegeversicherung](https://www.bundesgesundheitsministerium.de/themen/pflege/online-ratgeber-pflege/die-pflegeversicherung/finanzierung.html): seit 2025 und weiterhin 2026 PV 3,6 %, mit Kinderlosenzuschlag von 0,6 Prozentpunkten 4,2 %. Es bestehen Ausnahmen und Kinderabschläge, die das Modell nicht automatisch bestimmt. Beide BMG-Seiten weisen den Stand 03.09.2026 aus.
+Nicht unterstützte Einkommen, Versicherungsstatus oder besondere Umstände erfordern ausdrückliche eigene KV/PV-Gesamtbeträge nach allen Zuschüssen für die gesamte betroffene Phase, auch bei null. Diese ersetzen alle automatischen Regeln dieser Phase. Ungeklärte Kinderanerkennung wird über diesen bestehenden Sonderfall-/manuellen Weg behandelt. Jede verbleibende automatische Phase benötigt weiterhin geklärte Familienangaben.
 
-Daraus abgeleitete, editierbare **Eigenbelastungsannahmen**: gesetzliche Rente 8,75 % KV einschließlich angenommener Rentenbeteiligung bzw. erhaltenem Zuschuss; Betriebsrente und übrige Einkommen 17,5 % ohne fremde Beteiligung; private Rente, Miete und manuelle Portfolio-Basis 16,9 % ohne Krankengeldanspruch angenommen. Bei Nebenjobs müssen Beschäftigungsart und Arbeitgeberanteile selbst geprüft und KV/PV am Strom angepasst werden. Der kassenindividuelle Zusatzbeitrag kann vom Referenzwert abweichen. PV startet ausdrücklich bei 3,6 % ohne Kinderlosenzuschlag oder Kinderabschläge; 4,2 % kann bewusst ausgewählt oder ein anderer eigener Satz eingetragen werden. Daraus wird kein persönlicher Kinderstatus abgeleitet. Alle Sätze bleiben während der Projektion konstant.
+Freiwillige Phasen können die Kapitalbasis aus klassifizierten Anlagen schätzen oder eine ausdrückliche manuelle Kapitalertragsschätzung verwenden. Der automatische Schätzer unterstützt thesaurierende Aktienfonds und gewöhnliche Bankeinlagen unter den im Formular genannten Umfangs- und Verlustannahmen. Anschaffungskosten, Vorabpauschalen, simulierte Verluste und proportionale Verkäufe folgen der bestehenden Modellrechnung. Die Kapitalbasis ist kein zusätzliches auszahlbares Einkommen. Eine manuelle Kapitalbasis ersetzt nicht die gesamte Versicherungsphase.
 
-Bestehende Gesamtabzüge bleiben bei Migration von v10/v11 auf v12 unverändert. Selbst bei Aktivierung wird auf einen Bruttostrom erst zusätzliche KV/PV angewandt, wenn sein Gesamtabzug ausdrücklich ersetzt wurde. Die getrennten **sonstigen Abzüge** starten dann bei 0 % und müssen ohne KV/PV neu eingetragen werden. Der alte Gesamtabzug bleibt für den ausgeschalteten Modus gespeichert. Nettoangaben erhalten niemals zusätzliche Abzüge.
+Rechenannahmen enthalten Inflation, Quellen, Methoden und gesetzliche Satzüberschreibungen. Quellenbeschränkungen und aktive Überschreibungen bleiben sichtbar. Die Antwortkarten stehen vor der aufklappbaren KV/PV-Abrechnung; auch die Jahrestabelle ist aufklappbar. Sämtliche Werte stammen aus denselben Simulationsergebnissen und Jahreszeilen. Diagramme, Kaufkraftdarstellung und Rundung bleiben unverändert.
 
-Die manuelle Portfolio-Beitragsbasis gilt ab Rentenbeginn in heutiger Kaufkraft und wächst wie die Einkommen mit dem Inflationspfad. Sie erzeugt **kein Einkommen** und wird nicht aus Depotwert, Rendite oder Entnahme berechnet. 0 € setzt keine entsprechenden Kosten an; ein positiver Betrag setzt unabhängig vom angegebenen Status bewusst Kosten an. Diese reduzieren den verfügbaren Cashflow genau einmal, auch unter null. Beispiel: 1.000 € Monatsbasis verursacht bei 16,9 % KV + 3,6 % PV jährlich 2.460 € Kosten; ohne Einkommen erhöht sich der jährliche Kapitalbedarf um diese 2.460 €.
-
-Das Jahresledger trennt bisherige Gesamtabzüge, sonstige Abzüge, KV, PV, Portfolio-Basis und verfügbaren Netto-Cashflow. Sein Einkommensbetrag vor Abzügen enthält bei gemischten Eingaben Brutto- **und** bereits verfügbare Nettobeträge, keine hochgerechneten Bruttowerte. Zusammenfassungen und Entnahmelücken stammen aus dem Ledger. Deterministische Rechnung, Kapitalbedarfssuche und Bootstrap verwenden denselben Cashflow; Versicherungseinstellungen verändern nicht die gezogenen Marktpfade.
-
-Nicht enthalten: Beitragsbemessungsgrenzen, Mindestbemessung/-beiträge, Freibeträge (auch für Betriebsrenten), PKV-Formeln, Familien-/Partnerregeln, grenzüberschreitende Fälle, Steuern, Anschaffungskosten, Gewinne oder Ausschüttungsverfolgung. Portfolio-Kosten dürfen nicht nochmals angesetzt werden, wenn sie bereits in einer Nettoangabe oder Pauschale berücksichtigt wurden. Dies ist eine vereinfachte Schätzung, keine Steuer- oder Sozialversicherungsberatung.
+Investmentsteuern werden nicht automatisch berechnet oder finanziert; die Ergebnisse sind keine vollständig nach Steuern verfügbare Kaufkraft. Besondere persönliche Versicherungs-/Steuerfälle, PKV-Formeln oder eine individuelle Entnahmestrategie sind nicht Gegenstand der Automatik. Keine Live-ETF-Suche oder individuellen ETF-Backtests. Die Modellannahmen sind keine individuelle Steuer- oder Sozialversicherungsberatung.
 
 ## Lokal entwickeln
 

@@ -64,6 +64,7 @@ function renderInputPanel(
       onReset={options.onReset ?? vi.fn()}
     />,
   )
+  fireEvent.click(screen.getAllByText(/Rechenannahmen/, { selector: 'summary' })[0])
 }
 
 describe('InputPanel return source UX', () => {

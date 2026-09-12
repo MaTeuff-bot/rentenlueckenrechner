@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { RESET_NOTICE_KEY } from '../hooks/scenarioState/persistence'
 import { InsuranceBreakdown } from './InsuranceBreakdown'
-import { AssumptionsPanel } from './AssumptionsPanel'
 import { InputPanel } from './InputPanel'
 import { ScenarioOutcomePanel } from './ScenarioOutcomePanel'
 import { SummaryCards } from './SummaryCards'
@@ -11,7 +10,10 @@ import { useScenarioState } from '../hooks/useScenarioState'
 export function RentenlueckeCalculator() {
   const {
     input,
-    insuranceIssues,
+    issues,
+    childrenAnswer,
+    updateChildrenAnswer,
+    updateInsuranceTransition,
     calculationError,
     allocation,
     portfolioBuckets,
@@ -42,17 +44,20 @@ export function RentenlueckeCalculator() {
       <header className="hero">
         <div className="page-shell">
           <p className="eyebrow">Persönlicher Ruhestandsplaner</p>
-          <h1>Dein benötigtes Kapital zum Rentenbeginn</h1>
+          <h1>Wann möchtest du aufhören zu arbeiten – und reicht dein Geld dafür?</h1>
           <p>
-            Ordne deine benannten Portfolio-Bausteine den Rollen Aktien, Anleihen oder Cash zu und schätze mit
-            einer transparenten Jahressimulation, wie viel Kapital deine Rentenlücke bis zum Planungshorizont deckt.
+            Plane deinen Ruhestand mit Ausgaben, Einkommen, Vermögen und Versicherung. Du kannst jeden Abschnitt direkt bearbeiten.
           </p>
         </div>
       </header>
 
       <div className="page-shell content-stack">
-        {resetNotice && <section className="panel" role="status">Die bisherigen Eingaben wurden für die neue KV/PV-Berechnung zurückgesetzt. Bitte neu ergänzen. <button type="button" className="secondary-button" onClick={() => { localStorage.removeItem(RESET_NOTICE_KEY); setResetNotice(false) }}>Hinweis schließen</button></section>}
+        {resetNotice && <section className="panel" role="status">Die bisherigen Eingaben wurden für die überarbeitete Eingabeführung mit einem Zeitplan und einer Kinderliste zurückgesetzt. Bitte neu ergänzen. <button type="button" className="secondary-button" onClick={() => { localStorage.removeItem(RESET_NOTICE_KEY); setResetNotice(false) }}>Hinweis schließen</button></section>}
         <InputPanel
+          issues={issues}
+          childrenAnswer={childrenAnswer}
+          onChildrenChange={updateChildrenAnswer}
+          onTransitionChange={updateInsuranceTransition}
           input={input}
           allocation={allocation}
           portfolioBuckets={portfolioBuckets}
@@ -74,27 +79,29 @@ export function RentenlueckeCalculator() {
           onReset={reset}
         />
 
-        {insuranceIssues.length > 0 && <section className="panel source-warning" aria-label="KV/PV-Angaben ergänzen" role="status"><strong>KV/PV-Angaben fehlen oder widersprechen sich. Noch keine Prognose.</strong><ul>{insuranceIssues.map(issue => <li key={issue}>{issue}</li>)}</ul></section>}
-
+        <section id="ergebnis" tabIndex={-1} className="results-section" aria-labelledby="results-title">
+        <h2 id="results-title">Ergebnis</h2>
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
             {calculationError ?? portfolioBucketError ?? allocationError ??
-              'Bitte korrigiere die markierten Eingaben. Ergebnisse, Diagramm und Tabelle werden erst mit gültigen Annahmen berechnet.'}
+              'Deine Prognose ist noch offen. Ergänze die verlinkten Angaben; danach erscheinen Ergebnisse, Diagramm und Tabelle.'}
+            <p><a href="#inputs-title">Zu den offenen Angaben</a></p>
           </section>
         ) : (
           <>
-            <InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} />
             <SummaryCards result={result} stochasticSummary={stochasticSummary} />
+            <p className="source-warning">Investmentsteuern werden nicht automatisch berechnet oder finanziert. Die Ergebnisse sind keine vollständig nach Steuern verfügbare Kaufkraft.</p>
+            <details className="panel"><summary>KV/PV-Abrechnung im Detail</summary><InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} /></details>
             <ScenarioOutcomePanel
               result={result}
               stochasticSummary={stochasticSummary}
               historicalValidYears={historicalValidYears}
             />
-            <YearlyTable rows={result.rows} />
+            <details className="panel"><summary>Jährliche Abrechnung anzeigen</summary><YearlyTable rows={result.rows} /></details>
           </>
         )}
 
-        <AssumptionsPanel />
+        </section>
       </div>
     </main>
   )

@@ -1,3 +1,6 @@
+import { scenarioIssues } from '../model/scenarioIssues'
+import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
+import { timelineBoundary, transitionAfterStreamsChange } from '../model/scenarioTimeline'
 import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, type RetirementInsurance } from '../model/retirementInsurance'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -38,11 +41,12 @@ export function useScenarioState() {
     const annualReturn = calculatePortfolioExpectedReturn(allocation)
     return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
+      retirementInsurance: state.input.retirementInsurance ? { ...state.input.retirementInsurance, pensionAge: timelineBoundary(retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer ?? { kind: 'missing' }) } : undefined,
       retirementIncomeStreams,
       estimatorPortfolio: portfolioBuckets,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }), annualReturn)
-  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input])
+  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input, state.childrenAnswer, state.explicitInsuranceTransition])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const portfolioBucketError = useMemo(() => validatePortfolioBuckets(portfolioBuckets), [portfolioBuckets])
@@ -51,6 +55,7 @@ export function useScenarioState() {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
   const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
+  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError])
   const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
     () => ({
@@ -76,12 +81,11 @@ export function useScenarioState() {
   const { result, stochasticSummary, calculationError } = calculation
 
   useEffect(() => {
-    if (!parsedInput.success) return
-    localStorage.setItem(
-      STORAGE_KEY,
-      serializeScenarioState({ input: parsedInput.data, portfolioBuckets, retirementIncomeStreams: parsedInput.data.retirementIncomeStreams ?? [], historical }),
-    )
-  }, [historical, isValid, parsedInput, portfolioBuckets, retirementIncomeStreams])
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
+  }, [state])
+
+  const updateChildrenAnswer = (childrenAnswer: ChildrenAnswer) => setState(current => ({ ...current, childrenAnswer }))
+  const updateInsuranceTransition = (explicitInsuranceTransition: number | undefined) => setState(current => ({ ...current, explicitInsuranceTransition }))
 
   const updateField = (field: InputFieldName, value: number) => {
     setState((current) => ({
@@ -127,12 +131,10 @@ export function useScenarioState() {
   }
 
   const updateRetirementIncomeStream = (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => {
-    setState((current) => ({
-      ...current,
-      retirementIncomeStreams: current.retirementIncomeStreams.map((stream) =>
-        stream.id === id ? { ...stream, ...patch } : stream,
-      ),
-    }))
+    setState(current => {
+      const next = current.retirementIncomeStreams.map(stream => stream.id === id ? { ...stream, ...patch } : stream)
+      return { ...current, retirementIncomeStreams: next, explicitInsuranceTransition: transitionAfterStreamsChange(current.retirementIncomeStreams, next, current.explicitInsuranceTransition) }
+    })
   }
 
   const addRetirementIncomeStream = () => {
@@ -153,10 +155,10 @@ export function useScenarioState() {
   }
 
   const removeRetirementIncomeStream = (id: string) => {
-    setState((current) => ({
-      ...current,
-      retirementIncomeStreams: current.retirementIncomeStreams.filter((stream) => stream.id !== id),
-    }))
+    setState(current => {
+      const next = current.retirementIncomeStreams.filter(stream => stream.id !== id)
+      return { ...current, retirementIncomeStreams: next, explicitInsuranceTransition: transitionAfterStreamsChange(current.retirementIncomeStreams, next, current.explicitInsuranceTransition) }
+    })
   }
 
   const updateInflationSource = (sourceId: string) => {
@@ -174,7 +176,11 @@ export function useScenarioState() {
 
   return {
     input,
+    childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } as ChildrenAnswer,
+    updateChildrenAnswer,
+    updateInsuranceTransition,
     insuranceIssues,
+    issues,
     calculationError,
     allocation,
     portfolioBuckets,

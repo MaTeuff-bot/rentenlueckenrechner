@@ -40,11 +40,11 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
               </button>
               <label className="field">
                 <span className="field-label">Name</span>
-                <input type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
+                <input id={`portfolio-name-${bucket.id}`} type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
               </label>
               <label className="field">
                 <span className="field-label">Renditequelle/Proxy</span>
-                <select aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
+                <select id={`portfolio-source-${bucket.id}`} aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
                   {sourceOptionGroups.map((group) => (
                     <optgroup key={group.label} label={group.label}>
                       {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
@@ -53,7 +53,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 </select>
               </label>
               <label className="field"><span className="field-label">Tatsächliche Anlageart (unabhängig vom Proxy)</span>
-                <select aria-label={`Tatsächliche Anlageart von ${label}`} value={bucket.holding ?? ''} onChange={e => onUpdate(bucket.id, { holding: (e.target.value || undefined) as PortfolioBucket['holding'] })}>
+                <select id={`portfolio-holding-${bucket.id}`} aria-label={`Tatsächliche Anlageart von ${label}`} value={bucket.holding ?? ''} onChange={e => onUpdate(bucket.id, { holding: (e.target.value || undefined) as PortfolioBucket['holding'] })}>
                   <option value="">Bitte klassifizieren</option><option value="accumulating-equity-fund">Thesaurierender Aktienfonds / Aktien-ETF</option><option value="ordinary-bank-deposit">Gewöhnliche Bankeinlage</option><option value="unsupported">Andere / nicht unterstützte Anlage</option>
                 </select>
               </label>
@@ -77,7 +77,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
           )
         })}
       </div>
-      <button className="secondary-button portfolio-add" type="button" onClick={onAdd}>+ Anlage hinzufügen</button>
+      <button id="portfolio-add" className="secondary-button portfolio-add" type="button" onClick={onAdd}>+ Anlage hinzufügen</button>
       <div className="portfolio-summary" aria-label="Portfolio-Zusammenfassung">
         <strong>Gesamtwert: {currency.format(Number.isFinite(total) ? total : 0)}</strong>
         <span>Aktien {percent.format(allocation.equity)}</span>

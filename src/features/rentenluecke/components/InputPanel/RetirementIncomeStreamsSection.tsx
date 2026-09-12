@@ -84,6 +84,7 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
               <label className="field">
                 <span className="field-label">Kategorie</span>
                 <select
+                  id={`retirement-income-kind-${stream.id}`}
                   aria-label={`Kategorie von ${label}`}
                   aria-describedby={`retirement-income-help-${stream.id}`}
                   value={kind}
@@ -103,6 +104,7 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                 <span className="field-label">Name</span>
                 <input
                   type="text"
+                  id={`retirement-income-name-${stream.id}`}
                   aria-label={`Name von ${label}`}
                   value={stream.name}
                   placeholder={`Einkommen ${index + 1}`}
@@ -115,7 +117,7 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                 value={stream.amountMonthlyToday}
                 onChange={(amountMonthlyToday) => onUpdate(stream.id, { amountMonthlyToday })}
               />
-              <NumberInput
+              {kind === 'gesetzliche-rente' ? <p>Beginn: Alter {Number.isFinite(stream.startAge) ? stream.startAge : 'offen'}. <a href="#zeitplan">Im Zeitplan ändern</a></p> : <NumberInput
                 id={`retirement-income-start-${stream.id}`}
                 label="Startalter"
                 value={stream.startAge}
@@ -123,10 +125,12 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                 max={120}
                 onChange={(startAge) => onUpdate(stream.id, { startAge })}
               />
+              }
               <OptionalEndAgeInput stream={stream} error={endAgeError} onUpdate={onUpdate} />
               <label className="field">
                 <span className="field-label">Betragsart</span>
                 <select
+                  id={`retirement-income-amountBasis-${stream.id}`}
                   aria-label={`Betragsart von ${label}`}
                   value={stream.amountBasis}
                   onChange={(event) => {
@@ -154,8 +158,8 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                   })}
                 />
               ) : null}
-              {['gesetzliche-rente', 'betriebsrente'].includes(kind) && (automaticPhases.length > 0 || stream.support === 'unsupported') && <label className="field"><span className="field-label">Art bestätigen – {label}</span><select value={stream.support ?? ''} onChange={e => onUpdate(stream.id, { support: (e.target.value || undefined) as RetirementIncomeStream['support'] })}><option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische {kind === 'betriebsrente' ? 'laufende Betriebsrente' : 'gesetzliche Altersrente'}</option><option value="unsupported">Sonderfall / ungeklärt (z. B. Ausland, Einmalzahlung)</option></select></label>}
-              {kind === 'rental-income' && automaticPhases.some(phase => insurance?.[phase].status && insurance[phase].status !== 'kvdr') && <OptionalNumber label={`Beitragsrelevanter Mietüberschuss vor Steuern – ${label} (€/Monat heute)`} value={stream.rentalAssessmentMonthlyToday} onChange={rentalAssessmentMonthlyToday => onUpdate(stream.id, { rentalAssessmentMonthlyToday })} />}
+              {['gesetzliche-rente', 'betriebsrente'].includes(kind) && (automaticPhases.length > 0 || stream.support === 'unsupported') && <label className="field"><span className="field-label">Art bestätigen – {label}</span><select id={`retirement-income-support-${stream.id}`} value={stream.support ?? ''} onChange={e => onUpdate(stream.id, { support: (e.target.value || undefined) as RetirementIncomeStream['support'] })}><option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische {kind === 'betriebsrente' ? 'laufende Betriebsrente' : 'gesetzliche Altersrente'}</option><option value="unsupported">Sonderfall / ungeklärt (z. B. Ausland, Einmalzahlung)</option></select></label>}
+              {kind === 'rental-income' && automaticPhases.some(phase => insurance?.[phase].status && insurance[phase].status !== 'kvdr') && <OptionalNumber id={`retirement-income-rentalAssessmentMonthlyToday-${stream.id}`} label={`Beitragsrelevanter Mietüberschuss vor Steuern – ${label} (€/Monat heute)`} value={stream.rentalAssessmentMonthlyToday} onChange={rentalAssessmentMonthlyToday => onUpdate(stream.id, { rentalAssessmentMonthlyToday })} />}
               {kind === 'rental-income' && <p className="retirement-income-row-note">Monatsbetrag = verfügbarer Mietzufluss vor KV/PV; sonstige Abzüge separat. Die Beitragsbasis ist der Überschuss vor Steuern nach beitragsrechtlichen Kosten, unabhängig vom verfügbaren Geld. Bei KVdR ist gewöhnliche Miete beitragsfrei und darf netto bleiben.</p>}
               <p className="retirement-income-row-note">Netto nur für beitragsfreie Einnahmen oder bei manueller Phase, jeweils vor der separat erfassten KV/PV. Beitragsrelevante automatische Einkommen benötigen Brutto; keine Rückrechnung.</p>
               <button

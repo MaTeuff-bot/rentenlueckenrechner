@@ -7,7 +7,7 @@ export const inputLabels = {
   retirementAge: 'Arbeitsende (Alter)',
   planningAge: 'Planung bis Alter',
   currentCapital: 'Aktuelles Altersvorsorgevermögen',
-  monthlyContributionToday: 'Monatliche Sparrate bis Rentenbeginn, heutige Kaufkraft',
+  monthlyContributionToday: 'Monatliche Sparrate bis Arbeitsende, heutige Kaufkraft',
   monthlyDesiredSpendingToday: 'Gewünschte monatliche Ausgaben im Ruhestand, heutige Kaufkraft',
   monthlyRetirementIncomeToday: 'Erwartetes monatliches Renteneinkommen, heutige Kaufkraft',
   annualInflationRate: 'Inflation pro Jahr',
