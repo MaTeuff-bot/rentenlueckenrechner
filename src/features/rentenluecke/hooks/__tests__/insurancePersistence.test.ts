@@ -10,7 +10,7 @@ beforeEach(() => localStorage.clear())
 
 describe('guided insurance persistence and app-owned reset', () => {
   it('discards every owned old scenario version, preserves unrelated storage and records one reset notice', () => {
-    for (let version = 1; version <= 12; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
+    for (let version = 1; version <= 13; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
     localStorage.setItem('another-app.scenario.v12', 'keep')
     localStorage.setItem('rentenlueckenrechner.preferences', 'keep')
     localStorage.setItem('rentenlueckenrechner.scenario.v14', 'future')
@@ -21,8 +21,9 @@ describe('guided insurance persistence and app-owned reset', () => {
     loadInitialState()
     expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
   })
-  it('preserves v13 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
+  it('preserves v14 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
     const state = createDefaultState()
+    state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
     state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002], rates: { kvGeneralRate: 0, kvReducedRate: 0.15, pvBaseRate: 0.04 },
       bridge: { status: 'unsupported', kvMonthlyToday: 200, pvMonthlyToday: 0 },
       pension: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'not-received' },
@@ -34,7 +35,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     const loaded = loadInitialState()
     expect(loaded.input.retirementInsurance).toEqual(state.input.retirementInsurance)
     expect(loaded.retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
-    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(13)
+    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(14)
   })
   it('roundtrips unanswered fields without fabricating confirmed zeros', () => {
     const state = createDefaultState()
@@ -51,6 +52,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     const { result, unmount } = renderHook(useScenarioState)
     expect(result.current.isValid).toBe(false)
     act(() => result.current.updateRetirementIncomeStream('statutory-pension', { support: 'standard' }))
+    act(() => result.current.updateChildrenAnswer({ kind: 'children', rows: [{ id: 'older', year: 1980 }] }))
     act(() => result.current.updateRetirementInsurance(automaticInsurance()))
     expect(result.current.isValid).toBe(true)
     const complete = result.current.result
@@ -65,7 +67,8 @@ describe('guided insurance persistence and app-owned reset', () => {
     const validStored = localStorage.getItem(STORAGE_KEY)
     act(() => reloaded.result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: NaN })))
     expect(reloaded.result.current.isValid).toBe(false)
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(validStored)
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBe(validStored)
+    expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.insurerAdditionalRate).toBeNaN()
     act(() => reloaded.result.current.reset())
     expect(reloaded.result.current.result).toBeNull()
     expect(reloaded.result.current.input.retirementInsurance?.pension).toEqual({})
@@ -75,7 +78,8 @@ describe('guided insurance persistence and app-owned reset', () => {
 describe('additive insurance estimator persistence', () => {
   it('keeps legacy manual amounts and unrelated state without a new reset', () => {
     const state = createDefaultState()
-    state.input.retirementInsurance = automaticInsurance({
+    state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
+    state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002],
       pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 321, drvSubsidy: 'not-received' },
     })
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
@@ -91,7 +95,8 @@ describe('additive insurance estimator persistence', () => {
   it('roundtrips classifications, confirmed zero cost, projected rate and independent phase modes', () => {
     const state = createDefaultState()
     state.portfolioBuckets[0].holding = 'accumulating-equity-fund'
-    state.input.retirementInsurance = automaticInsurance({
+    state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
+    state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002],
       capitalEstimator: { fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
       bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', capitalMonthlyToday: 123 },
       pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 456, drvSubsidy: 'not-received' },

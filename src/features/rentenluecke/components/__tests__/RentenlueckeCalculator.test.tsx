@@ -36,6 +36,7 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear()
   const state = createDefaultState()
+  state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
   state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
   state.retirementIncomeStreams = state.retirementIncomeStreams.map(stream => ({ ...stream, support: 'standard' }))
   localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
@@ -53,9 +54,11 @@ describe('RentenlueckeCalculator', () => {
   it('renders core results after completed setup', async () => {
     render(<RentenlueckeCalculator />)
 
-    expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
     expect(screen.getAllByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toHaveLength(0)
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
+    fireEvent.click(screen.getByText('Rechenannahmen', { exact: false, selector: 'summary' }))
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
     expect(screen.getByText(/netto verfügbare Konsumausgaben in heutiger Kaufkraft/)).toBeInTheDocument()
@@ -68,6 +71,7 @@ describe('RentenlueckeCalculator', () => {
   it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
     render(<RentenlueckeCalculator />)
 
+    fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Details anzeigen' }))
 
     expect(screen.getByRole('columnheader', { name: 'Gewünschte Nettoausgaben' })).toBeInTheDocument()
@@ -88,8 +92,8 @@ describe('RentenlueckeCalculator', () => {
 
     expect(screen.getByText('Muss mindestens 0 sein.')).toBeInTheDocument()
     expect(currentAge).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('status')).toHaveTextContent('Bitte korrigiere die markierten Eingaben')
-    expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Deine Prognose ist noch offen/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
   it('updates the derived total, allocation, and result from a bucket value', () => {
@@ -100,15 +104,15 @@ describe('RentenlueckeCalculator', () => {
     fireEvent.change(inputById('portfolio-value-equity'), { target: { value: '40000' } })
     expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 55.000')
     expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Aktien 72,7 %')
-    expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
   })
 
   it('hides results for an empty portfolio', () => {
     render(<RentenlueckeCalculator />)
 
     for (const button of screen.getAllByRole('button', { name: /entfernen$/ }).filter(button => !button.getAttribute('aria-label')?.includes('Rente'))) fireEvent.click(button)
-    expect(screen.getByRole('status')).toHaveTextContent('Gesamtwert des Portfolios muss größer als 0')
-    expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Gesamtwert des Portfolios muss größer als 0/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Jahrestabelle' })).not.toBeInTheDocument()
   })
 
@@ -123,7 +127,7 @@ describe('RentenlueckeCalculator', () => {
     const deduction = inputById('retirement-income-deduction-statutory-pension')
     fireEvent.change(deduction, { target: { value: '20' } })
     expect(deduction).toHaveValue(20)
-    expect(screen.getByRole('heading', { name: 'Ergebnis' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Einkommen hinzufügen' }))
     expect(screen.getByLabelText('Name von Weiteres Einkommen')).toBeInTheDocument()
@@ -138,12 +142,12 @@ it('requires answers on clean load, announces the owned reset, and dismisses its
   localStorage.setItem('unrelated', 'keep')
   const { unmount } = render(<RentenlueckeCalculator />)
   expect(screen.getByText(/bisherigen Eingaben wurden/)).toBeVisible()
-  expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
-  expect(screen.getByLabelText('KV/PV-Angaben ergänzen')).toHaveTextContent('Noch keine Prognose')
+  expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
+  expect(screen.getByText(/Deine Prognose ist noch offen/)).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: 'Hinweis schließen' }))
   expect(localStorage.getItem('unrelated')).toBe('keep')
   unmount()
   render(<RentenlueckeCalculator />)
   expect(screen.queryByText(/bisherigen Eingaben wurden/)).not.toBeInTheDocument()
-  expect(screen.queryByRole('heading', { name: 'Ergebnis' })).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
 })

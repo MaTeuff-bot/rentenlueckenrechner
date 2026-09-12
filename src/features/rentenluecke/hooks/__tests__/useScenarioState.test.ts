@@ -19,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v13 scenario with income streams and annual bucket costs', () => {
+  it('roundtrips a v14 scenario with income streams and annual bucket costs', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -31,7 +31,7 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 13,
+      version: 14,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
@@ -39,7 +39,7 @@ describe('parsePersistedScenarioState', () => {
     expect(JSON.parse(serializeScenarioState(scenario)).portfolioBuckets.every((bucket: object) => !('role' in bucket))).toBe(true)
   })
 
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])('falls back to defaults for a v%i shape', (version) => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])('falls back to defaults for a v%i shape', (version) => {
     expect(parsePersistedScenarioState(persistedJson({
       version,
       input: { ...DEFAULT_INPUT, currentCapital: 123_456 },
@@ -85,7 +85,7 @@ describe('useScenarioState', () => {
       { id: 'zero', name: 'Zero', value: 0, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
     ]
     localStorage.setItem(
-      'rentenlueckenrechner.scenario.v13',
+      'rentenlueckenrechner.scenario.v14',
       serializeScenarioState(persisted),
     )
 
@@ -132,7 +132,7 @@ describe('useScenarioState', () => {
   it('updates output and supports adding/removing retirement income streams', () => {
     const state = createDefaultState()
     state.input = { ...state.input, currentAge: 65, planningAge: 70 }
-    localStorage.setItem('rentenlueckenrechner.scenario.v13', serializeScenarioState(state))
+    localStorage.setItem('rentenlueckenrechner.scenario.v14', serializeScenarioState(state))
     const { result } = renderHook(() => useScenarioState())
     act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
     const pension = result.current.retirementIncomeStreams[0]
