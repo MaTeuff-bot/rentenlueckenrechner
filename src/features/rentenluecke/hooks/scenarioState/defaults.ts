@@ -1,3 +1,4 @@
+import { defaultCoverageAnswers } from '../../model/insuranceCoverage'
 import { createDefaultRetirementInsurance, earliestPensionAge } from '../../model/retirementInsurance'
 import { DEFAULT_INPUT } from '../../model/defaults'
 import {
@@ -16,6 +17,7 @@ export function createDefaultState(): ScenarioState {
   const input = { ...baseInput, retirementIncomeStreams, retirementInsurance: createDefaultRetirementInsurance(earliestPensionAge(retirementIncomeStreams)) }
   return {
     input,
+    insuranceCoverageAnswers: defaultCoverageAnswers(),
     childrenAnswer: { kind: 'missing' },
     retirementIncomeStreams,
     portfolioBuckets: createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION),

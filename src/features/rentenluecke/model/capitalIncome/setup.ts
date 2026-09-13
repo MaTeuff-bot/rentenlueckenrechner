@@ -1,4 +1,4 @@
-import { phaseManualReasons, phaseStreams } from '../retirementInsurance'
+import { insurancePhaseRanges, phaseManualReasons, phaseStreams } from '../retirementInsurance'
 import { getReturnSeriesCategory, getReturnSeriesOptions } from '../historicalReturns/sourceOptions'
 import type { RentenlueckeInput } from '../types'
 
@@ -11,7 +11,7 @@ export function needsEstimator(input: RentenlueckeInput) {
   if (!i) return false
   return (['bridge', 'pension'] as const).some(key => {
     const p = i[key]
-    const active = key === 'bridge' ? input.retirementAge < (i.pensionAge ?? input.retirementAge) : (i.pensionAge ?? input.retirementAge) < input.planningAge
+    const active = insurancePhaseRanges(input, i).some(range => range.phase === key)
     return active && !phaseManualReasons(i, key, phaseStreams(input.retirementIncomeStreams ?? [], i, key, input.retirementAge, input.planningAge)).length && (p.status === 'voluntary' || p.status === 'unknown') && capitalMode(p) === 'automatic'
   })
 }

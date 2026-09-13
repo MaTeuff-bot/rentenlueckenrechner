@@ -11,6 +11,7 @@ export function RentenlueckeCalculator() {
   const {
     input,
     issues,
+    insuranceCoverageAnswers, updateInsuranceCoverage,
     childrenAnswer,
     updateChildrenAnswer,
     updateInsuranceTransition,
@@ -52,9 +53,10 @@ export function RentenlueckeCalculator() {
       </header>
 
       <div className="page-shell content-stack">
-        {resetNotice && <section className="panel" role="status">Die bisherigen Eingaben wurden für die überarbeitete Eingabeführung mit einem Zeitplan und einer Kinderliste zurückgesetzt. Bitte neu ergänzen. <button type="button" className="secondary-button" onClick={() => { localStorage.removeItem(RESET_NOTICE_KEY); setResetNotice(false) }}>Hinweis schließen</button></section>}
+        {resetNotice && <section className="panel" role="status">Die bisherigen Eingaben wurden für die überarbeitete Versicherungsplanung zurückgesetzt. Bitte neu ergänzen. <button type="button" className="secondary-button" onClick={() => { localStorage.removeItem(RESET_NOTICE_KEY); setResetNotice(false) }}>Hinweis schließen</button></section>}
         <InputPanel
           issues={issues}
+          insuranceCoverageAnswers={insuranceCoverageAnswers} onInsuranceCoverageChange={updateInsuranceCoverage}
           childrenAnswer={childrenAnswer}
           onChildrenChange={updateChildrenAnswer}
           onTransitionChange={updateInsuranceTransition}

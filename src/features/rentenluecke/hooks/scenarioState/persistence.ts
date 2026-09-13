@@ -1,3 +1,4 @@
+import { applyCoverage, insuranceCoverageSchema } from '../../model/insuranceCoverage'
 import { z } from 'zod'
 import { rentenlueckeInputSchema } from '../../model/inputSchema'
 import { retirementInsuranceSchema, insurancePhaseSchema } from '../../model/retirementInsurance'
@@ -9,8 +10,8 @@ import { calculatePortfolioExpectedReturn } from '../../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './defaults'
 import type { ScenarioState } from './types'
 
-export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v14'
-export const RESET_NOTICE_KEY = 'rentenlueckenrechner.ux-pr1-reset-notice'
+export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v15'
+export const RESET_NOTICE_KEY = 'rentenlueckenrechner.ux-pr2-reset-notice'
 // Draft validation checks shape/types, deliberately not calculation validity.
 // Nonfinite input is encoded as a tagged draft value, never a financial answer.
 const draftNumber = z.custom<number>(value => typeof value === 'number')
@@ -39,12 +40,12 @@ const input = z.object({
 })
 const children = z.discriminatedUnion('kind', [z.object({ kind: z.literal('missing') }), z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('children'), rows: z.array(z.object({ id: z.string(), year: optionalNumber })).min(1).refine(rows => new Set(rows.map(row => row.id)).size === rows.length) })])
-const persistedScenarioSchema = z.object({ version: z.literal(14), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
-  childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string() }),
+const persistedScenarioSchema = z.object({ version: z.literal(15), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
+  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string() }),
 })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
-  const oldKeys = Object.keys(localStorage).filter(key => /^rentenlueckenrechner\.scenario\.v(?:[1-9]|1[0-3])$/.test(key))
+  const oldKeys = Object.keys(localStorage).filter(key => /^rentenlueckenrechner\.scenario\.v(?:[1-9]|1[0-4])$/.test(key))
   if (oldKeys.length) {
     oldKeys.forEach(key => localStorage.removeItem(key))
     localStorage.setItem(RESET_NOTICE_KEY, '1')
@@ -52,7 +53,7 @@ export function loadInitialState(): ScenarioState {
   return parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY))
 }
 export function serializeScenarioState(state: ScenarioState): string {
-  return JSON.stringify({ ...state, version: 14, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
+  return JSON.stringify({ ...state, version: 15, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
     typeof value === 'number' && !Number.isFinite(value) ? { draftNumber: String(value) } : value)
 }
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -66,9 +67,9 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     if (!persisted.success) return createDefaultState()
     const state = persisted.data
     const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
-    return { childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input,
+    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input,
       retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets),
-      retirementInsurance: state.input.retirementInsurance ? { ...state.input.retirementInsurance,
+      retirementInsurance: state.input.retirementInsurance ? { ...applyCoverage(state.input.retirementInsurance, state.insuranceCoverageAnswers),
         pensionAge: timelineBoundary(state.retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer),
       } : undefined,
     }, calculatePortfolioExpectedReturn(allocation)) }

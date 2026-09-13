@@ -30,3 +30,5 @@ export function cashOnlyInput(patch: Partial<RentenlueckeInput> = {}): Rentenlue
     pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
   } }
 }
+
+export const completedCoverage = () => ({ bridge: { common: { kind: 'none' as const }, bridgeOnly: { kind: 'none' as const } }, pension: { common: { kind: 'none' as const } } })

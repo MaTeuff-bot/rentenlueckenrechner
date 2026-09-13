@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { automaticInsurance } from '../../model/__tests__/insuranceFixtures'
+import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../../hooks/scenarioState/defaults'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 
@@ -36,6 +36,7 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear()
   const state = createDefaultState()
+  state.insuranceCoverageAnswers = completedCoverage()
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
   state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
   state.retirementIncomeStreams = state.retirementIncomeStreams.map(stream => ({ ...stream, support: 'standard' }))

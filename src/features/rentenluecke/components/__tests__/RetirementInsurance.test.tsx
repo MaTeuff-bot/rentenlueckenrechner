@@ -1,3 +1,4 @@
+import { applyCoverage, defaultCoverageAnswers } from '../../model/insuranceCoverage'
 import { childrenEngineFields, type ChildrenAnswer } from '../../model/childrenAnswer'
 import { InsuranceRateAssumptions } from '../InputPanel/InsuranceRateAssumptions'
 // @vitest-environment jsdom
@@ -9,7 +10,7 @@ import { RetirementInsuranceSection } from '../InputPanel/RetirementInsuranceSec
 import { RetirementIncomeStreamsSection } from '../InputPanel/RetirementIncomeStreamsSection'
 import { InsuranceBreakdown } from '../InsuranceBreakdown'
 import { clearHiddenInvalidInsuranceValues, createDefaultRetirementInsurance, insuranceSetupIssues, type RetirementInsurance } from '../../model/retirementInsurance'
-import { insuredInput, pension, automaticInsurance } from '../../model/__tests__/insuranceFixtures'
+import { insuredInput, pension, automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { simulateScenario } from '../../model/simulateScenario'
 import { rentenlueckeInputSchema } from '../../model/inputSchema'
 import type { RetirementIncomeStream } from '../../model/types'
@@ -17,15 +18,16 @@ import type { RetirementIncomeStream } from '../../model/types'
 function Harness({ initial = pension({ support: undefined }), config = createDefaultRetirementInsurance(67), workStop = 67 }: {
   initial?: RetirementIncomeStream; config?: RetirementInsurance; workStop?: number
 }) {
+  const [coverage, setCoverage] = useState(() => config.pension.circumstances === 'standard' ? completedCoverage() : defaultCoverageAnswers())
   const [rawInsurance, setInsurance] = useState(config)
   const [childrenAnswer, setChildrenAnswer] = useState<ChildrenAnswer>(config.isParent === undefined ? { kind: 'missing' } : config.isParent ? { kind: 'children', rows: [{ id: 'older', year: 1980 }] } : { kind: 'none' })
   const [streams, setStreams] = useState([initial])
-  const input = clearHiddenInvalidInsuranceValues(insuredInput({ currentAge: workStop, retirementAge: workStop, planningAge: 70, retirementIncomeStreams: streams, retirementInsurance: { ...rawInsurance, ...childrenEngineFields(childrenAnswer) } }))
+  const input = clearHiddenInvalidInsuranceValues(insuredInput({ currentAge: workStop, retirementAge: workStop, planningAge: 70, retirementIncomeStreams: streams, retirementInsurance: { ...applyCoverage(rawInsurance, coverage), ...childrenEngineFields(childrenAnswer) } }))
   const insurance = input.retirementInsurance!
   const issues = insuranceSetupIssues(input)
   const valid = rentenlueckeInputSchema.safeParse(input).success && !issues.length
   return <>
-    <RetirementInsuranceSection insurance={insurance} input={input} onChange={setInsurance} childrenAnswer={childrenAnswer} onChildrenChange={setChildrenAnswer} />
+    <RetirementInsuranceSection coverage={coverage} onCoverageChange={setCoverage} insurance={insurance} input={input} onChange={setInsurance} childrenAnswer={childrenAnswer} onChildrenChange={setChildrenAnswer} />
     <details><summary>Rechenannahmen</summary><InsuranceRateAssumptions insurance={insurance} onChange={setInsurance} /></details>
     <RetirementIncomeStreamsSection input={input} streams={streams} insurance={insurance}
       onUpdate={(id, patch) => setStreams(current => current.map(stream => stream.id === id ? { ...stream, ...patch } : stream))}
@@ -34,11 +36,11 @@ function Harness({ initial = pension({ support: undefined }), config = createDef
     {valid && <InsuranceBreakdown rows={simulateScenario(input).retirementRows} streams={streams} />}
   </>
 }
-function change(label: string | RegExp, value: string) { fireEvent.change(screen.getByLabelText(label), { target: { value } }) }
+function change(label: string | RegExp, value: string) { const field = screen.queryByLabelText(label) ?? screen.getByLabelText(typeof label === 'string' ? label.replace('Rentenphase', 'Phase ab Versicherungsübergang') : label); fireEvent.change(field, { target: { value } }) }
 const breakdown = () => screen.queryByRole('heading', { name: 'Monatliche KV/PV-Aufschlüsselung' })
 function confirmKvdr() {
   change('Versicherungsstatus – Rentenphase', 'kvdr')
-  change('Versicherungsumstände – Rentenphase', 'standard')
+  fireEvent.click(within(screen.getByRole('group', { name: 'Besondere Umstände – Rentenphase' })).getByLabelText('Nichts davon'))
   change('Art bestätigen – Pension', 'standard')
   change('Kassenindividueller Zusatzbeitrag (%)', '2.9')
   fireEvent.click(screen.getByRole('button', { name: 'Keine anerkannten Kinder' }))
@@ -65,16 +67,16 @@ describe('guided insurance fields and ledger breakdown', () => {
     render(<Harness />)
     confirmKvdr()
     change('Versicherungsstatus – Rentenphase', 'unknown')
-    expect(screen.getByText(/Konservative Annahme: freiwillige GKV/)).toBeVisible()
+    expect(screen.getByText(/Für diese Planung nehmen wir freiwillige GKV an/)).toBeVisible()
     expect(breakdown()).not.toBeInTheDocument()
     change('Kapitalbasis – Rentenphase', 'manual')
     change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
     expect(breakdown()).not.toBeInTheDocument()
-    change('DRV-Zuschuss – Rentenphase', 'not-received')
+    change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
     change('Versicherungsstatus – Rentenphase', 'kvdr')
     expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('DRV-Zuschuss – Rentenphase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Rentenversicherungszuschuss einplanen?')).not.toBeInTheDocument()
   })
   it('keeps a saved manual phase in manual mode when its estimate is cleared', () => {
     render(<Harness initial={pension()} config={automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 100, drvSubsidy: 'not-received' } })} />)
@@ -126,7 +128,7 @@ describe('guided insurance fields and ledger breakdown', () => {
     change(/Beitragsrelevanter Mietüberschuss/, '1500')
     change('Kapitalbasis – Rentenphase', 'manual')
     change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
-    change('DRV-Zuschuss – Rentenphase', 'not-received')
+    change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
     change('Kategorie von Pension', kind)
     expect(screen.getByLabelText('Art bestätigen – Pension')).toHaveValue('')
@@ -141,13 +143,12 @@ describe('guided insurance fields and ledger breakdown', () => {
     change(/PV-Basissatz/, '4')
     change(/Ermäßigter KV-Satz/, '-1')
     expect(breakdown()).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Erweitert – eigene Gesamtannahme'))
-    fireEvent.click(screen.getByLabelText('Gesamte Rentenphase manuell berechnen'))
+    fireEvent.click(screen.getByLabelText(/Eigene Beiträge verwenden – (Rentenphase|Phase ab Versicherungsübergang)/))
     expect(screen.getByLabelText(/Allgemeiner KV-Satz/)).toHaveValue(16)
     change('Eigene KV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '100')
     change('Eigene PV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '20')
     expect(breakdown()).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Gesamte Rentenphase manuell berechnen'))
+    fireEvent.click(screen.getByLabelText(/Eigene Beiträge verwenden – (Rentenphase|Phase ab Versicherungsübergang)/))
     expect(breakdown()).toBeInTheDocument()
     fireEvent.click(screen.getByText('Rechenannahmen'))
     expect(screen.getByLabelText(/Allgemeiner KV-Satz/)).toHaveValue(16)
@@ -182,10 +183,9 @@ describe('guided insurance fields and ledger breakdown', () => {
     change(/Beitragsrelevanter Mietüberschuss/, '1500')
     change('Kapitalbasis – Rentenphase', 'manual')
     change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
-    change('DRV-Zuschuss – Rentenphase', 'not-received')
+    change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Erweitert – eigene Gesamtannahme'))
-    fireEvent.click(screen.getByLabelText('Gesamte Rentenphase manuell berechnen'))
+    fireEvent.click(screen.getByLabelText(/Eigene Beiträge verwenden – (Rentenphase|Phase ab Versicherungsübergang)/))
     expect(screen.queryByLabelText(/Beitragsrelevanter Mietüberschuss/)).not.toBeInTheDocument()
   })
   it('displays the selected ledger funding shortfall including insurance', () => {
@@ -204,4 +204,143 @@ describe('guided insurance fields and ledger breakdown', () => {
     fireEvent.click(screen.getByText('Bemessung und Grenzen erklären'))
     expect(screen.getByText(/ein gemeinsamer Betriebsrenten-KV-Freibetrag/)).toBeVisible()
   })
+})
+
+it('shows vertical applicable ranges, restricts bridge status, and renders shared controls once', () => {
+  render(<Harness initial={pension()} workStop={65} />)
+  expect(screen.getByRole('group', { name: 'Brücke · Alter 65 bis unter 67' })).toBeVisible()
+  expect(screen.getByRole('group', { name: 'Rentenphase · Alter 67 bis unter 70' })).toBeVisible()
+  expect(within(screen.getByLabelText('Versicherungsstatus – Brücke')).queryByRole('option', { name: /KVdR/ })).toBeNull()
+  expect(screen.getAllByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: 'Keine anerkannten Kinder' })).toHaveLength(1)
+  fireEvent.click(screen.getByLabelText('Eigene Beiträge verwenden – Brücke'))
+  fireEvent.click(screen.getByLabelText('Eigene Beiträge verwenden – Rentenphase'))
+  expect(screen.queryByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Keine anerkannten Kinder' })).toBeNull()
+})
+
+it('copies in both directions without asserting bridge-only coverage and keeps multiple exceptions visible', () => {
+  render(<Harness initial={pension()} workStop={65} />)
+  const group = (phase: string) => within(screen.getByRole('group', { name: `Besondere Umstände – ${phase}` }))
+  fireEvent.click(group('Rentenphase').getByLabelText('Nichts davon'))
+  fireEvent.click(screen.getByRole('button', { name: 'Angaben aus der anderen Phase übernehmen – Brücke' }))
+  expect(group('Brücke').getByLabelText('Nichts davon')).toBeChecked()
+  expect(within(screen.getByRole('group', { name: 'Zusätzlich in der Brücke' })).getByLabelText('Nichts davon')).not.toBeChecked()
+  expect(screen.getByText(/Brücken-spezifische Angaben bleiben/)).toBeVisible()
+  fireEvent.click(group('Brücke').getByLabelText('Krankengeld'))
+  fireEvent.click(group('Brücke').getByLabelText('Mehrere Personen'))
+  expect(group('Brücke').getByLabelText('Krankengeld')).toBeChecked()
+  expect(group('Brücke').getByLabelText('Mehrere Personen')).toBeChecked()
+  expect(group('Brücke').getByLabelText('Nichts davon')).not.toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: 'Angaben aus der anderen Phase übernehmen – Rentenphase' }))
+  expect(group('Rentenphase').getByLabelText('Krankengeld')).toBeChecked()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Rentenphase/)).toBeVisible()
+  fireEvent.click(group('Rentenphase').getByLabelText('Ich bin unsicher'))
+  expect(group('Rentenphase').getByLabelText('Krankengeld')).not.toBeChecked()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Rentenphase/)).toBeVisible()
+})
+
+it('retains valid inactive manual totals, capital and subsidy but clears the active override on return', () => {
+  render(<Harness initial={pension()} config={automaticInsurance({ pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed' } })} />)
+  const summary = screen.getByTestId('insurance-pension-summary')
+  expect(summary).toHaveTextContent('Unbekannt · freiwillige GKV angenommen · automatisch')
+  expect(summary).not.toHaveTextContent('€')
+  fireEvent.click(screen.getByLabelText('Eigene Beiträge verwenden – Rentenphase'))
+  expect(screen.queryByLabelText('Rentenversicherungszuschuss einplanen?')).toBeNull()
+  change('Eigene KV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '0')
+  change('Eigene PV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '25')
+  expect(summary).toHaveTextContent('KV 0 / PV 25 €/Monat heute')
+  fireEvent.click(screen.getByRole('button', { name: /Zur automatischen Berechnung zurückkehren/ }))
+  expect(screen.getByLabelText('Eigene Beiträge verwenden – Rentenphase')).not.toBeChecked()
+  expect(screen.getByLabelText('Rentenversicherungszuschuss einplanen?')).toHaveValue('confirmed')
+  expect(screen.getByLabelText(/Beitragsrelevante Kapitalerträge/)).toHaveValue(123)
+  expect(breakdown()).toBeInTheDocument()
+  fireEvent.click(screen.getByLabelText('Eigene Beiträge verwenden – Rentenphase'))
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/)).toHaveValue(0)
+  expect(screen.getByLabelText(/Eigene PV nach allen Zuschüssen/)).toHaveValue(25)
+})
+
+it('defers phase cards on an unusable timeline and labels a nonstatutory transition', () => {
+  const view = render(<Harness config={createDefaultRetirementInsurance(NaN)} />)
+  expect(screen.queryByLabelText(/Versicherungsstatus/)).toBeNull()
+  expect(screen.getByRole('button', { name: 'Zeitplan ergänzen / korrigieren' })).toBeVisible()
+  view.unmount()
+  render(<Harness initial={pension({ kind: 'rental-income' })} />)
+  expect(screen.getByRole('group', { name: 'Phase ab Versicherungsübergang · Alter 67 bis unter 70' })).toBeVisible()
+  expect(within(screen.getByRole('group', { name: 'Kranken- und Pflegeversicherung' })).queryByText(/Rentenphase/)).toBeNull()
+})
+
+it('coverage unsure requires both own totals, including explicit zero; returning to none restores automatic calculation', () => {
+  render(<Harness initial={pension()} config={automaticInsurance()} />)
+  const common = within(screen.getByRole('group', { name: 'Besondere Umstände – Rentenphase' }))
+  fireEvent.click(common.getByLabelText('Ich bin unsicher'))
+  expect(breakdown()).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Kassenindividueller Zusatzbeitrag (%)')).not.toBeInTheDocument()
+  expect(screen.getByTestId('insurance-pension-summary')).toHaveTextContent('KV offen / PV offen €/Monat heute')
+  change('Eigene KV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '0')
+  expect(breakdown()).not.toBeInTheDocument()
+  change('Eigene PV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '0')
+  expect(breakdown()).toBeInTheDocument()
+  expect(screen.getByTestId('insurance-pension-summary')).toHaveTextContent('KV 0 / PV 0 €/Monat heute')
+  fireEvent.click(common.getByLabelText('Nichts davon'))
+  expect(screen.getByTestId('insurance-pension-summary')).toHaveTextContent('KVdR · automatisch')
+  expect(screen.queryByLabelText(/Eigene KV nach allen Zuschüssen/)).not.toBeInTheDocument()
+  expect(breakdown()).toBeInTheDocument()
+})
+
+it.each(['voluntary', 'unknown'] as const)('places %s estimates after shared facts and requires a subsidy planning choice', status => {
+  render(<Harness initial={pension()} workStop={65} config={automaticInsurance({ pension: { status, circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 0 } })} />)
+  const card = screen.getByRole('group', { name: 'Rentenphase · Alter 67 bis unter 70' })
+  expect(within(card).queryByLabelText('Rentenversicherungszuschuss einplanen?')).toBeNull()
+  expect(within(card).queryByLabelText(/Kapitalbasis/)).toBeNull()
+  const shared = screen.getByRole('group', { name: '2. Gemeinsame Angaben für automatische Phasen' })
+  const estimate = screen.getByRole('group', { name: 'Automatische Beiträge – Rentenphase' })
+  expect(card.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(shared.compareDocumentPosition(estimate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  const subsidy = screen.getByLabelText('Rentenversicherungszuschuss einplanen?')
+  expect(subsidy).toHaveValue('')
+  expect(within(subsidy).getByRole('option', { name: 'Ja' })).toHaveValue('confirmed')
+  expect(within(subsidy).getByRole('option', { name: 'Nein, nicht ansetzen' })).toHaveValue('not-received')
+  expect(breakdown()).not.toBeInTheDocument()
+  change('Rentenversicherungszuschuss einplanen?', 'confirmed')
+  expect(breakdown()).toBeInTheDocument()
+  change('Rentenversicherungszuschuss einplanen?', 'not-received')
+  expect(breakdown()).toBeInTheDocument()
+  expect(within(screen.getByRole('group', { name: 'Brücke · Alter 65 bis unter 67' })).queryByLabelText(/Zuschuss/)).toBeNull()
+})
+
+it('shows exactly the existing checklist exclusions and explicit insurer help without a default', () => {
+  render(<Harness workStop={65} />)
+  const common = within(screen.getByRole('group', { name: 'Besondere Umstände – Brücke' }))
+  expect(common.getAllByRole('checkbox').map(control => control.parentElement?.textContent)).toEqual([
+    'Mehrere Personen', 'Beschäftigung oder Selbstständigkeit', 'Krankengeld', 'Partner- oder Haushaltsbemessung', 'Besondere Mindestbeitragsregeln', 'Anerkennung von Kindern ungeklärt', 'Nichts davon', 'Ich bin unsicher',
+  ])
+  expect(within(screen.getByRole('group', { name: 'Zusätzlich in der Brücke' })).getAllByRole('checkbox').map(control => control.parentElement?.textContent)).toEqual(['Rentenantragstellerregelung', 'Familienversicherung', 'Sozialleistungsregelung', 'Nichts davon', 'Ich bin unsicher'])
+  expect(screen.getByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toHaveValue(null)
+  fireEvent.click(screen.getByText('Wo finde ich das?'))
+  expect(screen.getByText(/Website oder in einer Beitragsmitteilung/)).toBeVisible()
+})
+
+it('unsupported status skips irrelevant coverage, opens totals immediately, and focuses the own-contribution action', () => {
+  render(<Harness />)
+  change('Versicherungsstatus – Rentenphase', 'unsupported')
+  expect(screen.queryByRole('group', { name: 'Besondere Umstände – Rentenphase' })).toBeNull()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/)).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Eigene Beiträge eingeben' }))
+  expect(document.activeElement).toBe(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/))
+  // Removing an explicit preference cannot override this forced status constraint.
+  fireEvent.click(screen.getByLabelText('Eigene Beiträge verwenden – Rentenphase'))
+  fireEvent.click(screen.getByRole('button', { name: /Zur automatischen Berechnung zurückkehren/ }))
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/)).toBeVisible()
+  expect(breakdown()).not.toBeInTheDocument()
+})
+
+it.each(['-1', '20.01'])('rejects additional contribution %s and preserves explicit zero interpretation', invalid => {
+  render(<Harness initial={pension()} config={automaticInsurance()} />)
+  change('Kassenindividueller Zusatzbeitrag (%)', invalid)
+  expect(screen.getByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toHaveAttribute('aria-invalid', 'true')
+  expect(breakdown()).not.toBeInTheDocument()
+  change('Kassenindividueller Zusatzbeitrag (%)', '0')
+  expect(screen.getByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toHaveValue(0)
+  expect(breakdown()).toBeInTheDocument()
 })

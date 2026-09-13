@@ -1,3 +1,4 @@
+import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
 import { useEffect } from 'react'
 import { TimelineSection } from './InputPanel/TimelineSection'
 import { InsuranceRateAssumptions } from './InputPanel/InsuranceRateAssumptions'
@@ -27,6 +28,8 @@ import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInf
 
 type InputPanelProps = {
   issues?: ScenarioIssue[]
+  insuranceCoverageAnswers?: InsuranceCoverageAnswers
+  onInsuranceCoverageChange?: (answers: InsuranceCoverageAnswers) => void
   childrenAnswer?: ChildrenAnswer
   onChildrenChange?: (answer: ChildrenAnswer) => void
   onTransitionChange?: (value: number | undefined) => void
@@ -54,6 +57,7 @@ type InputPanelProps = {
 }
 
 export function InputPanel({
+  insuranceCoverageAnswers, onInsuranceCoverageChange,
   issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange, onTransitionChange = () => {},
   input,
   allocation,
@@ -97,7 +101,7 @@ export function InputPanel({
     ['ausgaben', 'Ausgaben', `${input.monthlyDesiredSpendingToday} € monatlich heute`],
     ['einkommen', 'Einkommen', `${retirementIncomeStreams.length} Einkommensquellen`],
     ['vermoegen', 'Vermögen & Sparen', `${portfolioBuckets.length} Anlagen; Sparrate ${input.monthlyContributionToday} € bis Arbeitsende`],
-    ['versicherung', 'Versicherung', 'KV/PV für Brücke und Rentenphase'],
+    ['versicherung', 'Versicherung', retirementIncomeStreams.some(s => s.kind === 'gesetzliche-rente') ? 'KV/PV für anwendbare Phasen bis zum Planungshorizont' : 'KV/PV vor und ab Versicherungsübergang'],
     ['ergebnis', 'Ergebnis', issues.length ? 'Eingaben bitte ergänzen oder prüfen' : 'Deine Ruhestandsplanung'],
   ]
   const heading = (section: FlowSection) => {
@@ -176,7 +180,7 @@ export function InputPanel({
 
         </section>
         <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
-          <RetirementInsuranceSection input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} />
+          <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} />
         </section>
         <details id="annahmen" className="flow-section"><summary>Rechenannahmen <span className="section-status">{sectionStatus(issues, 'annahmen')}</span></summary>
         <InflationSourceSection

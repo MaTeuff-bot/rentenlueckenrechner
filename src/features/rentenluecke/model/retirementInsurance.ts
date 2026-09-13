@@ -42,6 +42,18 @@ export function earliestPensionAge(streams: readonly RetirementIncomeStream[]): 
   const ages = streams.filter(s => s.kind === 'gesetzliche-rente').map(s => s.startAge)
   return ages.length ? Math.min(...ages) : undefined
 }
+/** Prefer malformed controlling dates; ties retain the first stream in display order. */
+export function controllingPensionStream(streams: readonly RetirementIncomeStream[]) {
+  const statutory = streams.filter(s => s.kind === 'gesetzliche-rente')
+  return statutory.find(s => !Number.isInteger(s.startAge) || s.startAge < 0 || s.startAge > 120)
+    ?? statutory.reduce<RetirementIncomeStream | undefined>((first, next) => !first || next.startAge < first.startAge ? next : first, undefined)
+}
+export function insurancePhaseRanges(input: Pick<RentenlueckeInput, 'currentAge' | 'retirementAge' | 'planningAge'>, insurance: RetirementInsurance) {
+  const { retirementAge: start, planningAge: end } = input
+  const boundary = insurance.pensionAge
+  if (![start, end, boundary].every(v => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 120) || start > end || !Number.isInteger(input.currentAge) || input.currentAge < 0 || input.currentAge > 100 || start < input.currentAge || start > 100) return []
+  return ([{ phase: 'bridge', start, end: Math.min(end, boundary!) }, { phase: 'pension', start: Math.max(start, boundary!), end }] as const).filter(range => range.start < range.end)
+}
 export function activeIncomeStreams(streams: readonly RetirementIncomeStream[], age: number) {
   return streams.filter(s => s.startAge <= age && (s.endAge === null || age < s.endAge))
 }
@@ -76,9 +88,7 @@ export function insuranceSetupIssues(input: RentenlueckeInput): string[] {
   if (earliest !== undefined && i.pensionAge !== earliest) issues.push(`Rentenbeginn muss zum frühesten gesetzlichen Rentenstrom passen (Alter ${earliest}). Beginn oder Einkommensstrom korrigieren.`)
   if (i.referenceYear + input.planningAge - input.currentAge > 9999) issues.push('Basisjahr und Planungshorizont liegen außerhalb des unterstützten Kalenderbereichs.')
   if (new Set(streams.map(s => s.id)).size !== streams.length || streams.some(s => !s.id)) issues.push('Einkommensströme benötigen eindeutige Kennungen.')
-  const phases: ('bridge' | 'pension')[] = []
-  if (i.pensionAge !== undefined && input.retirementAge < i.pensionAge) phases.push('bridge')
-  if (i.pensionAge !== undefined && i.pensionAge < input.planningAge) phases.push('pension')
+  const phases = insurancePhaseRanges(input, i).map(range => range.phase)
   let automatic = false
   for (const phase of phases) {
     const p = i[phase], label = phase === 'bridge' ? 'Brücke' : 'Rentenphase'
@@ -146,9 +156,7 @@ export function clearHiddenInvalidInsuranceValues(input: RentenlueckeInput): Ren
   const streams = input.retirementIncomeStreams ?? []
   const automaticPhases: ('bridge' | 'pension')[] = []
   for (const phase of ['bridge', 'pension'] as const) {
-    const active = phase === 'bridge'
-      ? i.pensionAge !== undefined && input.retirementAge < i.pensionAge
-      : i.pensionAge === undefined || i.pensionAge < input.planningAge
+    const active = insurancePhaseRanges(input, i).some(range => range.phase === phase)
     const manual = phaseManualReasons(i, phase, phaseStreams(streams, i, phase, input.retirementAge, input.planningAge)).length > 0
     if (active && !manual) automaticPhases.push(phase)
     if (!active || !manual) {

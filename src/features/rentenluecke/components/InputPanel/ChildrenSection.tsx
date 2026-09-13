@@ -2,8 +2,8 @@ import { childrenSummary, type ChildrenAnswer } from '../../model/childrenAnswer
 import { OptionalNumber } from './RetirementInsuranceSection'
 import { focusField } from '../inputNavigation'
 let nextChildId = 0
-export function ChildrenSection({ answer, referenceYear, currentAge, onChange }: {
-  answer: ChildrenAnswer; referenceYear: number; currentAge: number; onChange: (answer: ChildrenAnswer) => void
+export function ChildrenSection({ answer, referenceYear, currentAge, onChange, manualPhase = 'pension' }: {
+  manualPhase?: 'bridge' | 'pension'; answer: ChildrenAnswer; referenceYear: number; currentAge: number; onChange: (answer: ChildrenAnswer) => void
 }) {
   const rows = answer.kind === 'children' ? answer.rows : []
   return <fieldset><legend>Für deine Pflegeversicherung anerkannte Kinder</legend>
@@ -23,6 +23,6 @@ export function ChildrenSection({ answer, referenceYear, currentAge, onChange }:
     }}>Anerkanntes Kind hinzufügen</button>
     <button id="children-none" type="button" className="secondary-button" aria-pressed={answer.kind === 'none'} onClick={() => onChange({ kind: 'none' })}>Keine anerkannten Kinder</button>
     <p data-testid="children-summary">{childrenSummary(answer, referenceYear)}</p>
-    <p>Anerkennung ungeklärt? <a href="#insurance-pension-manual" onClick={event => { event.preventDefault(); focusField('insurance-pension-manual', 'insurance-bridge-manual') }}>Eigene Gesamtannahme für die betroffenen Versicherungsphasen öffnen</a>. Dort ersetzen ausdrückliche KV/PV-Gesamtbeträge die gesamte Phase. Automatische Phasen benötigen weiterhin eine geklärte Kinderangabe.</p>
+    <p>Anerkennung ungeklärt? <a href={`#insurance-${manualPhase}-manual`} onClick={event => { event.preventDefault(); focusField(`insurance-${manualPhase}-manual`) }}>Eigene Gesamtannahme für die betroffenen Versicherungsphasen öffnen</a>. Dort ersetzen ausdrückliche KV/PV-Gesamtbeträge die gesamte Phase. Automatische Phasen benötigen weiterhin eine geklärte Kinderangabe.</p>
   </fieldset>
 }
