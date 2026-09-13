@@ -38,7 +38,7 @@ Der Zeitplan enthält aktuelles Alter, Arbeitsende, alle gesetzlichen Rentenbegi
 
 Die Kinderliste enthält ausschließlich Geburtsjahre aller für die Pflegeversicherung anerkannten Kinder. Auch ältere Kinder begründen dauerhafte Elterneigenschaft; Zwillinge erhalten zwei Zeilen. „Keine anerkannten Kinder“ ist eine ausdrückliche Antwort. Eine unberührte Liste oder das Entfernen des letzten Kindes bleibt unbeantwortet. Das Jahresmodell zählt Kinder ab 1. Januar des 25. Geburtstagsjahres nicht mehr als unter 25; die Elterneigenschaft bleibt erhalten.
 
-Eingaben einschließlich unvollständiger Entwürfe werden ausschließlich lokal unter `rentenlueckenrechner.scenario.v14` gespeichert. Für UX PR1 werden ausschließlich die app-eigenen Szenarioversionen v1–v13 entfernt, ohne Migration. Betroffene Nutzer erhalten einen dauerhaft schließbaren Hinweis. Fremde Einträge und gültige v14-Daten bleiben erhalten. Es gibt keine serverseitige Speicherung oder Synchronisierung. Nicht endliche Zahlen werden als Entwurfsmarker gespeichert und blockieren weiterhin die Berechnung.
+Eingaben einschließlich unvollständiger Entwürfe werden ausschließlich lokal unter `rentenlueckenrechner.scenario.v15` gespeichert. Für Versicherungs-UX PR2 werden ausschließlich die app-eigenen Szenarioversionen v1–v14 entfernt, ohne Migration. Betroffene Nutzer erhalten einen dauerhaft schließbaren Hinweis. Fremde Einträge und gültige v15-Daten bleiben erhalten. Es gibt keine serverseitige Speicherung oder Synchronisierung. Nicht endliche Zahlen werden als Entwurfsmarker gespeichert und blockieren weiterhin die Berechnung.
 
 ## Kranken- und Pflegeversicherung im Modell
 
@@ -75,3 +75,13 @@ npm run preview
 - `src/features/rentenluecke/hooks/`: Szenariozustand, Modellaufrufe und lokale Browserpersistenz.
 - `src/features/rentenluecke/components/`: React-Eingaben, Kennzahlen, Recharts-Diagramm und Jahrestabelle.
 - `src/shared/components/`: Wiederverwendbare Eingabekomponenten.
+
+### Versicherungsplanung nach Phasen (UX PR2)
+
+Die anwendbaren Phasen ergeben sich aus Arbeitsende, frühestem gesetzlichen Rentenbeginn (oder explizitem Versicherungsübergang ohne gesetzliche Rente) und Planungshorizont. Zuerst werden Status und besondere Umstände je Phase erfasst. KVdR steht nur in der späteren Phase zur Auswahl. Unbekannter Status erlaubt eine ausdrücklich beschriftete freiwillige-GKV-Annahme; die App prüft keine Berechtigung.
+
+Die gemeinsamen Umstände und die zusätzlichen Brücken-Umstände bleiben getrennte, explizite Antworten. Mehrere Ausnahmen sind möglich; „Nichts davon“ und „Ich bin unsicher“ sind innerhalb einer Gruppe exklusiv. Kopieren übernimmt nur kompatible gemeinsame Antworten, bewahrt bekannte Ausnahmen/Unsicherheit und verändert nie Brücken-Sonderfragen, Status oder Beträge. Unberührte Antworten gelten niemals als „Nichts davon“.
+
+Kinder und kassenindividueller Zusatzbeitrag werden einmal für die automatischen Phasen erfasst. Danach folgen die phasenspezifischen Schätzungen. Eigene monatliche KV/PV ersetzen die gesamte Phase in heutiger Kaufkraft, nach allen Zuschüssen; auch 0 muss ausdrücklich eingegeben werden. Später beginnende, nicht automatisch unterstützte Einkommen erfordern diese Gesamtbeträge schon ab dem ersten Phasenjahr. Manuelle Kapitalertragsschätzung und eigene KV/PV-Gesamtbeiträge sind getrennte Entscheidungen. Gültige inaktive Annahmen bleiben beim Wechsel erhalten.
+
+Die kanonischen `insuranceCoverageAnswers` werden vor Bereinigung und Validierung framework-frei auf die unveränderten Engine-Umstände abgebildet. Die jährlichen Ledger-Zeilen bleiben die Quelle aller berechneten Ergebnisse. Reproduzierbare lokale Browserprüfung: [PR2-Verifikation](docs/verification/insurance-ux-pr2.md).

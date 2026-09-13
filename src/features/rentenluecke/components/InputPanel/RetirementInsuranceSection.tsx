@@ -1,10 +1,14 @@
+import type { ScenarioIssue } from '../../model/scenarioIssues'
+import { InsuranceCoverageChecklist } from './InsuranceCoverageChecklist'
+import { applyCoverage, commonExceptions, bridgeExceptions, copyCompatibleCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../../model/insuranceCoverage'
+import { focusField } from '../inputNavigation'
 import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
 import { CapitalEstimatorSetup } from './CapitalEstimatorSetup'
 import { capitalMode, needsEstimator } from '../../model/capitalIncome/setup'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import type { RentenlueckeInput } from '../../model/types'
-import { phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
+import { controllingPensionStream, insurancePhaseRanges, phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
 
 export function OptionalNumber({ label, value, onChange, max, min = 0, step = 'any', id: explicitId }: {
   id?: string; label: string; value?: number; onChange: (value: number | undefined) => void; max?: number; min?: number; step?: string
@@ -14,49 +18,82 @@ export function OptionalNumber({ label, value, onChange, max, min = 0, step = 'a
   const invalid = value !== undefined && (!Number.isFinite(value) || value < min || (max !== undefined && value > max) || (step === '1' && !Number.isInteger(value)))
   return <label className="field" htmlFor={id}><span className="field-label" id={`${id}-label`}>{label}</span><input aria-labelledby={`${id}-label`} id={id} type="number" inputMode={step === '1' ? 'numeric' : 'decimal'} min={min} max={max} step={step} value={Number.isNaN(value) ? '' : value ?? ''} aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined} onChange={e => onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />{invalid && <span className="field-error" id={`${id}-error`}>Bitte {step === '1' ? 'eine ganze Zahl' : 'einen Wert'} ab {min}{max !== undefined ? ` bis ${max}` : ''} eingeben.</span>}</label>
 }
-export function RetirementInsuranceSection({ insurance: i, input, onChange, childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {} }: {
+export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {} }: {
+  issues?: ScenarioIssue[]
+  coverage?: InsuranceCoverageAnswers; onCoverageChange?: (answers: InsuranceCoverageAnswers) => void
   childrenAnswer?: ChildrenAnswer; onChildrenChange?: (answer: ChildrenAnswer) => void
   insurance: RetirementInsurance; input: RentenlueckeInput; onChange: (insurance: RetirementInsurance) => void
 }) {
-  const phases = (['bridge', 'pension'] as const).filter(phase => phase === 'bridge' ? i.pensionAge !== undefined && input.retirementAge < i.pensionAge : i.pensionAge === undefined || i.pensionAge < input.planningAge)
+  const [localCoverage, setLocalCoverage] = useState(defaultCoverageAnswers)
+  const [copyMessage, setCopyMessage] = useState('')
+  const answers = coverage ?? localCoverage
+  const changeCoverage = (next: InsuranceCoverageAnswers) => {
+    if (onCoverageChange) onCoverageChange(next)
+    else { setLocalCoverage(next); onChange(applyCoverage(insurance, next)) }
+  }
+  const i = applyCoverage(insurance, answers)
+  const ranges = insurancePhaseRanges(input, i)
+  const statutory = input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente')
+  const labelFor = (phase: 'bridge' | 'pension') => phase === 'bridge' ? 'Brücke' : statutory ? 'Rentenphase' : 'Phase ab Versicherungsübergang'
   const reasonsFor = (phase: 'bridge' | 'pension') => phaseManualReasons(i, phase, phaseStreams(input.retirementIncomeStreams ?? [], i, phase, input.retirementAge, input.planningAge))
-  const automatic = phases.some(phase => !reasonsFor(phase).length)
-  return <fieldset className="wide-fieldset"><legend>Kranken- und Pflegeversicherung</legend>
-    <p>Versicherungsübergang laut <a href="#zeitplan">Zeitplan</a>: {Number.isFinite(i.pensionAge) ? `Alter ${i.pensionAge}` : 'noch offen'}. Änderungen am gesetzlichen Rentenbeginn erfolgen ausschließlich im Zeitplan.</p>
-    {phases.map(phase => {
-      const p = i[phase], label = phase === 'bridge' ? 'Brücke' : 'Rentenphase'
+  const automatic = ranges.some(({ phase }) => !reasonsFor(phase).length)
+  const timelineTarget = !Number.isInteger(input.currentAge) || input.currentAge < 0 || input.currentAge > 100 ? 'currentAge' : !Number.isInteger(input.retirementAge) || input.retirementAge < input.currentAge || input.retirementAge > 100 ? 'retirementAge' : !Number.isInteger(input.planningAge) || input.planningAge <= input.retirementAge || input.planningAge > 120 ? 'planningAge' : statutory ? `retirement-income-start-${controllingPensionStream(input.retirementIncomeStreams!)!.id}` : 'insurance-transition'
+  return <fieldset className="wide-fieldset insurance-flow"><legend>Kranken- und Pflegeversicherung</legend>
+    <p>{statutory ? 'Rentenbeginn' : 'Versicherungsübergang'} laut Zeitplan: {Number.isFinite(i.pensionAge) ? `Alter ${i.pensionAge}` : 'noch offen'}. <button type="button" className="secondary-button" onClick={() => focusField(timelineTarget)}>Zeitplan ergänzen / korrigieren</button></p>
+    {!ranges.length && <p>Keine anwendbare Versicherungsphase. Bitte Arbeitsende, Übergang und Planungshorizont im Zeitplan prüfen.</p>}
+    {ranges.length > 0 && <h3>1. Status und besondere Umstände je Phase</h3>}
+    {ranges.map(({ phase, start, end }) => {
+      const p = i[phase], label = labelFor(phase)
       const update = (patch: Partial<InsurancePhase>) => onChange({ ...i, [phase]: { ...p, ...patch } })
       const reasons = reasonsFor(phase)
-      return <fieldset key={phase}><legend>{label}</legend>
+      const streams = phaseStreams(input.retirementIncomeStreams ?? [], i, phase, input.retirementAge, input.planningAge)
+      const forcedReasons = phaseManualReasons({ ...i, [phase]: { ...p, manual: false, circumstances: undefined } }, phase, streams)
+      const offending = streams.filter(stream => phaseManualReasons({ ...i, [phase]: { ...p, manual: false, circumstances: undefined, status: 'voluntary' } }, phase, [stream]).length)
+      const other = phase === 'bridge' ? 'pension' : 'bridge'
+      const phaseIssues = issues.filter(issue => issue.fieldPath.startsWith(`retirementInsurance.${phase}.`) || issue.fieldPath.startsWith(`insuranceCoverageAnswers.${phase}.`))
+      return <fieldset key={phase} className="insurance-phase"><legend>{label} · Alter {start} bis unter {end}</legend>
         <label className="field"><span className="field-label">Versicherungsstatus – {label}</span><select id={`insurance-${phase}-status`} value={p.status ?? ''} onChange={e => update({ status: (e.target.value || undefined) as InsurancePhase['status'] })}>
-          <option value="">Bitte auswählen</option><option value="kvdr">KVdR (selbst gewählt)</option><option value="voluntary">Freiwillige GKV</option><option value="unknown">Unbekannt – freiwillige GKV annehmen</option><option value="unsupported">Anderer Status / PKV / Familienversicherung</option>
+          <option value="">Bitte auswählen</option>{phase === 'pension' && <option value="kvdr">KVdR (selbst gewählt)</option>}<option value="voluntary">Freiwillige GKV</option><option value="unknown">Unbekannt – freiwillige GKV annehmen</option><option value="unsupported">Anderer Status / PKV / Familienversicherung</option>
         </select></label>
-        {p.status === 'unknown' && <p>Konservative Annahme: freiwillige GKV. Kein garantierter Höchstbeitrag. Die App prüft keine KVdR-Berechtigung.</p>}
-        {!p.manual && p.status !== 'unsupported' && !(phase === 'bridge' && p.status === 'kvdr') && <label className="field"><span className="field-label">Versicherungsumstände – {label}</span><select id={`insurance-${phase}-circumstances`} value={p.circumstances ?? ''} onChange={e => update({ circumstances: (e.target.value || undefined) as InsurancePhase['circumstances'] })}>
-          <option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische GKV, keine Sonderumstände</option><option value="unsupported">Sonderumstände / noch ungeklärt</option>
-        </select></label>}
-        <details><summary>Welche Umstände sind unterstützt?</summary><p>Automatisch unterstützt: eine Person ohne Beschäftigung, Selbstständigkeit, Krankengeld, Partner-/Haushaltsbemessung oder besondere Mindestbeitragsregeln. In der Brücke außerdem keine Rentenantragsteller-, Familien- oder Sozialleistungsregelung. Ungeklärte Kinderanerkennung zählt als Sonderumstand.</p></details>
-        <details><summary>Erweitert – eigene Gesamtannahme</summary><label><input id={`insurance-${phase}-manual`} type="checkbox" checked={p.manual ?? false} onChange={e => update({ manual: e.target.checked })} />Gesamte {label} manuell berechnen</label></details>
-        {reasons.length ? <>
-          <p className="source-warning">{reasons.join('; ')}. Für die gesamte {label} ersetzen eigene KV/PV-Gesamtbeträge die Automatik. Keine automatische Bemessung oder zusätzlichen Zuschüsse.</p>
-          <OptionalNumber id={`insurance-${phase}-kvMonthlyToday`} label={`Eigene KV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.kvMonthlyToday} onChange={kvMonthlyToday => update({ kvMonthlyToday })} />
-          <OptionalNumber id={`insurance-${phase}-pvMonthlyToday`} label={`Eigene PV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.pvMonthlyToday} onChange={pvMonthlyToday => update({ pvMonthlyToday })} />
-          <p>Beträge für die ganze Phase, einschließlich aller Einkommen. Auch 0 ausdrücklich eintragen. Einkommen vor diesen Versicherungsabzügen erfassen.</p>
-        </> : p.status && p.status !== 'kvdr' && <>
-          <label className="field"><span className="field-label">Kapitalbasis – {label}</span><select id={`insurance-${phase}-capitalMode`} value={capitalMode(p)} onChange={e => update({ capitalMode: e.target.value as 'automatic' | 'manual' })}><option value="automatic">Automatisch aus dem Portfolio schätzen</option><option value="manual">Manuelle Kapitalertragsschätzung</option></select></label>
-          {capitalMode(p) === 'manual' && <><OptionalNumber id={`insurance-${phase}-capitalMonthlyToday`} label={`Beitragsrelevante Kapitalerträge – ${label} (€/Monat heute)`} value={p.capitalMonthlyToday} onChange={capitalMonthlyToday => update({ capitalMode: 'manual', capitalMonthlyToday })} />
-          <p>Vor Steuern, nach beitragsrechtlichen Kosten. Schätzung oder ausdrücklich 0. Kein Depotwert, keine Gesamtrendite oder Entnahme; kein zusätzliches auszahlbares Einkommen. Bleibt in heutiger Kaufkraft konstant.</p></>}
-          {phase === 'pension' && <label className="field"><span className="field-label">DRV-Zuschuss – Rentenphase</span><select id={`insurance-${phase}-drvSubsidy`} value={p.drvSubsidy ?? ''} onChange={e => update({ drvSubsidy: (e.target.value || undefined) as InsurancePhase['drvSubsidy'] })}><option value="">Bitte auswählen</option><option value="confirmed">Erhalt bestätigt</option><option value="not-received">Nicht erhalten / nicht angesetzt</option></select></label>}
+        {p.status === 'unknown' && <p>Für diese Planung nehmen wir freiwillige GKV an. Das ist kein garantierter Höchstbeitrag. Die App prüft keine Versicherungsberechtigung.</p>}
+        <label><input id={`insurance-${phase}-manual`} type="checkbox" checked={p.manual ?? false} onChange={e => update({ manual: e.target.checked })} />Eigene Beiträge verwenden – {label}</label>
+        {p.manual && <button type="button" className="secondary-button" onClick={() => update({ manual: false })}>Zur automatischen Berechnung zurückkehren – {label}</button>}
+        {forcedReasons.length > 0 && <div className="source-warning"><p>{forcedReasons.join('; ')}. Die ganze Phase benötigt eigene Beiträge.</p>
+          {offending.map(stream => <p key={stream.id}>{stream.name} ab Alter {stream.startAge}: <button type="button" className="secondary-button" onClick={() => focusField(`retirement-income-kind-${stream.id}`)}>Einkommen bearbeiten</button></p>)}
+          <button type="button" className="secondary-button" onClick={() => focusField(`insurance-${phase}-kvMonthlyToday`)}>Eigene Beiträge eingeben</button>
+        </div>}
+        {!p.manual && !forcedReasons.length && <>
+          <InsuranceCoverageChecklist id={`insurance-${phase}-circumstances`} title={`Besondere Umstände – ${label}`} answer={answers[phase].common} options={commonExceptions} onChange={common => changeCoverage({ ...answers, [phase]: { ...answers[phase], common } })} />
+          {phase === 'bridge' && <InsuranceCoverageChecklist id="insurance-bridge-bridgeOnly" title="Zusätzlich in der Brücke" answer={answers.bridge.bridgeOnly} options={bridgeExceptions} onChange={bridgeOnly => changeCoverage({ ...answers, bridge: { ...answers.bridge, bridgeOnly } })} />}
+          {ranges.length === 2 && <button type="button" className="secondary-button" disabled={answers[other].common.kind === 'missing'} onClick={() => { const result = copyCompatibleCoverage(answers, other); changeCoverage(result.answers); setCopyMessage(result.message) }}>Angaben aus der anderen Phase übernehmen – {label}</button>}
         </>}
+        <p data-testid={`insurance-${phase}-summary`}>{reasons.length ? `Eigene Beiträge · KV ${p.kvMonthlyToday ?? 'offen'} / PV ${p.pvMonthlyToday ?? 'offen'} €/Monat heute` : `${p.status === 'kvdr' ? 'KVdR' : p.status === 'unknown' ? 'Unbekannt · freiwillige GKV angenommen' : p.status === 'voluntary' ? 'Freiwillige GKV' : 'Status offen'} · automatisch`}</p>
+        <p>{phaseIssues.length ? 'Offen / prüfen: Angaben für diese Phase ergänzen.' : 'Gemeinsame Angaben und Zeitplan separat prüfen.'}</p>
+        {phaseIssues.length > 0 && <ul>{phaseIssues.map(issue => <li key={issue.code}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); focusField(issue.fieldId) }}>{issue.message}</a></li>)}</ul>}
       </fieldset>
     })}
-    {needsEstimator(input) && <CapitalEstimatorSetup insurance={i} onChange={onChange} />}
-    {automatic && <>
+    {copyMessage && <p role="status">{copyMessage}</p>}
+    {automatic && <fieldset><legend>2. Gemeinsame Angaben für automatische Phasen</legend>
       <OptionalNumber id="insurance-insurerAdditionalRate" label="Kassenindividueller Zusatzbeitrag (%)" value={i.insurerAdditionalRate === undefined ? undefined : i.insurerAdditionalRate * 100} max={20} onChange={v => onChange({ ...i, insurerAdditionalRate: v === undefined ? undefined : v / 100 })} />
-      <ChildrenSection answer={childrenAnswer} referenceYear={i.referenceYear} currentAge={input.currentAge} onChange={onChildrenChange} />
+      <details><summary>Wo finde ich das?</summary><p>Den kassenindividuellen Zusatzbeitrag findest du auf der Website oder in einer Beitragsmitteilung deiner Krankenkasse.</p></details>
+      <ChildrenSection manualPhase={ranges.find(({ phase }) => !reasonsFor(phase).length)?.phase} answer={childrenAnswer} referenceYear={i.referenceYear} currentAge={input.currentAge} onChange={onChildrenChange} />
       {i.rates && Object.values(i.rates).some(value => value !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter „Erweitert“ prüfen oder auf Standards zurücksetzen.</p>}
-    </>}
-    <details><summary>Jahresmodell und Rechenregeln</summary><p>Jahresmodell: Arbeitsende, Einkommensbeginn/-ende und Rentenphase gelten ab dem jeweiligen Zeilen-Startalter, ohne Teiljahre. Basisjahr {i.referenceYear}; Alter = Kalenderjahr minus Geburtsjahr. PV: Kinder zählen ab 1. Januar ihres 25. Geburtstagsjahres nicht mehr; Kinderlosenzuschlag ab dem Jahr des 23. Geburtstags. Elterneigenschaft bleibt dauerhaft. Näherung ohne Monatsgenauigkeit.</p>
-    <p>Grenzen und Geldbeträge steigen mit der Inflation des jeweiligen Simulationspfads; Prozentsätze bleiben konstant. Regeln 2026, keine Bescheid- oder Centgenauigkeit.</p></details>
+    </fieldset>}
+    {ranges.length > 0 && <h3>3. Schätzungen je Phase</h3>}
+    {ranges.map(({ phase }) => {
+      const p = i[phase], label = labelFor(phase)
+      const update = (patch: Partial<InsurancePhase>) => onChange({ ...i, [phase]: { ...p, ...patch } })
+      return reasonsFor(phase).length ? <fieldset key={phase}><legend>Eigene Beiträge – {label}</legend>
+        <p>Eigene KV und PV für die gesamte Phase, in heutiger Kaufkraft und nach allen Zuschüssen. Die Beträge ersetzen die automatische Berechnung. Es wird kein weiterer Zuschuss abgezogen. Auch 0 bitte ausdrücklich eintragen.</p>
+        <OptionalNumber id={`insurance-${phase}-kvMonthlyToday`} label={`Eigene KV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.kvMonthlyToday} onChange={kvMonthlyToday => update({ kvMonthlyToday })} />
+        <OptionalNumber id={`insurance-${phase}-pvMonthlyToday`} label={`Eigene PV nach allen Zuschüssen – ${label} (€/Monat heute)`} value={p.pvMonthlyToday} onChange={pvMonthlyToday => update({ pvMonthlyToday })} />
+      </fieldset> : p.status && p.status !== 'kvdr' ? <fieldset key={phase}><legend>Automatische Beiträge – {label}</legend>
+        <label className="field"><span className="field-label">Kapitalbasis – {label}</span><select id={`insurance-${phase}-capitalMode`} value={capitalMode(p)} onChange={e => update({ capitalMode: e.target.value as 'automatic' | 'manual' })}><option value="automatic">Automatisch aus dem Portfolio schätzen</option><option value="manual">Manuelle Kapitalertragsschätzung</option></select></label>
+        {capitalMode(p) === 'manual' && <><OptionalNumber id={`insurance-${phase}-capitalMonthlyToday`} label={`Beitragsrelevante Kapitalerträge – ${label} (€/Monat heute)`} value={p.capitalMonthlyToday} onChange={capitalMonthlyToday => update({ capitalMode: 'manual', capitalMonthlyToday })} /><p>Vor Steuern, nach beitragsrechtlichen Kosten. Schätzung oder ausdrücklich 0. Kein Depotwert, keine Gesamtrendite oder Entnahme; kein zusätzliches auszahlbares Einkommen. Bleibt in heutiger Kaufkraft konstant. Die KV/PV werden weiterhin automatisch berechnet.</p></>}
+        {phase === 'pension' && <><label className="field"><span className="field-label">Rentenversicherungszuschuss einplanen?</span><select id="insurance-pension-drvSubsidy" value={p.drvSubsidy ?? ''} onChange={e => update({ drvSubsidy: (e.target.value || undefined) as InsurancePhase['drvSubsidy'] })}><option value="">Bitte auswählen</option><option value="confirmed">Ja</option><option value="not-received">Nein, nicht ansetzen</option></select></label><p>Planungsannahme; keine Prüfung eines Anspruchs.</p></>}
+      </fieldset> : null
+    })}
+    {needsEstimator({ ...input, retirementInsurance: i }) && <CapitalEstimatorSetup insurance={i} onChange={onChange} />}
+    <details><summary>Jahresmodell und Rechenregeln</summary><p>Jahresmodell: Arbeitsende, Einkommensbeginn/-ende und Versicherungsübergang gelten ab dem jeweiligen Zeilen-Startalter, ohne Teiljahre. Basisjahr {i.referenceYear}; Alter = Kalenderjahr minus Geburtsjahr. PV: Kinder zählen ab 1. Januar ihres 25. Geburtstagsjahres nicht mehr; Kinderlosenzuschlag ab dem Jahr des 23. Geburtstags. Elterneigenschaft bleibt dauerhaft. Näherung ohne Monatsgenauigkeit.</p><p>Grenzen und Geldbeträge steigen mit der Inflation des jeweiligen Simulationspfads; Prozentsätze bleiben konstant. Regeln 2026, keine Bescheid- oder Centgenauigkeit.</p></details>
   </fieldset>
 }

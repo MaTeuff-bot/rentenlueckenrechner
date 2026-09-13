@@ -9,10 +9,10 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
   if (!c) return null
   const monthly = (v: number) => formatCurrency(v / 12)
   return <section className="panel insurance-breakdown" aria-labelledby="insurance-breakdown-title"><h2 id="insurance-breakdown-title">Monatliche KV/PV-Aufschlüsselung</h2>
-    <label className="field"><span className="field-label">Berechnungsjahr auswählen</span><select value={row.ageStart} onChange={e => setSelectedAge(Number(e.target.value))}>{rows.map(r => <option key={r.ageStart} value={r.ageStart}>{r.insurance?.calendarYear} · Alter {r.ageStart} · {r.insurance?.phase === 'bridge' ? 'Brücke' : 'Rentenphase'}</option>)}</select></label>
+    <label className="field"><span className="field-label">Berechnungsjahr auswählen</span><select value={row.ageStart} onChange={e => setSelectedAge(Number(e.target.value))}>{rows.map(r => <option key={r.ageStart} value={r.ageStart}>{r.insurance?.calendarYear} · Alter {r.ageStart} · {r.insurance?.phase === 'bridge' ? 'Brücke' : streams.some(s => s.kind === 'gesetzliche-rente') ? 'Rentenphase' : 'Phase ab Versicherungsübergang'}</option>)}</select></label>
     <div className="source-chip-list">{(['bridge', 'pension'] as const).map(phase => {
       const first = rows.find(r => r.insurance?.phase === phase)
-      return first && <button className="secondary-button" type="button" key={phase} onClick={() => setSelectedAge(first.ageStart)}>{phase === 'bridge' ? 'Erstes Brückenjahr' : 'Erstes Rentenjahr'}</button>
+      return first && <button className="secondary-button" type="button" key={phase} onClick={() => setSelectedAge(first.ageStart)}>{phase === 'bridge' ? 'Erstes Brückenjahr' : streams.some(s => s.kind === 'gesetzliche-rente') ? 'Erstes Rentenjahr' : 'Erstes Jahr ab Versicherungsübergang'}</button>
     })}</div>
     <p>Monatsdurchschnitt aus der gemeinsamen Jahresrechnung, nominal im ausgewählten Jahr. {c.status === 'manual' ? 'Manuelle Gesamtannahme.' : c.selectedStatus === 'unknown' ? 'Unbekannter Status: konservative freiwillige GKV, kein garantierter Höchstbeitrag.' : c.effectiveStatus === 'kvdr' ? 'Selbst gewählte KVdR.' : 'Freiwillige GKV.'}</p>
     <dl className="insurance-reconciliation">

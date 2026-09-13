@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { RetirementInsuranceSection } from '../InputPanel/RetirementInsuranceSection'
 import { PortfolioBucketSection } from '../InputPanel/PortfolioBucketSection'
-import { automaticInsurance, insuredInput } from '../../model/__tests__/insuranceFixtures'
+import { automaticInsurance, insuredInput, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { insuranceSetupIssues } from '../../model/retirementInsurance'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns/constants'
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
@@ -20,7 +20,7 @@ function Harness() {
   const issues = insuranceSetupIssues(input)
   return <>
     <PortfolioBucketSection buckets={buckets} total={100000} allocation={{ equity: 1, bonds: 0, fixed: 0 }} error={null} onAdd={() => {}} onRemove={id => setBuckets(buckets.filter(b => b.id !== id))} onUpdate={(id, patch) => setBuckets(buckets.map(b => b.id === id ? { ...b, ...patch } : b))} />
-    <RetirementInsuranceSection insurance={insurance} input={input} onChange={setInsurance} />
+    <RetirementInsuranceSection coverage={completedCoverage()} insurance={insurance} input={input} onChange={setInsurance} />
     <p role="status">{issues.length ? issues.join(' ') : 'Vollständig'}</p>
   </>
 }

@@ -1,3 +1,4 @@
+import { applyCoverage, type InsuranceCoverageAnswers } from '../model/insuranceCoverage'
 import { scenarioIssues } from '../model/scenarioIssues'
 import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
 import { timelineBoundary, transitionAfterStreamsChange } from '../model/scenarioTimeline'
@@ -41,12 +42,12 @@ export function useScenarioState() {
     const annualReturn = calculatePortfolioExpectedReturn(allocation)
     return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
-      retirementInsurance: state.input.retirementInsurance ? { ...state.input.retirementInsurance, pensionAge: timelineBoundary(retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer ?? { kind: 'missing' }) } : undefined,
+      retirementInsurance: state.input.retirementInsurance ? { ...applyCoverage(state.input.retirementInsurance, state.insuranceCoverageAnswers), pensionAge: timelineBoundary(retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer ?? { kind: 'missing' }) } : undefined,
       retirementIncomeStreams,
       estimatorPortfolio: portfolioBuckets,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }), annualReturn)
-  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input, state.childrenAnswer, state.explicitInsuranceTransition])
+  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input, state.childrenAnswer, state.explicitInsuranceTransition, state.insuranceCoverageAnswers])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const portfolioBucketError = useMemo(() => validatePortfolioBuckets(portfolioBuckets), [portfolioBuckets])
@@ -55,7 +56,7 @@ export function useScenarioState() {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
   const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
-  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError])
+  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers])
   const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
     () => ({
@@ -84,6 +85,7 @@ export function useScenarioState() {
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
   }, [state])
 
+  const updateInsuranceCoverage = (insuranceCoverageAnswers: InsuranceCoverageAnswers) => setState(current => ({ ...current, insuranceCoverageAnswers }))
   const updateChildrenAnswer = (childrenAnswer: ChildrenAnswer) => setState(current => ({ ...current, childrenAnswer }))
   const updateInsuranceTransition = (explicitInsuranceTransition: number | undefined) => setState(current => ({ ...current, explicitInsuranceTransition }))
 
@@ -177,6 +179,8 @@ export function useScenarioState() {
   return {
     input,
     childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } as ChildrenAnswer,
+    insuranceCoverageAnswers: state.insuranceCoverageAnswers,
+    updateInsuranceCoverage,
     updateChildrenAnswer,
     updateInsuranceTransition,
     insuranceIssues,

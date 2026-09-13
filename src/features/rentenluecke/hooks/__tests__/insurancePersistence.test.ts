@@ -1,7 +1,8 @@
+import { applyCoverage } from '../../model/insuranceCoverage'
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { automaticInsurance } from '../../model/__tests__/insuranceFixtures'
+import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../scenarioState/defaults'
 import { loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY, RESET_NOTICE_KEY } from '../scenarioState/persistence'
 import { useScenarioState } from '../useScenarioState'
@@ -10,20 +11,21 @@ beforeEach(() => localStorage.clear())
 
 describe('guided insurance persistence and app-owned reset', () => {
   it('discards every owned old scenario version, preserves unrelated storage and records one reset notice', () => {
-    for (let version = 1; version <= 13; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
+    for (let version = 1; version <= 14; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
     localStorage.setItem('another-app.scenario.v12', 'keep')
     localStorage.setItem('rentenlueckenrechner.preferences', 'keep')
-    localStorage.setItem('rentenlueckenrechner.scenario.v14', 'future')
+    localStorage.setItem('rentenlueckenrechner.scenario.v16', 'future')
     expect(loadInitialState()).toEqual(createDefaultState())
-    expect(Object.keys(localStorage).sort()).toEqual(['another-app.scenario.v12', 'rentenlueckenrechner.preferences', 'rentenlueckenrechner.scenario.v14', RESET_NOTICE_KEY].sort())
+    expect(Object.keys(localStorage).sort()).toEqual(['another-app.scenario.v12', 'rentenlueckenrechner.preferences', 'rentenlueckenrechner.scenario.v16', RESET_NOTICE_KEY].sort())
     expect(localStorage.getItem(RESET_NOTICE_KEY)).toBe('1')
     localStorage.removeItem(RESET_NOTICE_KEY)
     loadInitialState()
     expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
   })
-  it('preserves v14 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
+  it('preserves v15 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
     const state = createDefaultState()
     state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
+    state.insuranceCoverageAnswers = completedCoverage()
     state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002], rates: { kvGeneralRate: 0, kvReducedRate: 0.15, pvBaseRate: 0.04 },
       bridge: { status: 'unsupported', kvMonthlyToday: 200, pvMonthlyToday: 0 },
       pension: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'not-received' },
@@ -33,9 +35,9 @@ describe('guided insurance persistence and app-owned reset', () => {
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
     localStorage.setItem('rentenlueckenrechner.scenario.v12', 'old')
     const loaded = loadInitialState()
-    expect(loaded.input.retirementInsurance).toEqual(state.input.retirementInsurance)
+    expect(loaded.input.retirementInsurance).toEqual(applyCoverage(state.input.retirementInsurance!, state.insuranceCoverageAnswers))
     expect(loaded.retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
-    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(14)
+    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(15)
   })
   it('roundtrips unanswered fields without fabricating confirmed zeros', () => {
     const state = createDefaultState()
@@ -53,6 +55,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     expect(result.current.isValid).toBe(false)
     act(() => result.current.updateRetirementIncomeStream('statutory-pension', { support: 'standard' }))
     act(() => result.current.updateChildrenAnswer({ kind: 'children', rows: [{ id: 'older', year: 1980 }] }))
+    act(() => result.current.updateInsuranceCoverage(completedCoverage()))
     act(() => result.current.updateRetirementInsurance(automaticInsurance()))
     expect(result.current.isValid).toBe(true)
     const complete = result.current.result
@@ -79,6 +82,7 @@ describe('additive insurance estimator persistence', () => {
   it('keeps legacy manual amounts and unrelated state without a new reset', () => {
     const state = createDefaultState()
     state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
+    state.insuranceCoverageAnswers = completedCoverage()
     state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002],
       pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 321, drvSubsidy: 'not-received' },
     })
@@ -96,15 +100,67 @@ describe('additive insurance estimator persistence', () => {
     const state = createDefaultState()
     state.portfolioBuckets[0].holding = 'accumulating-equity-fund'
     state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
+    state.insuranceCoverageAnswers = completedCoverage()
     state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002],
       capitalEstimator: { fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
       bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', capitalMonthlyToday: 123 },
       pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 456, drvSubsidy: 'not-received' },
     })
     const loaded = parsePersistedScenarioState(serializeScenarioState(state))
-    expect(loaded.input.retirementInsurance).toEqual(state.input.retirementInsurance)
+    expect(loaded.input.retirementInsurance).toEqual(applyCoverage(state.input.retirementInsurance!, state.insuranceCoverageAnswers))
     expect(loaded.portfolioBuckets).toEqual(state.portfolioBuckets)
     delete state.input.retirementInsurance.capitalEstimator!.fundAcquisitionCost
     expect(parsePersistedScenarioState(serializeScenarioState(state)).input.retirementInsurance!.capitalEstimator!.fundAcquisitionCost).toBeUndefined()
   })
+})
+
+it('resets a fully populated previous-version scenario, not just its insurance fields', () => {
+  const old = createDefaultState()
+  old.input = { ...old.input, currentAge: 55, retirementAge: 61, planningAge: 99, monthlyContributionToday: 987, monthlyDesiredSpendingToday: 4321, annualInflationRate: .08, retirementInsurance: automaticInsurance({ insurerAdditionalRate: .09 }) }
+  old.childrenAnswer = { kind: 'children', rows: [{ id: 'child', year: 2005 }] }
+  old.insuranceCoverageAnswers = completedCoverage()
+  old.portfolioBuckets = [{ id: 'old', name: 'Old portfolio', value: 123456, returnSeriesId: 'synthetic-equity-assumption-v1', holding: 'accumulating-equity-fund' }]
+  old.retirementIncomeStreams[0].amountMonthlyToday = 7890
+  old.historical.inflationSourceId = 'fixed-manual'
+  old.explicitInsuranceTransition = 66
+  const previous = JSON.parse(serializeScenarioState(old))
+  previous.version = 14
+  delete previous.insuranceCoverageAnswers // actual preceding version had no canonical coverage field
+  localStorage.setItem('rentenlueckenrechner.scenario.v14', JSON.stringify(previous))
+  localStorage.setItem('foreign', 'keep')
+  expect(loadInitialState()).toEqual(createDefaultState())
+  expect(localStorage.getItem('rentenlueckenrechner.scenario.v14')).toBeNull()
+  expect(localStorage.getItem(RESET_NOTICE_KEY)).toBe('1')
+  expect(localStorage.getItem('foreign')).toBe('keep')
+})
+
+it('retains valid inactive v15 assumptions across reload, then clears only the manual preference', () => {
+  const state = createDefaultState()
+  state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance({
+    capitalEstimator: { fundAcquisitionCost: 45678, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
+    pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 },
+  }) }
+  state.childrenAnswer = { kind: 'none' }
+  state.insuranceCoverageAnswers = completedCoverage()
+  state.retirementIncomeStreams[0].support = 'standard'
+  localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
+  const first = renderHook(useScenarioState)
+  const original = first.result.current.result
+  expect(original).not.toBeNull()
+  act(() => first.result.current.updateRetirementInsurance({ ...first.result.current.input.retirementInsurance!, pension: { ...first.result.current.input.retirementInsurance!.pension, manual: true } }))
+  expect(first.result.current.result!.retirementRows[0].healthInsurance).toBe(0)
+  first.unmount()
+  const restored = renderHook(useScenarioState)
+  const retained = restored.result.current.input.retirementInsurance!
+  expect(retained.pension).toMatchObject({ manual: true, capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 })
+  expect(retained.capitalEstimator?.fundAcquisitionCost).toBe(45678)
+  expect(retained.insurerAdditionalRate).toBe(.029)
+  act(() => restored.result.current.updateRetirementInsurance({ ...retained, pension: { ...retained.pension, manual: false } }))
+  expect(restored.result.current.result).toEqual(original)
+  expect(restored.result.current.result!.retirementRows[0].healthInsurance).toBeGreaterThan(0)
+  expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance!.pension.manual).toBe(false)
+  // Reopening automatic coverage cannot infer a previously missing answer or consume retained totals.
+  act(() => restored.result.current.updateInsuranceCoverage({ ...completedCoverage(), pension: { common: { kind: 'missing' } } }))
+  expect(restored.result.current.result).toBeNull()
+  expect(restored.result.current.issues.some(issue => issue.fieldPath === 'insuranceCoverageAnswers.pension.common')).toBe(true)
 })

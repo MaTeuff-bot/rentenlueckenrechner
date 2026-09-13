@@ -1,3 +1,5 @@
+import { controllingPensionStream } from './retirementInsurance'
+import type { InsuranceCoverageAnswers } from './insuranceCoverage'
 import type { ZodError } from 'zod'
 import type { RentenlueckeInput } from './types'
 import type { PortfolioBucket } from './portfolioBuckets'
@@ -22,7 +24,7 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
     return [`portfolio-${names[String(field)] ?? field}-${buckets[Number(key)]?.id}`, 'vermoegen']
   }
   if (root === 'retirementInsurance') {
-    if (key === 'pensionAge') return [input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? `retirement-income-start-${input.retirementIncomeStreams.find(s => s.kind === 'gesetzliche-rente')!.id}` : 'insurance-transition', 'zeitplan']
+    if (key === 'pensionAge') return [input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? `retirement-income-start-${controllingPensionStream(input.retirementIncomeStreams)!.id}` : 'insurance-transition', 'zeitplan']
     if (key === 'childBirthYears') return [children.kind === 'children' && children.rows[Number(field)] ? `child-${children.rows[Number(field)].id}` : 'children-add', 'versicherung']
     if (key === 'rates') return [`insurance-rates-${field}`, 'annahmen']
     if (key === 'capitalEstimator') return [`estimator-${field}`, 'versicherung']
@@ -35,7 +37,7 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
   return [root === 'currentCapital' ? `portfolio-value-${buckets[0]?.id}` : String(root), 'vermoegen']
 }
 /** UI routing adapter around existing validators. Every engine issue is retained. */
-export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null): ScenarioIssue[] {
+export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers): ScenarioIssue[] {
   const issues: ScenarioIssue[] = []
   const add = (path: (string | number)[], message: string, kind: ScenarioIssue['kind'], code: string) => {
     const [fieldId, section] = route(path, input, children, buckets)
@@ -62,7 +64,18 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     else if (message.includes('Kalenderbereich')) { path = ['planningAge']; kind = 'invalid' }
     else if (message.includes('Kennungen')) { path = ['retirementIncomeStreams', 0, 'id']; kind = 'invalid' }
     else if (message.includes('eigene monatliche')) path = ['retirementInsurance', phase, i?.[phase].kvMonthlyToday === undefined ? 'kvMonthlyToday' : 'pvMonthlyToday']
-    else if (message.includes('Versicherungsumstände')) path = ['retirementInsurance', phase, 'circumstances']
+    else if (message.includes('Versicherungsumstände')) {
+      if (coverage) {
+        const before = issues.length
+        const groups = phase === 'bridge' ? ['common', 'bridgeOnly'] as const : ['common'] as const
+        for (const group of groups) {
+          const answer = group === 'bridgeOnly' ? coverage.bridge.bridgeOnly : coverage[phase].common
+          if (answer.kind === 'missing') issues.push({ code: `coverage.${phase}.${group}`, fieldPath: `insuranceCoverageAnswers.${phase}.${group}`, fieldId: `insurance-${phase}-${group === 'common' ? 'circumstances' : 'bridgeOnly'}`, section: 'versicherung', kind: 'missing', message: `${phase === 'bridge' ? 'Brücke' : input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? 'Rentenphase' : 'Phase ab Versicherungsübergang'}: ${group === 'common' ? 'Besondere Umstände' : 'Zusätzliche Umstände in der Brücke'} beantworten.` })
+        }
+        if (issues.length > before) continue
+      }
+      path = ['retirementInsurance', phase, 'circumstances']
+    }
     else if (message.includes('Versicherungsstatus')) path = ['retirementInsurance', phase, 'status']
     else if (message.includes('Kapitalertragsbasis')) path = ['retirementInsurance', phase, 'capitalMonthlyToday']
     else if (message.includes('DRV-Zuschuss')) path = ['retirementInsurance', phase, 'drvSubsidy']
@@ -79,7 +92,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
       path = ['estimatorPortfolio', index, 'holding']; kind = buckets[index]?.holding ? 'invalid' : 'missing'
     } else if (message.includes('Bankeinlagen')) { path = ['estimatorPortfolio', Math.max(0, buckets.findIndex(b => b.holding === 'ordinary-bank-deposit' && getReturnSeriesCategory(b.returnSeriesId) !== 'cash')), 'returnSeriesId']; kind = 'invalid' }
     else if (/Ausgangsallokation|Portfoliowerte/.test(message)) { path = ['estimatorPortfolio', 0, 'value']; kind = 'invalid' }
-    add(path, /PV-Elterneigenschaft/.test(message) ? 'Anerkannte Kinder ergänzen oder ausdrücklich „Keine anerkannten Kinder“ wählen.' : message, kind, `setup.${path.join('.')}`)
+    add(path, /PV-Elterneigenschaft/.test(message) ? 'Anerkannte Kinder ergänzen oder ausdrücklich „Keine anerkannten Kinder“ wählen.' : !input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? message.replaceAll('Rentenphase', 'Phase ab Versicherungsübergang') : message, kind, `setup.${path.join('.')}`)
   }
   if (portfolioError || allocationError) {
     const index = Math.max(0, buckets.findIndex(b => !Number.isFinite(b.value) || b.value < 0 || !Number.isFinite(b.annualCostRate ?? 0) || (b.annualCostRate ?? 0) < 0 || (b.annualCostRate ?? 0) > 1 || !getReturnSeriesCategory(b.returnSeriesId)))
