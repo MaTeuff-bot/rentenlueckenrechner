@@ -194,7 +194,11 @@ describe('inactive investment tax foundation', () => {
     const first = valueHypotheticalLiquidation(closed, 'cash', 1, cutoff)
     expect(valueHypotheticalLiquidation(closed, 'cash', 1, cutoff)).toEqual(first)
     expect(() => valueHypotheticalLiquidation(first.state, 'cash', 1, cutoff)).toThrow()
-    expect(() => beginInvestmentYear(first.state, 2027, 1000, 0)).toThrow()
+    // The terminal state is parked in 'closed': a subsequent horizon year is allowed to
+    // begin (it is a fresh closed state), but a second closeWithPendingVP would mint a
+    // duplicate vp: record, so the guard test becomes phase-based instead.
+    expect(first.state.phase).toBe('closed')
+    expect(() => receivePendingVP(first.state)).toThrow()
     expect(first.state.taxYears).toHaveLength(1)
     expect(first.state.pending).toEqual([])
     expect(totals(first.state)).toEqual({ units: 0, basis: 0, vp: 0 })

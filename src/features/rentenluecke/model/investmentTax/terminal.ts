@@ -28,5 +28,8 @@ export function valueHypotheticalLiquidation(state: InvestmentState, cashId: str
   next = reconcileTax(next, cashId, `terminal-tax:${state.year}`)
   const outstandingLiability = unpaidTax(next)
   const nominal = finite(totalValue(next) - outstandingLiability)
+  // Park in 'closed' so a caller cannot run closeWithPendingVP afterwards and mint a
+  // second `vp:` record for cohorts whose VP this liquidation already assessed (read side).
+  next.phase = 'closed'
   return { nominal, real: finite(nominal / cumulativeInflation), outstandingLiability, state: checked(next) }
 }
