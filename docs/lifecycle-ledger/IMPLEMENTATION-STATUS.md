@@ -86,3 +86,88 @@ No live code imports the new module.
    per-trial evaluation; the bounded fixed-point iteration (8 × €0.005) lives
    in the yearly close, mirroring the lifecycle solver. Nonconvergence throws
    `LedgerInsuranceError` before anything commits, so no next state exists.
+
+## Review fix round 1 (independent-review findings on `a3cb8d5`)
+
+Fix commit `ce80b09` (not pushed, no PR — coordinator publishes).
+`PLAN.md` normative contracts intact and unmodified: no live-path changes,
+no UI/persistence, no new user settings, engines reused, no assertion
+weakening.
+
+### Blocking finding 1 — bootstrap conflated depletion with nonconvergence
+
+`adapters.ts` depletion condition contained `|| exhausted`, so
+solver-exhausted paths reported `depleted` and never engaged
+`failureCount`/`summaryBlocked` (PLAN §8.2,
+bootstrap-failed-path-blocks-summary). Fix: `exhausted` now returns
+`{status:"failed", kind:"nonconvergence", ...}` first; the depletion branch
+requires only unfunded/stranded/insuranceGap above dust. Depletion and
+nonconvergence stay distinct statuses.
+
+### Blocking finding 2 — insurance gap collapsed to zero on depletion
+
+The `depleted` variant carried no insurance amounts. Fix: `types.ts`
+extends it with `unfundedInsuranceKv`/`unfundedInsurancePv` (summed over
+reports), populated in `adapters.ts`, so `insuranceGap` stays visible and
+never collapses to zero. Asserted in tests.
+
+### Coordinator ruling — `survives()` includes terminal-settlement semantics
+
+Implements PLAN §8.1: `ledgerSurvives` now, after `liquidateLifecycle` on
+the trial clone (and the outstanding-liability check), computes
+`assessTerminalInsurance` for the horizon year and fails the candidate
+(returns false) when the incremental terminal insurance cannot be covered
+by the terminal proceeds/cash within dust tolerance. Regression test uses a
+mocked `assessTerminalInsurance` because a natural
+incremental-greater-than-nominal outcome is unreachable (rates < 100%,
+ceiling/minimum bound it) — the mock verifies the wiring, i.e. a candidate
+that survives withdrawals but cannot cover terminal insurance fails.
+
+### Accepted non-blocking fail-closed fixes
+
+(a) `adapters.ts` `ledgerSurvives` catch rethrows non-`LedgerInsuranceError`
+input/validation errors instead of the catch-all `return false`, which had
+surfaced as a misleading `RequiredCapitalCalculationError`; genuine
+candidate failures (`LedgerInsuranceError`) still return false.
+(b) `annualCashflow.ts` validates `insurance.calendarYear === year` and
+throws fail-closed `LedgerInsuranceError` on mismatch.
+(c) `terminalInsurance.ts` gates `ceilingBinding` off for manual specs
+(`spec.manual ? false : ...`) — comparing a pension-only base against a
+fixed manual burden is meaningless.
+
+### Regression tests (ledger suites 56 → 62, helpers not weakened)
+
+- Solver-exhausted-but-funded bootstrap path → `failed`/`nonconvergence` +
+  blocked summary.
+- Insurance-driven depletion payload keeps summed KV/PV amounts visible
+  (never zero).
+- Terminal-insurance-unfunded search candidate fails `survives()`.
+- `ledgerSurvives` rethrows input errors vs returning false for candidates;
+  manual spec `ceilingBinding` is false.
+- `insurance.calendarYear` mismatch throws `LedgerInsuranceError`.
+- Test-helper consistency fix (not weakening): `yi`/`yearInput` derive
+  `finalYear`/`finalAge` from the patch so the default insurance spec year
+  matches an overridden ledger year under the new (b) validation.
+
+### Gate results (exact commands, final tree at `ce80b09`)
+
+- `npx vitest run
+  src/features/rentenluecke/model/lifecycleLedger/lifecycleLedger.adapters.test.ts` —
+  26 passed.
+- `npx vitest run
+  src/features/rentenluecke/model/lifecycleLedger/lifecycleLedger.test.ts` —
+  25 passed.
+- `npx vitest run
+  src/features/rentenluecke/model/lifecycleLedger/lifecycleLedger.conservation.test.ts` —
+  11 passed.
+- `npx vitest run src/features/rentenluecke/model/investmentTax` —
+  1 file, 24 passed.
+- `npx vitest run
+  src/features/rentenluecke/model/lifecycleAllocation/lifecycleAllocation.test.ts` —
+  42 passed; `.../lifecycleSensitivity.test.ts` — 10 passed;
+  `.../hermesAudit.test.ts` — 2 passed (allocation block 54 + tax 24 = 78).
+- Full `npm test -- --run` — 32 files, 646 tests, all pass, exit 0
+  (prior 640 + 6 new ledger regression tests).
+- `npm run lint` (`eslint .`) — exit 0.
+- `npm run build` (`tsc -b && vite build`) — exit 0.
+- `git diff --check` — clean.
