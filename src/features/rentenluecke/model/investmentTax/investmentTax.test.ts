@@ -189,19 +189,25 @@ describe('inactive investment tax foundation', () => {
     expect(flat.priceIncome).toBe(0)
     expect(flat.state.pending).toEqual([])
   })
-  it.each(['beforeHoldingCutoff', 'afterHoldingCutoff'] as const)('protects repeated terminal valuation under %s', cutoff => {
+  it.each(['beforeHoldingCutoff', 'afterHoldingCutoff'] as const)('protects terminal state under %s', cutoff => {
     const closed = simulateInvestmentYear(initial(), annual()).state
     const first = valueHypotheticalLiquidation(closed, 'cash', 1, cutoff)
     expect(valueHypotheticalLiquidation(closed, 'cash', 1, cutoff)).toEqual(first)
-    expect(() => valueHypotheticalLiquidation(first.state, 'cash', 1, cutoff)).toThrow()
-    // The terminal state is parked in 'closed': a subsequent horizon year is allowed to
-    // begin (it is a fresh closed state), but a second closeWithPendingVP would mint a
-    // duplicate vp: record, so the guard test becomes phase-based instead.
-    expect(first.state.phase).toBe('closed')
-    expect(() => receivePendingVP(first.state)).toThrow()
+    expect(first.state.phase).toBe('terminated')
     expect(first.state.taxYears).toHaveLength(1)
     expect(first.state.pending).toEqual([])
     expect(totals(first.state)).toEqual({ units: 0, basis: 0, vp: 0 })
+    expect(() => valueHypotheticalLiquidation(first.state, 'cash', 1, cutoff)).toThrow(/Invalid event order/)
+    expect(() => beginInvestmentYear(first.state, 2027, 1000, 0)).toThrow(/Invalid event order/)
+    expect(() => beginInvestmentYear(first.state, 2027, 0, 0)).toThrow(/Invalid event order/)
+    expect(() => closeWithPendingVP(first.state, { f: 110, future: 21 }, 0.032)).toThrow(/Invalid event order/)
+    expect(() => receivePendingVP(first.state)).toThrow(/Invalid event order/)
+    expect(() => applyAnnualPricesAndInterest(first.state, { f: 110, future: 21 }, { cash: 0 })).toThrow(/Invalid event order/)
+    expect(() => reconcileTax(first.state, 'cash', 'terminal-retry-tax')).toThrow(/Invalid event order/)
+    expect(() => applyTransaction(first.state, { id: 'terminal-retry-external', kind: 'external', cashId: 'cash', amount: 1 })).toThrow(/Invalid event order/)
+    expect(() => applyTransaction(first.state, { id: 'terminal-retry-transfer', kind: 'transfer', fromId: 'cash', toId: 'cash', amount: 1 })).toThrow(/Invalid event order/)
+    expect(() => simulateInvestmentYear(first.state, { ...annual(2027, 110), year: 2027 })).toThrow(/Invalid event order/)
+    expect(first.state.taxYears).toHaveLength(1)
   })
   it('requires complete annual quotes including empty buckets and rejects duplicate/out-of-order operations', () => {
     const s = initial(), active = start(s)

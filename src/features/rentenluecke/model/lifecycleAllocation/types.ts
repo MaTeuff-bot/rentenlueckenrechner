@@ -43,6 +43,13 @@ export interface LifecycleYearInput {
   fundPrices: Record<string, number>;
   depositRates: Record<string, number>;
   basisRate: number;
+  /**
+   * Cumulative purchasing-power factor F for this year: nominal reserve target =
+   * `amountToday * F`, terminal `real = nominal / F_last`. `F` is finite `> 0` with
+   * `F = 1` meaning today's purchasing power. Compounding `F_n = Prod(1 + infl)`;
+   * deflation (`F < 1`) and non-monotonic paths are allowed. Annual-vs-cumulative
+   * confusion is a bug: always pass the cumulative factor, never the annual rate.
+   */
   inflationFactor: number;
 }
 

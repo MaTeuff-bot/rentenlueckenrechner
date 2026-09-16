@@ -15,7 +15,7 @@ const rich: OpeningBucket[] = [
   { id: 'bond', name: 'Bond', classification: 'bondFund', units: 100, price: 100, acquisitionCost: 8000 },
   { id: 'equity', name: 'Equity', classification: 'equityFund', units: 400, price: 100, acquisitionCost: 32000 },
 ];
-const y = (over: Partial<LifecycleYearInput>, i: number): LifecycleYearInput => ({ age: 30 + i, year: 2026 + i, contribution: 0, withdrawalNeed: 0, allowance: 500, churchRate: 0, fundPrices: { bond: 100, equity: 100 }, depositRates: { cash: 0.01 }, basisRate: 0.025, inflationFactor: 1.01, ...over });
+const y = (over: Partial<LifecycleYearInput>, i: number): LifecycleYearInput => ({ age: 30 + i, year: 2026 + i, contribution: 0, withdrawalNeed: 0, allowance: 500, churchRate: 0, fundPrices: { bond: 100, equity: 100 }, depositRates: { cash: 0.01 }, basisRate: 0.025, inflationFactor: 1.01 ** i, ...over });
 
 describe('S1 full invariants', () => {
   it('60y stress: conservation, no closing churn, no negatives, tax rollforward, terminal real', () => {
@@ -54,7 +54,7 @@ describe('S1 full invariants', () => {
     expect(r.state.eventIds.some(id=>id.includes('trial'))).toBe(false);
     const liab = r.state.taxYears.reduce((n,t)=>n+t.liability,0);
     expect(r.state.taxYears.reduce((n,t)=>n+t.paid,0) + unpaidTax(r.state)).toBeCloseTo(liab, 4);
-    const cum = years.reduce((n,yy)=>n*yy.inflationFactor,1);
+    const cum = years[years.length - 1]!.inflationFactor;
     const res = liquidateLifecycle(r.state, 'cash', cum);
     // The deterministic drawdown path (35k/yr vs ~4k/yr contributions, 15% drops every 5th
     // year) exhausts the portfolio at 2070 and every later withdrawal is unfunded, so the

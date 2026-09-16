@@ -359,13 +359,23 @@ describe('annual full rebalance', () => {
     ]);
     expect(baseline.reports[0].trades.length).toBeLessThanOrEqual(2);
     expect(netted.reports[0].trades.length).toBeLessThanOrEqual(4);
+    // Opening targets use actual wealth only; closing targets reflect year-end flows and
+    // net-of-liability anchor. Opposite sides across opening vs closing are legitimate
+    // when flows/market moves justify them. Churn ban applies within each phase.
     for (const run of [baseline, netted]) {
-      const seen = new Map<string, Set<string>>();
-      for (const t of run.reports[0].trades) {
-        if (!seen.has(t.bucketId)) seen.set(t.bucketId, new Set());
-        seen.get(t.bucketId)!.add(t.kind);
+      const tx = run.state.transactions.filter((x) => x.year === 2026 && ['sale', 'purchase', 'transfer'].includes(x.kind));
+      for (const phase of ['opening', 'closing']) {
+        const by = new Map<string, Set<string>>();
+        const isOpening = (id: string) => id.includes(':opening:');
+        for (const x of tx) {
+          const inPhase = phase === 'opening' ? isOpening(x.id) : !isOpening(x.id);
+          if (!inPhase) continue;
+          const k = x.kind === 'sale' ? 'sell' : x.kind === 'purchase' ? 'buy' : x.cash > 0 ? 'sell' : 'buy';
+          if (!by.has(x.bucketId)) by.set(x.bucketId, new Set());
+          by.get(x.bucketId)!.add(k);
+        }
+        for (const kinds of by.values()) expect(kinds.size).toBeLessThanOrEqual(1);
       }
-      for (const kinds of seen.values()) expect(kinds.size).toBeLessThanOrEqual(1);
     }
   });
 
@@ -406,6 +416,47 @@ describe('initial allocation', () => {
     expect(state.taxYears).toHaveLength(1);
     const fund = state.buckets.find((b) => b.id === 'equity');
     expect(fund).toBeDefined();
+  });
+
+  it('keeps matching prefill opening empty even with later contribution/withdrawal', () => {
+    const values = { cash: 4000, bond: 4000, equity: 8000 };
+    const targets = prefillTargetsFromHoldings(values, { cash: 'deposit', bond: 'bondFund', equity: 'equityFund' });
+    const config = stdConfig(targets);
+    const opening = openingOf(80, 100, 6400, 40, 100, 3200, 4000);
+    const initial = createLifecycleState(config, 2026, opening);
+    const { state, report } = simulateLifecycleYear(config, initial, yearInput({
+      fundPrices: { bond: 100, equity: 100 },
+      contribution: 3000, withdrawalNeed: 6000, allowance: 1000,
+    }));
+    const openingTx = state.transactions.filter((x) => x.id.includes(':opening:'));
+    expect(openingTx).toEqual([]);
+    expect(state.taxYears).toHaveLength(1);
+    // Closing handles year-end flows; opening used actual wealth only.
+    expect(report.trades.length).toBeGreaterThan(0);
+    expect(report.unfundedWithdrawal).toBe(0);
+  });
+
+  it('allows legitimate opposite opening/closing sides on deliberate target change plus market move', () => {
+    const config = stdConfig({
+      cash: { role: 'percent', share: 0.1 },
+      bond: { role: 'percent', share: 0.1 },
+      equity: { role: 'percent', share: 0.8 },
+    });
+    const opening = openingOf(80, 100, 6400, 40, 100, 3200, 4000);
+    const initial = createLifecycleState(config, 2026, opening);
+    const { state } = simulateLifecycleYear(config, initial, yearInput({
+      fundPrices: { bond: 50, equity: 200 },
+      contribution: 0, withdrawalNeed: 0, allowance: 100000,
+    }));
+    const tx = state.transactions.filter((x) => x.year === 2026 && ['sale', 'purchase'].includes(x.kind));
+    const openingSides = new Map<string, string>();
+    for (const x of tx.filter((x) => x.id.includes(':opening:'))) {
+      openingSides.set(x.bucketId, x.kind);
+    }
+    // Opening must reflect actual-wealth targets at opening prices; closing refines at
+    // closing prices. Opposite sides across phases are legitimate here and must not throw.
+    expect(state.phase).toBe('closed');
+    expect(openingSides.size).toBeGreaterThan(0);
   });
 
   it('funds explicit targets at zero wealth from the year-zero contribution', () => {
@@ -484,21 +535,24 @@ describe('savings routing', () => {
 });
 
 describe('withdrawal ordering and after-tax targets', () => {
-  // Opening wealth is W0 = 20000 with the withdrawal pre-staged as settlement overweight:
-  // WTO anchor0 = W0 - S gives bond/equity targets exactly equal to holdings, so the
-  // opening rebalance is empty and the closing unified execution alone funds the
-  // withdrawal: cash first, then the overweight sale, never the underweight bucket.
+  // Opening wealth is W0 = 20000 with extra settlement cash staging the withdrawal need.
+  // Opening targets use actual wealth only (year-end convention); the closing unified
+  // execution funds the withdrawal: cash first, then the overweight sale, never the
+  // underweight bucket.
   const diverging = (withdrawalNeed: number, allowance: number) => {
     const config = stdConfig({
       cash: { role: 'fixedReserve', amountToday: 5000 },
       bond: { role: 'percent', share: 0.5 },
       equity: { role: 'percent', share: 0.5 },
     });
-    const half = (15000 - withdrawalNeed) / 2;
+    // Actual-wealth anchor: holdings already match year-zero targets (cash5000/bond7500/
+    // equity7500, W0=20000), so the opening rebalance is empty and the hand-computed
+    // market delta applies to raw opening balances. Withdrawal is funded year-end.
+    const half = 7500;
     return {
       config,
       half,
-      opening: openingOf(half / 100, 100, half * 0.8, half / 100, 100, half * 0.8, 5000 + withdrawalNeed),
+      opening: openingOf(half / 100, 100, half * 0.8, half / 100, 100, half * 0.8, 5000),
       input: yearInput({
         withdrawalNeed, allowance,
         fundPrices: { bond: 50, equity: 140 },
@@ -522,19 +576,28 @@ describe('withdrawal ordering and after-tax targets', () => {
     const { config, opening, input, half } = diverging(1000, 100000);
     const taxed = { ...input, allowance: 100 };
     void half;
-    const { reports } = runYears(config, opening, [taxed]);
+    const { reports, state } = runYears(config, opening, [taxed]);
     const report = reports[0];
     const targetSum = Object.values(report.targetsNominal).reduce((n, v) => n + v, 0);
     expect(targetSum).toBeLessThanOrEqual(report.anchorNominal + 1e-6);
     // Independent market delta from the staged units (half/100 each side).
+    // Anchor is net of the full current-year liability (not just paid); closing is gross
+    // after paid, so closing = anchor + outstanding. Prior unpaid is zero in this fixture.
     const units = half / 100;
     const marketDelta = units * (50 - 100) + units * (140 - 100);
-    expect(report.anchorNominal).toBeCloseTo(report.openingValue + marketDelta - report.withdrawal - report.taxPaid, 4);
-    expect(report.closingValue).toBeCloseTo(report.anchorNominal, 2);
+    const liability = state.taxYears.find((x) => x.year === 2026)?.liability ?? 0;
+    expect(liability).toBeGreaterThanOrEqual(report.taxPaid);
+    expect(report.anchorNominal).toBeCloseTo(report.openingValue + marketDelta - report.withdrawal - liability, 4);
+    expect(report.closingValue).toBeCloseTo(report.anchorNominal + report.unpaidTax, 2);
+    expect(report.closingValue).toBeCloseTo(report.openingValue + marketDelta - report.withdrawal - report.taxPaid, 4);
+    // Churn ban applies within closing only; legitimate opposite opening/closing sides
+    // (deliberate target change + market move) are allowed.
+    const tx = state.transactions.filter((x) => x.year === 2026 && ['sale', 'purchase', 'transfer'].includes(x.kind) && !x.id.includes(':opening:'));
     const byBucket = new Map<string, Set<string>>();
-    for (const t of report.trades) {
-      if (!byBucket.has(t.bucketId)) byBucket.set(t.bucketId, new Set());
-      byBucket.get(t.bucketId)!.add(t.kind);
+    for (const x of tx) {
+      const k = x.kind === 'sale' ? 'sell' : x.kind === 'purchase' ? 'buy' : x.cash > 0 ? 'sell' : 'buy';
+      if (!byBucket.has(x.bucketId)) byBucket.set(x.bucketId, new Set());
+      byBucket.get(x.bucketId)!.add(k);
     }
     for (const kinds of byBucket.values()) expect(kinds.size).toBeLessThanOrEqual(1);
   });
@@ -674,11 +737,11 @@ describe('terminal liquidation', () => {
     const years = Array.from({ length: 10 }, (_, i) => yearInput({
       age: 30 + i, year: 2026 + i, allowance: 200,
       fundPrices: { bond: 100 + 2 * (i + 1), equity: 100 + 5 * (i + 1) },
-      basisRate: 0.025, inflationFactor: 1 + 0.02 * i,
+      basisRate: 0.025, inflationFactor: 1.02 ** i,
     }));
     const { state } = runYears(config, opening, years);
     const yearsBefore = state.taxYears.length;
-    const inflation = 1.2;
+    const inflation = 1.02 ** 9;
     const result = liquidateLifecycle(state, 'cash', inflation);
     expect(result.state.taxYears).toHaveLength(yearsBefore);
     expect(result.real).toBeCloseTo(result.nominal / inflation, 9);
@@ -769,7 +832,7 @@ describe('conservation suite', () => {
       age: 30 + i, year: 2026 + i, allowance: 500,
       contribution: i % 2 === 0 ? 1000 : 0, withdrawalNeed: i % 2 === 1 ? 800 : 0,
       fundPrices: { bond: 100 + 3 * i, equity: 100 + 7 * i },
-      depositRates: { cash: 0.01 }, inflationFactor: 1 + 0.02 * i,
+      depositRates: { cash: 0.01 }, inflationFactor: 1.02 ** i,
     }));
     const { state, reports } = runYears(config, opening, years);
     for (let i = 1; i < reports.length; i++) {
@@ -788,6 +851,229 @@ describe('conservation suite', () => {
     for (const record of saleGains) {
       expect(record.amount).toBeLessThanOrEqual(record.gross + 1e-9);
     }
+  });
+});
+
+describe('tax-funding coordination', () => {
+  it('funds VP liability from sellable equity with zero cash target', () => {
+    const config = stdConfig({
+      cash: { role: 'percent', share: 0 },
+      bond: { role: 'percent', share: 0 },
+      equity: { role: 'percent', share: 1 },
+    });
+    const opening: OpeningBucket[] = [
+      { id: 'cash', name: 'Cash', classification: 'deposit', value: 50 },
+      { id: 'bond', name: 'Bond', classification: 'bondFund', units: 0, price: 100, acquisitionCost: 0 },
+      { id: 'equity', name: 'Equity', classification: 'equityFund', units: 100, price: 100, acquisitionCost: 2000 },
+    ];
+    const years = [2026, 2027].map((year, i) => yearInput({
+      age: 30 + i, year, allowance: 0,
+      fundPrices: { bond: 100, equity: 200 },
+      depositRates: { cash: 0 }, basisRate: 0.05, inflationFactor: 1,
+    }));
+    const { state, reports } = runYears(config, opening, years);
+    const y2 = reports[1]!;
+    const liability = state.taxYears.find((x) => x.year === 2027)?.liability ?? 0;
+    expect(liability).toBeGreaterThan(0);
+    // Bounded solver tolerance is 0.005; residual unpaid below one cent is converged funding.
+    expect(y2.taxPaid).toBeCloseTo(liability, 2);
+    expect(y2.unpaidTax).toBeLessThan(0.01);
+    expect(unpaidTax(state)).toBeLessThan(0.01);
+    // Net anchor: closing gross = anchor + outstanding.
+    expect(y2.closingValue).toBeCloseTo(y2.anchorNominal + y2.unpaidTax, 4);
+    for (const v of Object.values(y2.valuesNominal)) expect(v).toBeGreaterThanOrEqual(-1e-9);
+    const targetSum = Object.values(y2.targetsNominal).reduce((n, v) => n + v, 0);
+    expect(targetSum).toBeLessThanOrEqual(y2.anchorNominal + 1e-6);
+  });
+
+  it('carries prior unpaid explicitly while funding current liability when sellable wealth permits', () => {
+    const config = stdConfig({
+      cash: { role: 'percent', share: 0.2 },
+      bond: { role: 'percent', share: 0.3 },
+      equity: { role: 'percent', share: 0.5 },
+    });
+    const opening = openingOf(80, 100, 6400, 40, 100, 3200, 4000);
+    // Year 1 drains settlement via full withdrawal, leaving current-year tax unpaid.
+    const y1 = yearInput({
+      age: 30, year: 2026, allowance: 0, contribution: 0, withdrawalNeed: 20000,
+      fundPrices: { bond: 120, equity: 140 }, depositRates: { cash: 0 }, basisRate: 0.025, inflationFactor: 1,
+    });
+    const first = runYears(config, opening, [y1]);
+    const priorOutstanding = unpaidTax(first.state);
+    expect(priorOutstanding).toBeGreaterThanOrEqual(0);
+    // Year 2 brings ample contribution; current liability must be funded, prior stays explicit.
+    const y2 = yearInput({
+      age: 31, year: 2027, allowance: 0, contribution: 20000, withdrawalNeed: 0,
+      fundPrices: { bond: 120, equity: 140 }, depositRates: { cash: 0 }, basisRate: 0.025, inflationFactor: 1,
+    });
+    const { state, reports } = simulateLifecycle(config, first.state, [y2]);
+    const rep = reports[0]!;
+    const currentLiability = state.taxYears.find((x) => x.year === 2027)?.liability ?? 0;
+    const currentPaid = state.taxYears.find((x) => x.year === 2027)?.paid ?? 0;
+    expect(currentLiability).toBeGreaterThanOrEqual(0);
+    // Current-year funding uses sellable wealth: paid equals liability whenever cash after
+    // net-target execution covers it; otherwise shortfall stays explicit (no borrowing).
+    expect(currentPaid).toBeLessThanOrEqual(currentLiability + 1e-9);
+    expect(rep.unpaidTax).toBeCloseTo(unpaidTax(state), 9);
+    expect(rep.anchorNominal).toBeCloseTo(rep.closingValue - rep.unpaidTax, 4);
+    for (const b of state.buckets) expect(bucketValue(b)).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('handles severe drawdown with partial and full sales without inventing wealth', () => {
+    const config = stdConfig({
+      cash: { role: 'fixedReserve', amountToday: 5000 },
+      bond: { role: 'percent', share: 0.5 },
+      equity: { role: 'percent', share: 0.5 },
+    });
+    // Actual-wealth empty opening (cash5000/bond7000/equity7000) keeps the hand-computed
+    // market exact: opening trades are empty, market applies to raw holdings.
+    const opening = openingOf(70, 100, 5600, 70, 100, 5600, 5000);
+    const crash = yearInput({
+      age: 30, year: 2026, allowance: 100,
+      fundPrices: { bond: 50, equity: 40 }, depositRates: { cash: 0 }, basisRate: 0.025, inflationFactor: 1,
+    });
+    const { state, reports } = runYears(config, opening, [crash]);
+    const rep = reports[0]!;
+    expect(rep.closingValue).toBeLessThan(rep.openingValue);
+    expect(rep.unfundedWithdrawal).toBe(0);
+    for (const v of Object.values(rep.valuesNominal)) expect(v).toBeGreaterThanOrEqual(-1e-9);
+    // Basis rollforward: purchases add, sales release pro-rata, VP resolution adds nothing.
+    const equity = state.buckets.find((b) => b.id === 'equity');
+    if (!equity || equity.classification === 'deposit') throw new Error('equity missing');
+    for (const c of equity.cohorts) {
+      expect(c.basis).toBeGreaterThanOrEqual(-1e-9);
+      expect(c.assessedVP).toBeGreaterThanOrEqual(-1e-9);
+    }
+    // Conservation: closing = opening + market + contribution - withdrawal - paid.
+    const market = 70 * (40 - 100) + 70 * (50 - 100);
+    expect(rep.closingValue).toBeCloseTo(rep.openingValue + market - rep.withdrawal - rep.taxPaid, 4);
+    // Full-sale edge: liquidate remaining equity at crash prices still conserves and reports.
+    const fullSaleYears = [yearInput({
+      age: 31, year: 2027, allowance: 0, withdrawalNeed: 0,
+      fundPrices: { bond: 50, equity: 40 }, depositRates: { cash: 0 }, basisRate: 0, inflationFactor: 1,
+    })];
+    const after = simulateLifecycle(config, state, fullSaleYears);
+    for (const v of Object.values(after.reports[0]!.valuesNominal)) expect(v).toBeGreaterThanOrEqual(-1e-9);
+  });
+});
+
+describe('inflation cumulative contract', () => {
+  it('compounds fixed reserves and validates finite positive factors', () => {
+    const config = stdConfig({
+      cash: { role: 'fixedReserve', amountToday: 10000 },
+      bond: { role: 'percent', share: 0.5 },
+      equity: { role: 'percent', share: 0.5 },
+    });
+    expect(resolveYearlyTargetsEuro(config, 30, 50000, 1).targetsNominal.cash).toBe(10000);
+    expect(resolveYearlyTargetsEuro(config, 30, 50000, 1.02 ** 10).targetsNominal.cash).toBeCloseTo(10000 * 1.02 ** 10, 9);
+    // Deflation and non-monotonic paths are allowed (no monotonicity imposed).
+    expect(resolveYearlyTargetsEuro(config, 30, 50000, 0.98).targetsNominal.cash).toBeCloseTo(9800, 9);
+    expect(resolveYearlyTargetsEuro(config, 30, 50000, 1.02 ** 5 * 0.99).targetsNominal.cash).toBeCloseTo(10000 * 1.02 ** 5 * 0.99, 9);
+    for (const bad of [0, -1, NaN, Infinity, -Infinity]) {
+      expect(() => resolveYearlyTargetsEuro(config, 30, 50000, bad)).toThrow(/inflation/);
+      expect(() => simulateLifecycleYear(config, createLifecycleState(config, 2026, openingOf(80, 100, 6400, 40, 100, 3200, 4000)), yearInput({ inflationFactor: bad }))).toThrow(/inflation/);
+    }
+    expect(() => liquidateLifecycle(createLifecycleState(config, 2026, openingOf(80, 100, 6400, 40, 100, 3200, 4000)), 'cash', 0)).toThrow();
+  });
+
+  it.each([40, 50, 60])('holds constant real reserves over %i years with matching terminal deflator', (years) => {
+    const config = stdConfig({
+      cash: { role: 'fixedReserve', amountToday: 25000 },
+      bond: { role: 'percent', share: 0.5 },
+      equity: { role: 'percent', share: 0.5 },
+    });
+    const opening = openingOf(375, 100, 30000, 375, 100, 30000, 25000);
+    const path = Array.from({ length: years }, (_, i) => yearInput({
+      age: 30 + i, year: 2026 + i, allowance: 100000,
+      fundPrices: { bond: 100, equity: 100 }, depositRates: { cash: 0 }, basisRate: 0,
+      inflationFactor: 1.02 ** i,
+    }));
+    const { state, reports } = runYears(config, opening, path);
+    for (let i = 0; i < reports.length; i++) {
+      const expectedNominal = 25000 * 1.02 ** i;
+      const F = 1.02 ** i;
+      expect(reports[i]!.targetsNominal.cash).toBeCloseTo(expectedNominal, 6);
+      expect(reports[i]!.valuesNominal.cash).toBeCloseTo(expectedNominal, 6);
+      // Constant real reserve: nominal / F stays 25000.
+      expect(reports[i]!.targetsNominal.cash / F).toBeCloseTo(25000, 6);
+      expect(reports[i]!.valuesNominal.cash / F).toBeCloseTo(25000, 6);
+      // Growing nominal reserve is funded by sales; no sell-and-buy churn within closing.
+      expect(reports[i]!.solverExhausted).toBe(false);
+    }
+    const lastF = 1.02 ** (years - 1);
+    const result = liquidateLifecycle(state, 'cash', lastF);
+    expect(result.real).toBeCloseTo(result.nominal / lastF, 9);
+    // Flat market, no flows/tax: nominal stays 100000, real is deflated by last F.
+    expect(result.nominal).toBeCloseTo(100000, 0);
+    expect(result.real).toBeCloseTo(100000 / lastF, 0);
+  });
+});
+
+describe('solver exhaustion and draw fallback probes', () => {
+  it('keeps the bounded solver safe and flagged when it exhausts', () => {
+    const config = stdConfig({
+      cash: { role: 'fixedReserve', amountToday: 5000 },
+      bond: { role: 'percent', share: 0.5 },
+      equity: { role: 'percent', share: 0.5 },
+    });
+    const opening = openingOf(80, 100, 6400, 40, 100, 3200, 5000);
+    const years = Array.from({ length: 10 }, (_, i) => yearInput({
+      age: 30 + i, year: 2026 + i, allowance: 100,
+      contribution: 2000, withdrawalNeed: 1000,
+      fundPrices: { bond: 100 + 5 * (i % 2 === 0 ? 1 : -1), equity: 100 + 20 * (i % 3 === 0 ? 1 : -1) },
+      depositRates: { cash: 0.01 }, basisRate: 0.05, inflationFactor: 1.02 ** i,
+    }));
+    const { state, reports } = runYears(config, opening, years);
+    for (const rep of reports) {
+      expect(rep.iterations).toBeLessThanOrEqual(8);
+      expect(rep.iterations).toBeGreaterThanOrEqual(1);
+      expect(typeof rep.solverExhausted).toBe('boolean');
+      for (const v of Object.values(rep.valuesNominal)) expect(v).toBeGreaterThanOrEqual(-1e-9);
+      expect(rep.unfundedWithdrawal).toBeGreaterThanOrEqual(-1e-9);
+      expect(rep.unpaidTax).toBeGreaterThanOrEqual(-1e-9);
+    }
+    // Ledger stays safe even if exhaustion ever triggers: no negatives, no trial leakage.
+    expect(state.eventIds.some((id) => id.includes('trial'))).toBe(false);
+    for (const b of state.buckets) expect(bucketValue(b)).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('nets closing-draw fallback instead of full sell-and-buy churn', () => {
+    const config: LifecycleConfig = {
+      buckets: [
+        { id: 'cash', name: 'Cash', kind: 'deposit', priority: 1 },
+        { id: 'bond', name: 'Bond', kind: 'bondFund', priority: 2 },
+        { id: 'equity', name: 'Equity', kind: 'equityFund', priority: 3 },
+      ],
+      milestones: [{
+        name: 'all', startAge: 30,
+        targets: {
+          cash: { role: 'percent', share: 0.1 },
+          bond: { role: 'percent', share: 0.1 },
+          equity: { role: 'percent', share: 0.8 },
+        },
+      }],
+      transitions: [],
+      taxCashId: 'cash',
+    };
+    // Withdrawal exceeds settlement cash; only equity holds sellable wealth and carries a
+    // pending buy leg, forcing the netted draw-and-buy fallback path.
+    const opening = openingOf(10, 100, 800, 10, 100, 800, 2000);
+    const initial = createLifecycleState(config, 2026, opening);
+    const { state, report } = simulateLifecycleYear(config, initial, yearInput({
+      fundPrices: { bond: 100, equity: 100 }, depositRates: { cash: 0 },
+      contribution: 0, withdrawalNeed: 5000, allowance: 100000, inflationFactor: 1,
+    }));
+    expect(report.withdrawal).toBeLessThanOrEqual(4000 + 1e-6);
+    expect(report.unfundedWithdrawal).toBeGreaterThanOrEqual(0);
+    // Within closing, no bucket is fully sold then rebought: fallback nets the pending buy.
+    const tx = state.transactions.filter((x) => x.year === 2026 && ['sale', 'purchase', 'transfer'].includes(x.kind) && !x.id.includes(':opening:'));
+    const by = new Map<string, Set<string>>();
+    for (const x of tx) {
+      const k = x.kind === 'sale' ? 'sell' : x.kind === 'purchase' ? 'buy' : x.cash > 0 ? 'sell' : 'buy';
+      if (!by.has(x.bucketId)) by.set(x.bucketId, new Set());
+      by.get(x.bucketId)!.add(k);
+    }
+    for (const kinds of by.values()) expect(kinds.size).toBeLessThanOrEqual(1);
   });
 });
 

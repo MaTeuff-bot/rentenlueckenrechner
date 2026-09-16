@@ -91,7 +91,7 @@ function validateYearInput(config: LifecycleConfig, input: LifecycleYearInput): 
   if (![0, 0.08, 0.09].includes(input.churchRate)) throw new Error(`Year ${input.year}: invalid church rate`);
   if (!Number.isFinite(input.basisRate)) throw new Error(`Year ${input.year}: invalid basis rate`);
   if (!Number.isFinite(input.inflationFactor) || input.inflationFactor <= 0) {
-    throw new Error(`Year ${input.year}: invalid inflation factor`);
+    throw new Error(`Year ${input.year}: invalid cumulative inflation factor`);
   }
   const funds = fundIds(config);
   const deposits = depositIds(config);
@@ -332,11 +332,10 @@ export function simulateLifecycleYear(
   if (isFirstYear) {
     const values0 = valuesSnapshot(next);
     const wealth0 = totalValue(next);
-    // Anticipate known year-zero flows so the opening rebalance does not open
-    // positions the closing solve must immediately reverse (market/tax refinement
-    // still happens at closing; see PLAN section 4.5).
-    const funded0 = Math.min(input.withdrawalNeed, wealth0 + input.contribution);
-    const anchor0 = Math.max(0, wealth0 + input.contribution - funded0);
+    // Opening targets use actual wealth only. Future year-end contribution/withdrawal
+    // flows are handled by the closing solve at closing prices; anticipating them here
+    // would open positions the closing solve must immediately reverse (avoidable churn).
+    const anchor0 = Math.max(0, wealth0);
     const { targetsNominal } = resolveYearlyTargetsEuro(config, input.age, anchor0, input.inflationFactor);
     const executed = executeOpening(config, next, values0, targetsNominal, input.year);
     next = executed.state;
@@ -357,9 +356,16 @@ export function simulateLifecycleYear(
   const wealthAfterInflows = totalValue(next);
   const valuesAfterInflows = valuesSnapshot(next);
   const cappedWithdrawal = Math.min(input.withdrawalNeed, wealthAfterInflows);
-
-  let anchor = wealthAfterInflows - cappedWithdrawal;
-  let planTargets = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor).targetsNominal;
+  // Payable liabilities are funded from settlement cash. The anchor is net of the full
+  // current-year liability (ledger `taxYears[].liability`, which already includes VP,
+  // interest and sale gains including tax-on-funding-sales) plus prior unpaid carried
+  // balances. Residual cash after reaching net targets therefore covers the liability,
+  // so buys implicitly reserve for tax instead of draining it. Reuses ledger math only.
+  const priorUnpaid = unpaidTax(next);
+  let anchor = wealthAfterInflows - cappedWithdrawal - priorUnpaid;
+  let solved = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor);
+  let planTargets = solved.targetsNominal;
+  let executedShortfall = solved.shortfall;
   let iterations = 0;
   let exhausted = false;
   for (let k = 0; k < MAX_SOLVER_ITERATIONS; k++) {
@@ -367,8 +373,8 @@ export function simulateLifecycleYear(
     const trialExec = executeUnified(config, trialBase, valuesAfterInflows, planTargets, cappedWithdrawal, input.fundPrices, `lifecycle:${input.year}:trial:${k}`);
     let trial = trialExec.state;
     trial = reconcileTax(trial, config.taxCashId, `lifecycle:${input.year}:trial:${k}:tax`);
-    const paid = trial.taxYears.find((t) => t.year === input.year)?.paid ?? 0;
-    const following = wealthAfterInflows - cappedWithdrawal - paid;
+    const trialLiability = trial.taxYears.find((t) => t.year === input.year)?.liability ?? 0;
+    const following = wealthAfterInflows - cappedWithdrawal - priorUnpaid - trialLiability;
     iterations = k + 1;
     if (Math.abs(following - anchor) < SOLVER_TOLERANCE_EUR) break;
     if (k === MAX_SOLVER_ITERATIONS - 1) {
@@ -376,7 +382,9 @@ export function simulateLifecycleYear(
       break;
     }
     anchor = following;
-    planTargets = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor).targetsNominal;
+    solved = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor);
+    planTargets = solved.targetsNominal;
+    executedShortfall = solved.shortfall;
   }
   // If the loop exhausted, planTargets is still the LAST TRIALED plan (the update after the
   // final trial is skipped above), so the executed plan is the last measured one.
@@ -387,11 +395,18 @@ export function simulateLifecycleYear(
 
   next = reconcileTax(next, config.taxCashId, `lifecycle:${input.year}:tax`);
   const paid = next.taxYears.find((t) => t.year === input.year)?.paid ?? 0;
+  const finalLiability = next.taxYears.find((t) => t.year === input.year)?.liability ?? 0;
 
   next = closeWithPendingVP(next, firstPrices, input.basisRate);
 
-  const anchorFinal = wealthAfterInflows - fundedWithdrawal - paid;
-  const accepted = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchorFinal), input.inflationFactor);
+  const anchorFinalMeasured = wealthAfterInflows - fundedWithdrawal - priorUnpaid - finalLiability;
+  // Converged years retarget against the measured net anchor (within tolerance of the
+  // executed plan). Exhausted years report the EXECUTED plan's targets with the measured
+  // net anchor so the mismatch stays visible instead of a success-looking retarget.
+  const accepted = exhausted
+    ? { targetsNominal: planTargets, shortfall: executedShortfall }
+    : resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchorFinalMeasured), input.inflationFactor);
+  const anchorFinal = Math.max(0, anchorFinalMeasured);
 
   const report: LifecycleYearReport = {
     age: input.age,

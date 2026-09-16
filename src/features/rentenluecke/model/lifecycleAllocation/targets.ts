@@ -167,6 +167,11 @@ function priorityOf(config: LifecycleConfig, id: string): number {
   return b.priority;
 }
 
+/**
+ * Yearly euro targets against a nominal remainder anchor. `inflationFactor` is the
+ * cumulative purchasing-power factor F for this year (finite `> 0`; `F = 1` is today;
+ * compounding; deflation/non-monotonic allowed). Fixed claims are `amountToday * F`.
+ */
 export function resolveYearlyTargetsEuro(
   config: LifecycleConfig,
   age: number,
@@ -177,7 +182,7 @@ export function resolveYearlyTargetsEuro(
     throw new Error(`Invalid wealth anchor ${remainderAnchorNominal} at age ${age}`);
   }
   if (!Number.isFinite(inflationFactor) || inflationFactor <= 0) {
-    throw new Error(`Invalid inflation factor ${inflationFactor} at age ${age}`);
+    throw new Error(`Invalid cumulative inflation factor ${inflationFactor} at age ${age}`);
   }
   const err = validateLifecycleConfig(config);
   if (err) throw new Error(err);
