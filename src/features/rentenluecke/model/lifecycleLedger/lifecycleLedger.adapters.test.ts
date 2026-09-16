@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyAnnualPricesAndInterest,
   beginInvestmentYear,
@@ -24,6 +24,7 @@ import {
   simulateLedger,
   simulateLedgerYear,
 } from './index.js';
+import * as terminalInsuranceModule from './terminalInsurance.js';
 import { RequiredCapitalCalculationError } from './index.js';
 import type { LedgerInsuranceSpec, LedgerYearInput } from './index.js';
 
@@ -83,9 +84,11 @@ function manualZero(calendarYear: number): LedgerInsuranceSpec {
 }
 
 function yi(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026): LedgerYearInput {
+  const finalYear = (patch as Partial<LedgerYearInput>).year ?? year;
+  const finalAge = (patch as Partial<LedgerYearInput>).age ?? age;
   return {
-    age,
-    year,
+    age: finalAge,
+    year: finalYear,
     contribution: 0,
     withdrawalNeed: 0,
     allowance: 1000,
@@ -94,7 +97,7 @@ function yi(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026): Ledger
     depositRates: { cash: 0 },
     basisRate: 0.025,
     inflationFactor: 1,
-    insurance: manualZero(year),
+    insurance: manualZero(finalYear),
     ...patch,
   };
 }
@@ -511,5 +514,146 @@ describe('search adapter', () => {
     expect(() =>
       searchLedgerCapital(cfg, crushing, { openingForCapital: scaledOpening, terminalInflation: 1, allowZeroStart: true }),
     ).toThrow(RequiredCapitalCalculationError);
+  });
+});
+
+describe('review fix round 1 (blocking + coordinator ruling)', () => {
+  it('solver-exhausted but funded bootstrap path reports failed/nonconvergence and blocks summary', () => {
+    const cfg: LifecycleConfig = {
+      buckets,
+      milestones: [
+        {
+          name: 'only',
+          startAge: 30,
+          targets: {
+            cash: { role: 'percent', share: 0 },
+            bond: { role: 'percent', share: 0 },
+            equity: { role: 'percent', share: 1 },
+          },
+        },
+      ],
+      transitions: [],
+      taxCashId: 'cash',
+    };
+    const opening: OpeningBucket[] = [
+      { id: 'cash', name: 'Cash', classification: 'deposit', value: 10000 },
+      { id: 'bond', name: 'Bond fund', classification: 'bondFund', units: 0, price: 100, acquisitionCost: 0 },
+      { id: 'equity', name: 'Equity fund', classification: 'equityFund', units: 50000, price: 100, acquisitionCost: 1000000 },
+    ];
+    const base: LedgerYearInput[] = [
+      yi(
+        { age: 40, year: 2026, withdrawalNeed: 500000, allowance: 0, depositRates: { cash: 0 }, insurance: manualZero(2026) },
+        40,
+        2026,
+      ),
+    ];
+    const ref = runLedgerDeterministic(cfg, opening, 2026, base);
+    expect(ref.reports[0]?.solverExhausted).toBe(true);
+    expect(ref.reports[0]?.unfundedWithdrawal ?? NaN).toBeCloseTo(0, 6);
+    const out = runLedgerBootstrap(cfg, opening, 2026, base, [
+      {
+        years: base.map((y) => ({ fundPrices: y.fundPrices, depositRates: y.depositRates, inflationFactor: y.inflationFactor })),
+      },
+    ]);
+    expect(out.paths[0]?.status).toBe('failed');
+    if (out.paths[0]?.status !== 'failed') throw new Error('exhausted path must be failed');
+    expect(out.paths[0].kind).toBe('nonconvergence');
+    expect(out.failureCount).toBe(1);
+    expect(out.depletionCount).toBe(0);
+    expect(out.summaryBlocked).toBe(true);
+  });
+
+  it('insurance-driven depletion keeps summed KV/PV unfunded amounts visible (never zero)', () => {
+    const cfg = singleMilestoneConfig();
+    const crushing: LedgerYearInput[] = [
+      yi(
+        {
+          age: 66,
+          year: 2026,
+          withdrawalNeed: 0,
+          allowance: 100000,
+          insurance: spec({
+            calendarYear: 2026,
+            manual: { reason: 'insurance-gap payload', kvMonthly: 10000, pvMonthly: 500 },
+          }),
+        },
+        66,
+        2026,
+      ),
+    ];
+    const ref = runLedgerDeterministic(cfg, wealthyOpening(), 2026, crushing);
+    const gapKv = ref.reports[0]?.unfundedInsuranceKv ?? 0;
+    const gapPv = ref.reports[0]?.unfundedInsurancePv ?? 0;
+    expect(gapKv + gapPv).toBeGreaterThan(0);
+    expect(ref.reports[0]?.unfundedWithdrawal ?? NaN).toBeCloseTo(0, 6);
+    const out = runLedgerBootstrap(cfg, wealthyOpening(), 2026, crushing, [
+      {
+        years: crushing.map((y) => ({ fundPrices: y.fundPrices, depositRates: y.depositRates, inflationFactor: y.inflationFactor })),
+      },
+    ]);
+    expect(out.paths[0]?.status).toBe('depleted');
+    if (out.paths[0]?.status !== 'depleted') throw new Error('insurance gap must deplete');
+    expect(out.paths[0].unfundedInsuranceKv).toBeCloseTo(gapKv, 6);
+    expect(out.paths[0].unfundedInsurancePv).toBeCloseTo(gapPv, 6);
+    expect(out.paths[0].unfundedInsuranceKv + out.paths[0].unfundedInsurancePv).toBeGreaterThan(0);
+    expect(out.paths[0].unfundedWithdrawal).toBeCloseTo(0, 6);
+    expect(out.failureCount).toBe(0);
+    expect(out.summaryBlocked).toBe(false);
+  });
+
+  it('terminal-insurance-unfunded candidate fails survives() even when withdrawals survive', () => {
+    const cfg = singleMilestoneConfig();
+    const years: LedgerYearInput[] = [yi({ age: 66, year: 2026, withdrawalNeed: 0 }, 66, 2026)];
+    expect(ledgerSurvives(cfg, wealthyOpening(), years, 1)).toBe(true);
+    const spy = vi
+      .spyOn(terminalInsuranceModule, 'assessTerminalInsurance')
+      .mockReturnValue({
+        incrementalKvAnnual: 1_000_000_000,
+        incrementalPvAnnual: 0,
+        liquidationAssessableGain: 0,
+        baseCapitalAssessmentAnnual: 0,
+        augmentedCapitalAssessmentAnnual: 0,
+        assumption: 'continuing-voluntary-annual-assessment',
+        cutoff: 'beforeHoldingCutoff',
+        ceilingBinding: false,
+      });
+    try {
+      expect(ledgerSurvives(cfg, wealthyOpening(), years, 1)).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(ledgerSurvives(cfg, wealthyOpening(), years, 1)).toBe(true);
+  });
+
+  it('ledgerSurvives rethrows input errors instead of masking them as candidate failure', () => {
+    const cfg = singleMilestoneConfig();
+    const good: LedgerYearInput[] = [yi({ age: 66, year: 2026, withdrawalNeed: 0 }, 66, 2026)];
+    expect(ledgerSurvives(cfg, wealthyOpening(), good, 1)).toBe(true);
+    const missingBucket: LedgerYearInput[] = [
+      yi({ age: 66, year: 2026, fundPrices: { bond: 100 } } as unknown as LedgerYearInput, 66, 2026),
+    ];
+    expect(() => ledgerSurvives(cfg, wealthyOpening(), missingBucket, 1)).toThrow();
+    const huge: LedgerYearInput[] = [yi({ age: 66, year: 2026, withdrawalNeed: 1_000_000_000 }, 66, 2026)];
+    expect(ledgerSurvives(cfg, wealthyOpening(), huge, 1)).toBe(false);
+  });
+
+  it('manual terminal specs never report ceilingBinding', () => {
+    const cfg = singleMilestoneConfig();
+    const st = createLedgerState(cfg, 2026, wealthyOpening());
+    const r = simulateLedger(cfg, st, [yi({ age: 66, year: 2026 }, 66, 2026)]);
+    const base = r.reports[0]?.capitalAssessmentAnnual ?? 0;
+    const manualSpec = spec({
+      calendarYear: 2026,
+      statutoryPensions: [{ id: 'pension', grossMonthly: 20000 }],
+      manual: { reason: 'ceiling gate', kvMonthly: 200, pvMonthly: 100 },
+    });
+    const res = assessTerminalInsurance({
+      state: r.state,
+      taxCashId: 'cash',
+      cumulativeInflation: 1,
+      spec: manualSpec,
+      baseCapitalAssessmentAnnual: base,
+    });
+    expect(res.ceilingBinding).toBe(false);
   });
 });

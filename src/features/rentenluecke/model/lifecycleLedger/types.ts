@@ -85,7 +85,14 @@ export interface LedgerBootstrapPath {
 
 export type LedgerPathOutcome =
   | { status: 'survived'; closingValue: number }
-  | { status: 'depleted'; closingValue: number; unfundedWithdrawal: number; remainingLiabilities: Record<number, number> }
+  | {
+      status: 'depleted';
+      closingValue: number;
+      unfundedWithdrawal: number;
+      unfundedInsuranceKv: number;
+      unfundedInsurancePv: number;
+      remainingLiabilities: Record<number, number>;
+    }
   | { status: 'failed'; kind: 'nonconvergence' | 'error'; error: string };
 
 export interface LedgerBootstrapResult {

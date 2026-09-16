@@ -62,9 +62,11 @@ function manualZero(calendarYear: number): LedgerInsuranceSpec {
 }
 
 function yi(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026): LedgerYearInput {
+  const finalYear = (patch as Partial<LedgerYearInput>).year ?? year;
+  const finalAge = (patch as Partial<LedgerYearInput>).age ?? age;
   return {
-    age,
-    year,
+    age: finalAge,
+    year: finalYear,
     contribution: 0,
     withdrawalNeed: 0,
     allowance: 1000,
@@ -73,7 +75,7 @@ function yi(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026): Ledger
     depositRates: { cash: 0 },
     basisRate: 0.025,
     inflationFactor: 1,
-    insurance: manualZero(year),
+    insurance: manualZero(finalYear),
     ...patch,
   };
 }

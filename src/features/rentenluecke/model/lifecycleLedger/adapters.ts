@@ -7,6 +7,7 @@ import type { LifecycleConfig } from '../lifecycleAllocation/index.js';
 import { totalValue, unpaidTax } from '../investmentTax/index.js';
 import type { OpeningBucket } from '../investmentTax/index.js';
 import { LEDGER_DUST_EUR, LedgerInsuranceError, simulateLedger } from './annualCashflow.js';
+import { assessTerminalInsurance } from './terminalInsurance.js';
 import type {
   LedgerBootstrapPath,
   LedgerBootstrapResult,
@@ -94,13 +95,24 @@ export function runLedgerBootstrap(
       const unfunded = result.reports.reduce((n, r) => n + r.unfundedWithdrawal, 0);
       const remaining = result.reports.at(-1)?.remainingLiabilities ?? {};
       const stranded = Object.values(remaining).reduce((n, v) => n + v, 0);
-      const insuranceGap = result.reports.reduce((n, r) => n + r.unfundedInsuranceKv + r.unfundedInsurancePv, 0);
+      const unfundedInsuranceKv = result.reports.reduce((n, r) => n + r.unfundedInsuranceKv, 0);
+      const unfundedInsurancePv = result.reports.reduce((n, r) => n + r.unfundedInsurancePv, 0);
+      const insuranceGap = unfundedInsuranceKv + unfundedInsurancePv;
       const exhausted = result.reports.some((r) => r.solverExhausted);
-      if (unfunded > LEDGER_DUST_EUR || stranded > LEDGER_DUST_EUR || insuranceGap > LEDGER_DUST_EUR || exhausted) {
+      if (exhausted) {
+        return {
+          status: 'failed',
+          kind: 'nonconvergence',
+          error: `Bootstrap path ${index}: solver exhausted (nonconvergence)`,
+        } as LedgerPathOutcome;
+      }
+      if (unfunded > LEDGER_DUST_EUR || stranded > LEDGER_DUST_EUR || insuranceGap > LEDGER_DUST_EUR) {
         return {
           status: 'depleted',
           closingValue: result.reports.at(-1)?.closingValue ?? totalValue(result.state),
           unfundedWithdrawal: unfunded,
+          unfundedInsuranceKv,
+          unfundedInsurancePv,
           remainingLiabilities: remaining,
         } as LedgerPathOutcome;
       }
@@ -146,8 +158,8 @@ export function ledgerSurvives(
   years: LedgerYearInput[],
   terminalInflation: number,
 ): boolean {
+  if (years.length === 0) return true;
   try {
-    if (years.length === 0) return true;
     const result = runLedgerDeterministic(config, opening, years[0]?.year ?? 0, years);
     for (const report of result.reports) {
       if (report.solverExhausted) return false;
@@ -157,10 +169,25 @@ export function ledgerSurvives(
       if (Object.values(report.remainingLiabilities).some((v) => v > LEDGER_DUST_EUR)) return false;
     }
     void unpaidTax(result.state);
-    liquidateLifecycle(result.state, config.taxCashId, terminalInflation);
+    const terminal = liquidateLifecycle(structuredClone(result.state), config.taxCashId, terminalInflation);
+    if (terminal.outstandingLiability > LEDGER_DUST_EUR) return false;
+    const horizonSpec = years.at(-1)?.insurance;
+    const baseAssessment = result.reports.at(-1)?.capitalAssessmentAnnual ?? 0;
+    if (horizonSpec) {
+      const terminalInsurance = assessTerminalInsurance({
+        state: result.state,
+        taxCashId: config.taxCashId,
+        cumulativeInflation: terminalInflation,
+        spec: horizonSpec,
+        baseCapitalAssessmentAnnual: baseAssessment,
+      });
+      const incremental = terminalInsurance.incrementalKvAnnual + terminalInsurance.incrementalPvAnnual;
+      if (incremental > terminal.nominal + LEDGER_DUST_EUR) return false;
+    }
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof LedgerInsuranceError) return false;
+    throw error;
   }
 }
 

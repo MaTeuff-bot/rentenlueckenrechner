@@ -131,6 +131,11 @@ function validateLedgerYearInput(config: LifecycleConfig, input: LedgerYearInput
   if (!['kvdr', 'voluntary', 'unknown'].includes(spec.status)) throw new Error(`Year ${input.year}: invalid insurance status`);
   if (!['bridge', 'pension'].includes(spec.phase)) throw new Error(`Year ${input.year}: invalid insurance phase`);
   if (!Number.isInteger(spec.calendarYear)) throw new Error(`Year ${input.year}: invalid insurance calendar year`);
+  if (spec.calendarYear !== input.year) {
+    throw new LedgerInsuranceError([
+      `Year ${input.year}: insurance calendarYear ${spec.calendarYear} does not match ledger year ${input.year}`,
+    ]);
+  }
   if (!Number.isFinite(spec.cashflowBeforeInsuranceMonthly)) throw new Error(`Year ${input.year}: invalid cashflow before insurance`);
   if (!Number.isFinite(spec.insurerAdditionalRate) || spec.insurerAdditionalRate < 0) {
     throw new Error(`Year ${input.year}: invalid insurer additional rate`);

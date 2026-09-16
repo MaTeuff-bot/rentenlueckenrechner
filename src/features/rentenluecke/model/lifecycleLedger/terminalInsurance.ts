@@ -68,6 +68,6 @@ export function assessTerminalInsurance(args: TerminalInsuranceArgs): TerminalIn
     augmentedCapitalAssessmentAnnual: augmented,
     assumption: spec.status === 'kvdr' ? 'kvdr-no-new-charge' : 'continuing-voluntary-annual-assessment',
     cutoff,
-    ceilingBinding: assessedMonthly > thresholds.monthlyCeiling,
+    ceilingBinding: spec.manual ? false : assessedMonthly > thresholds.monthlyCeiling,
   };
 }

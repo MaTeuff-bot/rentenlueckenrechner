@@ -78,9 +78,11 @@ function manualZeroSpec(calendarYear: number): LedgerInsuranceSpec {
 }
 
 function yearInput(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026): LedgerYearInput {
+  const finalYear = (patch as Partial<LedgerYearInput>).year ?? year;
+  const finalAge = (patch as Partial<LedgerYearInput>).age ?? age;
   return {
-    age,
-    year,
+    age: finalAge,
+    year: finalYear,
     contribution: 0,
     withdrawalNeed: 0,
     allowance: 1000,
@@ -89,7 +91,7 @@ function yearInput(patch: Partial<LedgerYearInput> = {}, age = 66, year = 2026):
     depositRates: { cash: 0.02 },
     basisRate: 0.025,
     inflationFactor: 1,
-    insurance: spec({ calendarYear: year }),
+    insurance: spec({ calendarYear: finalYear }),
     ...patch,
   };
 }
@@ -607,5 +609,19 @@ describe('zero wealth and future holdings', () => {
       },
     );
     expect(step.report.valuesNominal['future'] ?? 0).toBeGreaterThan(0);
+  });
+});
+
+describe('review fix round 1', () => {
+  it('insurance calendarYear mismatch throws fail-closed LedgerInsuranceError', () => {
+    const cfg = percentConfig();
+    const st = createLedgerState(cfg, 2026, wealthyOpening());
+    expect(() =>
+      simulateLedgerYear(
+        cfg,
+        st,
+        yearInput({ age: 66, year: 2027, insurance: spec({ calendarYear: 2026 }) }),
+      ),
+    ).toThrow(LedgerInsuranceError);
   });
 });
