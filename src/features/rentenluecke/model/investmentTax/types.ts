@@ -43,7 +43,7 @@ export interface TaxYear {
 }
 export interface InvestmentState {
   year: number
-  phase: 'closed' | 'opening' | 'closing'
+  phase: 'closed' | 'opening' | 'closing' | 'terminated'
   buckets: Bucket[]
   pending: PendingVP[]
   taxIncome: IncomeRecord[]

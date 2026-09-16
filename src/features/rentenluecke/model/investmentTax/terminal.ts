@@ -28,5 +28,10 @@ export function valueHypotheticalLiquidation(state: InvestmentState, cashId: str
   next = reconcileTax(next, cashId, `terminal-tax:${state.year}`)
   const outstandingLiability = unpaidTax(next)
   const nominal = finite(totalValue(next) - outstandingLiability)
+  // Park in explicit terminal phase so no further annual begin, repeated liquidation,
+  // close/receipt or other mutation can run afterwards. All `transition()` callers
+  // require `closed`, `opening` or `closing` and therefore reject `terminated` with
+  // `Invalid event order`. Same-horizon settlement itself needs no extra allowance/year.
+  next.phase = 'terminated'
   return { nominal, real: finite(nominal / cumulativeInflation), outstandingLiability, state: checked(next) }
 }
