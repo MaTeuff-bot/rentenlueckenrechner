@@ -79,18 +79,37 @@ export function runLedgerBootstrap(
   const reference = runLedgerDeterministic(config, opening, firstYear, baseYears);
   const outcomes: LedgerPathOutcome[] = paths.map((path, index) => {
     try {
-      if (path.years.length !== baseYears.length) {
-        throw new Error(`Bootstrap path ${index}: ${path.years.length} market years do not match ${baseYears.length} ledger years`);
-      }
-      const years: LedgerYearInput[] = baseYears.map((base, i) => {
-        const market = path.years[i];
-        if (!market) throw new Error(`Bootstrap path ${index}: missing market year ${i}`);
-        assertMarketCoverage(config, market.fundPrices, market.depositRates, `Bootstrap path ${index} year ${i}`);
-        if (!Number.isFinite(market.inflationFactor) || market.inflationFactor <= 0) {
-          throw new Error(`Bootstrap path ${index} year ${i}: invalid cumulative inflation factor`);
+      let years: LedgerYearInput[];
+      if (path.fullYears) {
+        if (path.fullYears.length !== baseYears.length) {
+          throw new Error(`Bootstrap path ${index}: ${path.fullYears.length} full years do not match ${baseYears.length} ledger years`);
         }
-        return { ...base, fundPrices: market.fundPrices, depositRates: market.depositRates, inflationFactor: market.inflationFactor };
-      });
+        for (let i = 0; i < path.fullYears.length; i++) {
+          const full = path.fullYears[i];
+          if (!full) throw new Error(`Bootstrap path ${index}: missing full year ${i}`);
+          assertMarketCoverage(config, full.fundPrices, full.depositRates, `Bootstrap path ${index} year ${i}`);
+          if (!Number.isFinite(full.inflationFactor) || full.inflationFactor <= 0) {
+            throw new Error(`Bootstrap path ${index} year ${i}: invalid cumulative inflation factor`);
+          }
+          if (full.year !== baseYears[i]?.year || full.age !== baseYears[i]?.age) {
+            throw new Error(`Bootstrap path ${index} year ${i}: full-year age/calendar mismatch`);
+          }
+        }
+        years = path.fullYears;
+      } else {
+        if (path.years.length !== baseYears.length) {
+          throw new Error(`Bootstrap path ${index}: ${path.years.length} market years do not match ${baseYears.length} ledger years`);
+        }
+        years = baseYears.map((base, i) => {
+          const market = path.years[i];
+          if (!market) throw new Error(`Bootstrap path ${index}: missing market year ${i}`);
+          assertMarketCoverage(config, market.fundPrices, market.depositRates, `Bootstrap path ${index} year ${i}`);
+          if (!Number.isFinite(market.inflationFactor) || market.inflationFactor <= 0) {
+            throw new Error(`Bootstrap path ${index} year ${i}: invalid cumulative inflation factor`);
+          }
+          return { ...base, fundPrices: market.fundPrices, depositRates: market.depositRates, inflationFactor: market.inflationFactor };
+        });
+      }
       const result = runLedgerDeterministic(config, opening, firstYear, years);
       const unfunded = result.reports.reduce((n, r) => n + r.unfundedWithdrawal, 0);
       const remaining = result.reports.at(-1)?.remainingLiabilities ?? {};
@@ -106,6 +125,9 @@ export function runLedgerBootstrap(
           error: `Bootstrap path ${index}: solver exhausted (nonconvergence)`,
         } as LedgerPathOutcome;
       }
+      const yearlyClosingNominal = result.reports.map((r) => r.closingValue);
+      const yearlyAnchorNominal = result.reports.map((r) => r.anchorNominal);
+      const yearlyInflationFactors = years.map((y) => y.inflationFactor);
       if (unfunded > LEDGER_DUST_EUR || stranded > LEDGER_DUST_EUR || insuranceGap > LEDGER_DUST_EUR) {
         return {
           status: 'depleted',
@@ -114,9 +136,18 @@ export function runLedgerBootstrap(
           unfundedInsuranceKv,
           unfundedInsurancePv,
           remainingLiabilities: remaining,
+          yearlyClosingNominal,
+          yearlyAnchorNominal,
+          yearlyInflationFactors,
         } as LedgerPathOutcome;
       }
-      return { status: 'survived', closingValue: result.reports.at(-1)?.closingValue ?? totalValue(result.state) };
+      return {
+        status: 'survived',
+        closingValue: result.reports.at(-1)?.closingValue ?? totalValue(result.state),
+        yearlyClosingNominal,
+        yearlyAnchorNominal,
+        yearlyInflationFactors,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {

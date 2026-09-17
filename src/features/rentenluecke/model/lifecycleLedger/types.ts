@@ -37,6 +37,7 @@ export interface LedgerInsuranceSpec {
   rentalAssessmentMonthly: number;
   drvSubsidy?: 'confirmed' | 'not-received';
   expenseAllowanceAnnual?: number;
+  manualCapitalAssessmentMonthlyToday?: number;
   manual?: LedgerManualReplacement | null;
   rateOverrides?: {
     kvGeneralRate?: number;
@@ -49,7 +50,7 @@ export interface LedgerYearInput extends LifecycleYearInput {
   insurance: LedgerInsuranceSpec;
 }
 
-export type LedgerInsuranceAssumption = 'per-bucket' | 'kvdr-excluded' | 'manual-replacement';
+export type LedgerInsuranceAssumption = 'per-bucket' | 'kvdr-excluded' | 'manual-replacement' | 'manual-capital-assessment';
 
 export interface LedgerYearReport extends LifecycleYearReport {
   taxPaidCurrentYear: number;
@@ -81,10 +82,11 @@ export interface LedgerMarketYear {
 
 export interface LedgerBootstrapPath {
   years: LedgerMarketYear[];
+  fullYears?: LedgerYearInput[];
 }
 
 export type LedgerPathOutcome =
-  | { status: 'survived'; closingValue: number }
+  | { status: 'survived'; closingValue: number; yearlyClosingNominal: number[]; yearlyAnchorNominal: number[]; yearlyInflationFactors: number[] }
   | {
       status: 'depleted';
       closingValue: number;
@@ -92,6 +94,9 @@ export type LedgerPathOutcome =
       unfundedInsuranceKv: number;
       unfundedInsurancePv: number;
       remainingLiabilities: Record<number, number>;
+      yearlyClosingNominal: number[];
+      yearlyAnchorNominal: number[];
+      yearlyInflationFactors: number[];
     }
   | { status: 'failed'; kind: 'nonconvergence' | 'error'; error: string };
 

@@ -4,25 +4,29 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../scenarioState/defaults'
-import { loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY, RESET_NOTICE_KEY } from '../scenarioState/persistence'
+import { createInitialLifecycleMilestones } from '../../model/lifecycleDraft'
+import { LIFECYCLE_RESET_NOTICE_KEY, loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY, RESET_NOTICE_KEY } from '../scenarioState/persistence'
 import { useScenarioState } from '../useScenarioState'
 
 beforeEach(() => localStorage.clear())
 
 describe('guided insurance persistence and app-owned reset', () => {
   it('discards every owned old scenario version, preserves unrelated storage and records one reset notice', () => {
-    for (let version = 1; version <= 14; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
+    for (let version = 1; version <= 15; version++) localStorage.setItem(`rentenlueckenrechner.scenario.v${version}`, 'old')
     localStorage.setItem('another-app.scenario.v12', 'keep')
     localStorage.setItem('rentenlueckenrechner.preferences', 'keep')
-    localStorage.setItem('rentenlueckenrechner.scenario.v16', 'future')
+    localStorage.setItem('rentenlueckenrechner.scenario.v17', 'future')
     expect(loadInitialState()).toEqual(createDefaultState())
-    expect(Object.keys(localStorage).sort()).toEqual(['another-app.scenario.v12', 'rentenlueckenrechner.preferences', 'rentenlueckenrechner.scenario.v16', RESET_NOTICE_KEY].sort())
+    expect(Object.keys(localStorage).sort()).toEqual(['another-app.scenario.v12', 'rentenlueckenrechner.preferences', 'rentenlueckenrechner.scenario.v17', RESET_NOTICE_KEY, LIFECYCLE_RESET_NOTICE_KEY].sort())
     expect(localStorage.getItem(RESET_NOTICE_KEY)).toBe('1')
+    expect(localStorage.getItem(LIFECYCLE_RESET_NOTICE_KEY)).toBe('1')
     localStorage.removeItem(RESET_NOTICE_KEY)
+    localStorage.removeItem(LIFECYCLE_RESET_NOTICE_KEY)
     loadInitialState()
     expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
+    expect(localStorage.getItem(LIFECYCLE_RESET_NOTICE_KEY)).toBeNull()
   })
-  it('preserves v15 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
+  it('preserves v16 when old keys coexist and roundtrips phase bases, family, gross/rental and shared rate overrides', () => {
     const state = createDefaultState()
     state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
     state.insuranceCoverageAnswers = completedCoverage()
@@ -37,7 +41,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     const loaded = loadInitialState()
     expect(loaded.input.retirementInsurance).toEqual(applyCoverage(state.input.retirementInsurance!, state.insuranceCoverageAnswers))
     expect(loaded.retirementIncomeStreams).toEqual(state.retirementIncomeStreams)
-    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(15)
+    expect(JSON.parse(serializeScenarioState(loaded)).version).toBe(16)
   })
   it('roundtrips unanswered fields without fabricating confirmed zeros', () => {
     const state = createDefaultState()
@@ -47,33 +51,42 @@ describe('guided insurance persistence and app-owned reset', () => {
     expect(loaded.retirementIncomeStreams[0].support).toBeUndefined()
     expect(parsePersistedScenarioState('{broken')).toEqual(state)
   })
-  it('persists valid incomplete transitions and hides results, then restores the completed forecast', () => {
+  it('persists valid incomplete transitions and hides lifecycle results, then restores the completed forecast', () => {
     const state = createDefaultState()
     state.input = { ...state.input, currentAge: 65, planningAge: 70 }
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
     const { result, unmount } = renderHook(useScenarioState)
-    expect(result.current.isValid).toBe(false)
+    expect(result.current.lifecycleValid).toBe(false)
+    expect(result.current.lifecycleRun).toBeNull()
     act(() => result.current.updateRetirementIncomeStream('statutory-pension', { support: 'standard' }))
     act(() => result.current.updateChildrenAnswer({ kind: 'children', rows: [{ id: 'older', year: 1980 }] }))
     act(() => result.current.updateInsuranceCoverage(completedCoverage()))
     act(() => result.current.updateRetirementInsurance(automaticInsurance()))
-    expect(result.current.isValid).toBe(true)
-    const complete = result.current.result
+    act(() => result.current.updateLifecycleClassification('equity', 'equityFund'))
+    act(() => result.current.updateLifecycleClassification('bonds', 'bondFund'))
+    act(() => result.current.updateLifecycleClassification('fixed', 'deposit'))
+    act(() => result.current.updateLifecycleAcquisitionCost('equity', 0))
+    act(() => result.current.updateLifecycleAcquisitionCost('bonds', 0))
+    act(() => result.current.updateLifecycleTaxCashId('fixed'))
+    act(() => result.current.initLifecycleMilestones())
+    expect(result.current.lifecycleValid).toBe(true)
+    expect(result.current.lifecycleRun).not.toBeNull()
+    const complete = result.current.lifecycleRun
     act(() => result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: undefined })))
-    expect(result.current.result).toBeNull()
+    expect(result.current.lifecycleRun).toBeNull()
     expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
     unmount()
     const reloaded = renderHook(useScenarioState)
-    expect(reloaded.result.current.result).toBeNull()
+    expect(reloaded.result.current.lifecycleRun).toBeNull()
     act(() => reloaded.result.current.updateRetirementInsurance(automaticInsurance()))
-    expect(reloaded.result.current.result).toEqual(complete)
+    expect(reloaded.result.current.lifecycleRun).toEqual(complete)
     const validStored = localStorage.getItem(STORAGE_KEY)
     act(() => reloaded.result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: NaN })))
-    expect(reloaded.result.current.isValid).toBe(false)
+    expect(reloaded.result.current.lifecycleValid).toBe(false)
     expect(localStorage.getItem(STORAGE_KEY)).not.toBe(validStored)
     expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.insurerAdditionalRate).toBeNaN()
     act(() => reloaded.result.current.reset())
-    expect(reloaded.result.current.result).toBeNull()
+    expect(reloaded.result.current.lifecycleRun).toBeNull()
     expect(reloaded.result.current.input.retirementInsurance?.pension).toEqual({})
   }, 20000)
 })
@@ -134,33 +147,45 @@ it('resets a fully populated previous-version scenario, not just its insurance f
   expect(localStorage.getItem('foreign')).toBe('keep')
 })
 
-it('retains valid inactive v15 assumptions across reload, then clears only the manual preference', () => {
+it('retains valid lifecycle assumptions across reload, then clears only the manual preference', () => {
   const state = createDefaultState()
   state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance({
-    capitalEstimator: { fundAcquisitionCost: 45678, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
-    pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 },
+    pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 },
   }) }
   state.childrenAnswer = { kind: 'none' }
   state.insuranceCoverageAnswers = completedCoverage()
   state.retirementIncomeStreams[0].support = 'standard'
+  state.lifecycleClassification = { equity: 'equityFund', bonds: 'bondFund', fixed: 'deposit' }
+  state.lifecycleAcquisitionCost = { equity: 45678, bonds: 0 }
+  state.lifecycleTaxCashId = 'fixed'
+  const created = createInitialLifecycleMilestones(65, state.input.retirementAge, state.portfolioBuckets, state.lifecycleClassification)
+  state.lifecycleMilestones = created.milestones
+  state.lifecycleTransitions = created.transitions
   localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
   const first = renderHook(useScenarioState)
-  const original = first.result.current.result
+  const original = first.result.current.lifecycleRun
   expect(original).not.toBeNull()
-  act(() => first.result.current.updateRetirementInsurance({ ...first.result.current.input.retirementInsurance!, pension: { ...first.result.current.input.retirementInsurance!.pension, manual: true } }))
-  expect(first.result.current.result!.retirementRows[0].healthInsurance).toBe(0)
+  expect(first.result.current.lifecycleValid).toBe(true)
+  act(() => first.result.current.updateRetirementInsurance({ ...first.result.current.input.retirementInsurance!, pension: { ...first.result.current.input.retirementInsurance!.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
+  expect(first.result.current.lifecycleRun).not.toBeNull()
+  const manualRun = first.result.current.lifecycleRun
+  expect(manualRun).not.toEqual(original)
+  const retiredManual = manualRun?.years.find((y) => y.age === first.result.current.input.retirementAge)
+  expect(retiredManual?.insurance.manual).toMatchObject({ kvMonthly: 0, pvMonthly: 0 })
   first.unmount()
   const restored = renderHook(useScenarioState)
   const retained = restored.result.current.input.retirementInsurance!
   expect(retained.pension).toMatchObject({ manual: true, capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 })
-  expect(retained.capitalEstimator?.fundAcquisitionCost).toBe(45678)
+  expect(restored.result.current.lifecycleAcquisitionCost).toMatchObject({ equity: 45678 })
   expect(retained.insurerAdditionalRate).toBe(.029)
+  expect(restored.result.current.lifecycleRun).toEqual(manualRun)
   act(() => restored.result.current.updateRetirementInsurance({ ...retained, pension: { ...retained.pension, manual: false } }))
-  expect(restored.result.current.result).toEqual(original)
-  expect(restored.result.current.result!.retirementRows[0].healthInsurance).toBeGreaterThan(0)
+  expect(restored.result.current.lifecycleRun).toEqual(original)
+  const retiredAutomatic = restored.result.current.lifecycleRun?.years.find((y) => y.age === restored.result.current.input.retirementAge)
+  expect(retiredAutomatic?.insurance.manual).toBeNull()
   expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance!.pension.manual).toBe(false)
   // Reopening automatic coverage cannot infer a previously missing answer or consume retained totals.
   act(() => restored.result.current.updateInsuranceCoverage({ ...completedCoverage(), pension: { common: { kind: 'missing' } } }))
-  expect(restored.result.current.result).toBeNull()
+  expect(restored.result.current.lifecycleRun).toBeNull()
   expect(restored.result.current.issues.some(issue => issue.fieldPath === 'insuranceCoverageAnswers.pension.common')).toBe(true)
 })

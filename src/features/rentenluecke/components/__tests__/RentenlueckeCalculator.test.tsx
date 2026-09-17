@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState } from '../../hooks/scenarioState/defaults'
+import { createInitialLifecycleMilestones } from '../../model/lifecycleDraft'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 
 import '@testing-library/jest-dom/vitest'
@@ -40,6 +41,13 @@ beforeEach(() => {
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
   state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
   state.retirementIncomeStreams = state.retirementIncomeStreams.map(stream => ({ ...stream, support: 'standard' }))
+  state.lifecycleClassification = { equity: 'equityFund', bonds: 'bondFund', fixed: 'deposit' }
+  state.lifecycleAcquisitionCost = { equity: 0, bonds: 0 }
+  state.lifecycleTaxCashId = 'fixed'
+  state.historical.inflationSourceId = 'fixed-manual'
+  const created = createInitialLifecycleMilestones(65, state.input.retirementAge, state.portfolioBuckets, state.lifecycleClassification)
+  state.lifecycleMilestones = created.milestones
+  state.lifecycleTransitions = created.transitions
   localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
 })
 
@@ -52,38 +60,35 @@ function inputById(id: string): HTMLInputElement {
 }
 
 describe('RentenlueckeCalculator', () => {
-  it('renders core results after completed setup', async () => {
+  it('renders the single lifecycle results path after completed setup', async () => {
     render(<RentenlueckeCalculator />)
 
     expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
-    expect(screen.getAllByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toHaveLength(0)
-    expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Lebenszyklus-Ergebnis/ })).toBeInTheDocument()
+    expect(screen.getByText(/Vermögensverlauf Lebenszyklus/)).toBeInTheDocument()
+    expect(screen.queryByText(/Kapitalverlauf und Überlebenswahrscheinlichkeit/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
-    fireEvent.click(screen.getByText('Rechenannahmen', { exact: false, selector: 'summary' }))
-    expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
-    expect(screen.getByText(/netto verfügbare Konsumausgaben in heutiger Kaufkraft/)).toBeInTheDocument()
-    expect(screen.getAllByText(/Rentenbescheid/)).not.toHaveLength(0)
-    expect(screen.getAllByText(/behandelt ihn als Bruttobetrag in heutiger Kaufkraft/)).not.toHaveLength(0)
-    expect(screen.getByText(/Versicherungsstatus und den Einkommensarten/)).toBeInTheDocument()
-    expect(screen.getByText(/Sozialversicherungsberatung und kein Beitragsbescheid/)).toBeInTheDocument()
-  }, 20000)
+    expect(screen.getByText(/Jahrestabelle Lebenszyklus/)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Entnahme gedeckt' })).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Benötigtes Kapital berechnen'))
+    expect(await screen.findByText(/Keine Kapitalzahl/, {}, { timeout: 10000 })).toBeInTheDocument()
+    expect(screen.getByText(/kein Bypass/)).toBeInTheDocument()
+  }, 30000)
 
-  it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
+  it('shows lifecycle yearly rows with spending adequacy and after-liquidation wealth from the common ledger', () => {
     render(<RentenlueckeCalculator />)
 
     fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Details anzeigen' }))
 
-    expect(screen.getByRole('columnheader', { name: 'Gewünschte Nettoausgaben' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Einkommen vor Modellabzügen (Brutto + Nettoangaben)' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Abzüge gesamt' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Verfügbarer Netto-Cashflow' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Entnahmelücke' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Konsumierter Überschuss' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Entnahme für Nettolücke' })).toBeInTheDocument()
-    expect(screen.getAllByRole('cell', { name: '0 €' }).length).toBeGreaterThan(0)
-  }, 20000)
+    expect(screen.getByRole('columnheader', { name: 'Entnahme gedeckt' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Entnahme ungedeckt' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Steuer laufend' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'KV/PV gezahlt' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Schlusswert' })).toBeInTheDocument()
+    expect(screen.getByText(/Nach Abwicklung real/)).toBeInTheDocument()
+    expect(screen.getByText(/Offene Steuerverbindlichkeiten/)).toBeInTheDocument()
+  }, 30000)
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {
     render(<RentenlueckeCalculator />)

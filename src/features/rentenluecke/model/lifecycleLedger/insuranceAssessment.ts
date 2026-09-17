@@ -73,8 +73,14 @@ export function buildContributionInput(
       pvMonthly: spec.manual.pvMonthly,
     };
   }
+  const manualCapitalToday = spec.manualCapitalAssessmentMonthlyToday;
+  if (manualCapitalToday !== undefined && (!Number.isFinite(manualCapitalToday) || manualCapitalToday < 0)) {
+    throw new Error('Invalid manual capital assessment');
+  }
+  const effectiveCapitalAnnual =
+    manualCapitalToday !== undefined ? manualCapitalToday * 12 * inflationFactor : capitalAssessmentAnnual;
   const capitalMonthly =
-    spec.status === 'kvdr' ? undefined : capitalAssessmentAnnual / 12;
+    spec.status === 'kvdr' ? undefined : effectiveCapitalAnnual / 12;
   const input: Record<string, unknown> = {
     ...common,
     mode: 'automatic',
@@ -103,6 +109,14 @@ export function resolveInsuranceBurden(
   inflationFactor: number,
 ): InsuranceBurden {
   const assessmentIncomeAnnual = sumAssessmentIncomeAnnual(trialState, ledgerYear);
+  if (spec.manual && spec.manualCapitalAssessmentMonthlyToday !== undefined) {
+    return {
+      converged: false,
+      kind: 'invalid',
+      residual: 0,
+      diagnostics: [`Year ${ledgerYear}: manual replacement and manual capital assessment must not combine`],
+    };
+  }
   if (spec.manual) {
     const result = calculateContributions(buildContributionInput(spec, 0, inflationFactor));
     if (result.status === 'automatic' || result.status === 'manual') {
@@ -115,18 +129,42 @@ export function resolveInsuranceBurden(
       diagnostics: [`Year ${ledgerYear}: manual replacement input rejected (${result.status})`],
     };
   }
-  const capitalAssessmentAnnual =
+  const manualToday = spec.manualCapitalAssessmentMonthlyToday;
+  if (manualToday !== undefined && (!Number.isFinite(manualToday) || manualToday < 0)) {
+    return {
+      converged: false,
+      kind: 'invalid',
+      residual: 0,
+      diagnostics: [`Year ${ledgerYear}: manual capital assessment must be >= 0`],
+    };
+  }
+  if (spec.status === 'kvdr' && manualToday !== undefined) {
+    return {
+      converged: false,
+      kind: 'invalid',
+      residual: 0,
+      diagnostics: [`Year ${ledgerYear}: kvdr excludes capital assessment; clear the manual capital estimate`],
+    };
+  }
+  const automaticCapitalAnnual =
     spec.status === 'kvdr'
       ? 0
       : mapCapitalAssessmentAnnual(trialState, ledgerYear, inflationFactor, spec.expenseAllowanceAnnual);
-  const result = calculateContributions(buildContributionInput(spec, capitalAssessmentAnnual, inflationFactor));
+  const capitalAssessmentAnnual =
+    manualToday !== undefined ? manualToday * 12 * inflationFactor : automaticCapitalAnnual;
+  const result = calculateContributions(buildContributionInput(spec, automaticCapitalAnnual, inflationFactor));
   if (result.status === 'automatic' || result.status === 'manual') {
     return {
       converged: true,
       result,
       capitalAssessmentAnnual,
       assessmentIncomeAnnual,
-      assumption: spec.status === 'kvdr' ? 'kvdr-excluded' : 'per-bucket',
+      assumption:
+        spec.status === 'kvdr'
+          ? 'kvdr-excluded'
+          : manualToday !== undefined
+            ? 'manual-capital-assessment'
+            : 'per-bucket',
     };
   }
   const diagnostics =
