@@ -119,6 +119,48 @@ export function insuranceSetupIssues(input: RentenlueckeInput): string[] {
   }
   return [...new Set([...issues, ...estimatorSetupIssues(input)])]
 }
+export function insuranceSetupIssuesWithoutEstimator(input: RentenlueckeInput): string[] {
+  const i = input.retirementInsurance
+  if (!i) return ['Bitte KV/PV-Angaben ergänzen.']
+  if (!retirementInsuranceSchema.safeParse(i).success) return ['Bitte gültige KV/PV-Werte eingeben (Beträge ab 0, gültige Jahre und Sätze).']
+  const issues: string[] = []
+  const streams = input.retirementIncomeStreams ?? []
+  if (i.pensionAge === undefined) issues.push('Beginn der Rentenphase angeben.')
+  const earliest = earliestPensionAge(streams)
+  if (earliest !== undefined && i.pensionAge !== earliest) issues.push(`Rentenbeginn muss zum frühesten gesetzlichen Rentenstrom passen (Alter ${earliest}). Beginn oder Einkommensstrom korrigieren.`)
+  if (i.referenceYear + input.planningAge - input.currentAge > 9999) issues.push('Basisjahr und Planungshorizont liegen außerhalb des unterstützten Kalenderbereichs.')
+  if (new Set(streams.map(s => s.id)).size !== streams.length || streams.some(s => !s.id)) issues.push('Einkommensströme benötigen eindeutige Kennungen.')
+  const phases = insurancePhaseRanges(input, i).map(range => range.phase)
+  let automatic = false
+  for (const phase of phases) {
+    const p = i[phase], label = phase === 'bridge' ? 'Brücke' : 'Rentenphase'
+    const relevant = phaseStreams(streams, i, phase, input.retirementAge, input.planningAge)
+    if (phaseManualReasons(i, phase, relevant).length) {
+      if (p.kvMonthlyToday === undefined || p.pvMonthlyToday === undefined) issues.push(`${label}: eigene monatliche KV und PV nach allen Zuschüssen für die gesamte Phase eintragen, auch 0 ausdrücklich.`)
+      continue
+    }
+    automatic = true
+    if (!p.status) issues.push(`${label}: Versicherungsstatus auswählen.`)
+    if (!p.circumstances) issues.push(`${label}: Versicherungsumstände bestätigen.`)
+    if (p.status && p.status !== 'kvdr') {
+      if (capitalMode(p) === 'manual' && p.capitalMonthlyToday === undefined) issues.push(`${label}: Kapitalertragsbasis schätzen oder 0 eintragen.`)
+      if (phase === 'pension' && !p.drvSubsidy) issues.push(`${label}: Erhalt des DRV-Zuschusses angeben.`)
+    }
+    for (const s of relevant) {
+      if (['gesetzliche-rente', 'betriebsrente'].includes(s.kind ?? '') && !s.support) issues.push(`${s.name}: gewöhnlichen inländischen Rentenbezug bestätigen oder Sonderfall auswählen.`)
+      if ((s.kind !== 'rental-income' || p.status !== 'kvdr') && s.amountBasis !== 'gross') issues.push(`${s.name}: beitragsrelevantes Einkommen brutto eingeben; keine Rückrechnung aus Netto.`)
+      if (s.kind === 'rental-income' && p.status && p.status !== 'kvdr' && s.rentalAssessmentMonthlyToday === undefined) issues.push(`${s.name}: Mietüberschuss vor Steuern nach beitragsrechtlichen Kosten angeben.`)
+    }
+  }
+  if (automatic) {
+    if (i.insurerAdditionalRate === undefined) issues.push('Kassenindividuellen Zusatzbeitrag angeben.')
+    if (i.isParent === undefined) issues.push('Dauerhafte PV-Elterneigenschaft angeben.')
+    if (i.isParent && !i.childrenConfirmed) issues.push('Vollständige Liste der anerkannten Kinder bestätigen (auch keine).')
+    if (!i.isParent && i.childBirthYears.length) issues.push('Kinderliste widerspricht fehlender Elterneigenschaft.')
+    if (i.childBirthYears.some(y => y > i.referenceYear || y < i.referenceYear - input.currentAge)) issues.push('Kindergeburtsjahre müssen zwischen eigenem Geburtsjahr und Basisjahr liegen.')
+  }
+  return [...new Set(issues)]
+}
 export type CompleteContribution = Extract<ContributionResult, { status: 'automatic' | 'manual' }>
 export function contributionForYear(input: RentenlueckeInput, age: number, inflation: number, cash: number, annualCapitalAssessment?: number): CompleteContribution {
   const i = input.retirementInsurance!

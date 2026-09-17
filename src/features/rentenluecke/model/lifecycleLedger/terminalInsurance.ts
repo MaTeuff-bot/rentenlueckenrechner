@@ -38,10 +38,24 @@ export function assessTerminalInsurance(args: TerminalInsuranceArgs): TerminalIn
   if (!Number.isFinite(baseCapitalAssessmentAnnual) || baseCapitalAssessmentAnnual < 0) {
     throw new Error('Terminal needs a finite nonneg base capital assessment');
   }
+  const manualToday = spec.manualCapitalAssessmentMonthlyToday;
+  if (manualToday !== undefined && (!Number.isFinite(manualToday) || manualToday < 0)) {
+    throw new Error('Terminal needs a finite nonneg manual capital assessment');
+  }
+  if (spec.manual && manualToday !== undefined) {
+    throw new Error('Terminal manual replacement and manual capital assessment must not combine');
+  }
+  if (spec.status === 'kvdr' && manualToday !== undefined) {
+    throw new Error('Terminal kvdr excludes capital assessment; clear the manual capital estimate');
+  }
   const { gain } = liquidationAssessableGain(state, taxCashId, cumulativeInflation, cutoff);
-  const augmented = baseCapitalAssessmentAnnual + gain;
-  const baseResult = calculateContributions(buildContributionInput(spec, baseCapitalAssessmentAnnual, cumulativeInflation));
-  const augResult = calculateContributions(buildContributionInput(spec, augmented, cumulativeInflation));
+  const baseForTerminal =
+    manualToday !== undefined ? manualToday * 12 * cumulativeInflation : baseCapitalAssessmentAnnual;
+  const augmented = baseForTerminal + gain;
+  const specForTerminal =
+    manualToday !== undefined ? { ...spec, manualCapitalAssessmentMonthlyToday: undefined } : spec;
+  const baseResult = calculateContributions(buildContributionInput(specForTerminal, baseForTerminal, cumulativeInflation));
+  const augResult = calculateContributions(buildContributionInput(specForTerminal, augmented, cumulativeInflation));
   if (baseResult.status !== 'automatic' && baseResult.status !== 'manual') {
     throw new LedgerInsuranceError([`Terminal base insurance input rejected (${baseResult.status})`]);
   }
@@ -64,7 +78,7 @@ export function assessTerminalInsurance(args: TerminalInsuranceArgs): TerminalIn
     incrementalKvAnnual,
     incrementalPvAnnual,
     liquidationAssessableGain: gain,
-    baseCapitalAssessmentAnnual,
+    baseCapitalAssessmentAnnual: baseForTerminal,
     augmentedCapitalAssessmentAnnual: augmented,
     assumption: spec.status === 'kvdr' ? 'kvdr-no-new-charge' : 'continuing-voluntary-annual-assessment',
     cutoff,

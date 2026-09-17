@@ -10,6 +10,7 @@ import {
 } from '../investmentTax/index.js';
 import type { InvestmentState } from '../investmentTax/index.js';
 import {
+  buildRebalancePlan,
   createLifecycleState,
   resolveYearlyTargetsEuro,
   validateLifecycleConfig,
@@ -162,22 +163,12 @@ function planLegs(
   targets: Record<string, number>,
   priorities: Record<string, number>,
 ): { sells: RebalanceLeg[]; buys: RebalanceLeg[] } {
-  const sells: RebalanceLeg[] = [];
-  const buys: RebalanceLeg[] = [];
-  for (const id of Object.keys(targets)) {
-    const value = valuesBefore[id];
-    const target = targets[id];
-    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Invalid value for bucket ${id}`);
-    if (typeof target !== 'number' || !Number.isFinite(target) || target < 0) {
-      throw new Error(`Invalid target for bucket ${id}`);
-    }
-    const delta = target - value;
-    if (delta < -LEDGER_DUST_EUR) sells.push({ bucketId: id, euros: -delta });
-    else if (delta > LEDGER_DUST_EUR) buys.push({ bucketId: id, euros: delta });
-  }
-  sells.sort((a, b) => b.euros - a.euros || (priorities[a.bucketId] ?? 0) - (priorities[b.bucketId] ?? 0));
-  buys.sort((a, b) => (priorities[a.bucketId] ?? 0) - (priorities[b.bucketId] ?? 0) || b.euros - a.euros);
-  return { sells, buys };
+  if (Math.abs(LEDGER_DUST_EUR - 0.01) > 1e-12) throw new Error('Ledger dust must mirror allocation dust');
+  const plan = buildRebalancePlan(valuesBefore, targets, priorities);
+  return {
+    sells: plan.sells.map((l) => ({ bucketId: l.bucketId, euros: l.euros })),
+    buys: plan.buys.map((l) => ({ bucketId: l.bucketId, euros: l.euros })),
+  };
 }
 
 function executeLedgerUnified(
