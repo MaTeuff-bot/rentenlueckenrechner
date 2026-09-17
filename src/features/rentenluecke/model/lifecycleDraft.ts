@@ -89,7 +89,7 @@ export function buildLifecycleBuckets(
   return portfolioBuckets.map((bucket, index) => {
     const kind = classification[bucket.id]
     if (kind !== 'equityFund' && kind !== 'bondFund' && kind !== 'deposit') {
-      throw new Error(`Missing classification for bucket ${bucket.id}`)
+      throw new Error(`Anlage ${bucket.name.trim() || bucket.id}: Steuerklasse ausdrücklich wählen (Aktienfonds, Rentenfonds oder Einlage).`)
     }
     return { id: bucket.id, name: bucket.name.trim() || `Anlage ${index + 1}`, kind, priority: index + 1 }
   })
