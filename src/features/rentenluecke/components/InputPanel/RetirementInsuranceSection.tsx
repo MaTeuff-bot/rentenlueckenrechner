@@ -4,7 +4,8 @@ import { applyCoverage, commonExceptions, bridgeExceptions, copyCompatibleCovera
 import { focusField } from '../inputNavigation'
 import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
-import { capitalMode } from '../../model/capitalIncome/setup'
+import { CapitalEstimatorSetup } from './CapitalEstimatorSetup'
+import { capitalMode, needsEstimator } from '../../model/capitalIncome/setup'
 import { useId, useState } from 'react'
 import type { RentenlueckeInput } from '../../model/types'
 import { controllingPensionStream, insurancePhaseRanges, phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
@@ -92,6 +93,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
         {phase === 'pension' && <><label className="field"><span className="field-label">Rentenversicherungszuschuss einplanen?</span><select id="insurance-pension-drvSubsidy" value={p.drvSubsidy ?? ''} onChange={e => update({ drvSubsidy: (e.target.value || undefined) as InsurancePhase['drvSubsidy'] })}><option value="">Bitte auswählen</option><option value="confirmed">Ja</option><option value="not-received">Nein, nicht ansetzen</option></select></label><p>Planungsannahme; keine Prüfung eines Anspruchs.</p></>}
       </fieldset> : null
     })}
+    {needsEstimator({ ...input, retirementInsurance: i }) && <CapitalEstimatorSetup insurance={i} onChange={onChange} />}
     <details><summary>Jahresmodell und Rechenregeln</summary><p>Jahresmodell: Arbeitsende, Einkommensbeginn/-ende und Versicherungsübergang gelten ab dem jeweiligen Zeilen-Startalter, ohne Teiljahre. Basisjahr {i.referenceYear}; Alter = Kalenderjahr minus Geburtsjahr. PV: Kinder zählen ab 1. Januar ihres 25. Geburtstagsjahres nicht mehr; Kinderlosenzuschlag ab dem Jahr des 23. Geburtstags. Elterneigenschaft bleibt dauerhaft. Näherung ohne Monatsgenauigkeit.</p><p>Grenzen und Geldbeträge steigen mit der Inflation des jeweiligen Simulationspfads; Prozentsätze bleiben konstant. Regeln 2026, keine Bescheid- oder Centgenauigkeit.</p></details>
   </fieldset>
 }

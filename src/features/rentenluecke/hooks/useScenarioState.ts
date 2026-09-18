@@ -2,11 +2,13 @@ import { applyCoverage, type InsuranceCoverageAnswers } from '../model/insurance
 import { scenarioIssues } from '../model/scenarioIssues'
 import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
 import { timelineBoundary, transitionAfterStreamsChange } from '../model/scenarioTimeline'
-import { clearHiddenInvalidInsuranceValues, insuranceSetupIssuesWithoutEstimator, type RetirementInsurance } from '../model/retirementInsurance'
+import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, type RetirementInsurance } from '../model/retirementInsurance'
 import { useEffect, useMemo, useState } from 'react'
 import {
   findInflationSourceOption,
   getValidHistoricalYears,
+  runHistoricalBootstrapSimulation,
+  simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
 import {
@@ -26,21 +28,6 @@ import {
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
 import type { RetirementIncomeStream } from '../model/types'
-import {
-  basisIssues,
-  buildLifecycleBuckets,
-  classificationIssues,
-  createInitialLifecycleMilestones,
-  rePrefillLifecycleMilestones as rePrefillLifecycleMilestonesFromHoldings,
-  taxCashIssues,
-  validateLifecycleMilestones,
-  validateLifecycleTaxSettings,
-} from '../model/lifecycleDraft.js'
-import type { LifecycleClassification } from './scenarioState/types.js'
-import type { LifecycleTaxSettings } from './scenarioState/types.js'
-import { runLifecycleBootstrap, runLifecycleScenario } from '../model/lifecycleScenario.js'
-import { capitalMode } from '../model/capitalIncome/setup.js'
-import { phaseManualReasons, phaseStreams } from '../model/retirementInsurance.js'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
 
@@ -68,7 +55,7 @@ export function useScenarioState() {
   const fieldErrors = useMemo<Partial<Record<InputFieldName, string>>>(() => {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
-  const insuranceIssues = useMemo(() => insuranceSetupIssuesWithoutEstimator(input), [input])
+  const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
   const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers])
   const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError
   const historicalSettings = useMemo(
@@ -83,93 +70,16 @@ export function useScenarioState() {
     const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
     return inflationSource ? getValidHistoricalYears(historicalSettings.portfolioComponents, inflationSource) : []
   }, [historical.inflationSourceId, historicalSettings.portfolioComponents, input.annualInflationRate])
-  const calculationError: string | null = null
-  const result = null
-  const stochasticSummary = null
-
-  const lifecycleClassification = state.lifecycleClassification ?? {}
-  const lifecycleAcquisitionCost = state.lifecycleAcquisitionCost ?? {}
-  const lifecycleTaxCashId = state.lifecycleTaxCashId
-  const lifecycleTaxSettings = state.lifecycleTaxSettings ?? { allowanceAnnualToday: 1000, churchRate: 0 as const, basisRate: 0.032 }
-  const lifecycleMilestones = state.lifecycleMilestones
-  const lifecycleTransitions = state.lifecycleTransitions
-
-  const lifecycleIssues = useMemo(() => {
-    const list: string[] = []
-    list.push(...classificationIssues(portfolioBuckets, lifecycleClassification))
-    list.push(...basisIssues(portfolioBuckets, lifecycleClassification, lifecycleAcquisitionCost))
-    list.push(...taxCashIssues(portfolioBuckets, lifecycleClassification, lifecycleTaxCashId))
-    const taxError = validateLifecycleTaxSettings(lifecycleTaxSettings)
-    if (taxError) list.push(taxError)
+  const calculation = useMemo(() => {
+    if (!isValid || !parsedInput.success) return { result: null, stochasticSummary: null, calculationError: null }
     try {
-      const buckets = buildLifecycleBuckets(portfolioBuckets, lifecycleClassification)
-      const milestoneError = validateLifecycleMilestones(lifecycleMilestones, lifecycleTransitions, buckets, lifecycleTaxCashId)
-      if (milestoneError) list.push(milestoneError)
+      const result = simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
+      return { result, stochasticSummary: runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings), calculationError: null }
     } catch (error) {
-      list.push(error instanceof Error ? error.message : String(error))
+      return { result: null, stochasticSummary: null, calculationError: `Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)} Automatische Kapitalbasis prüfen oder ausdrücklich manuelle Kapitalertragsschätzung wählen.` }
     }
-    const unsupported = portfolioBuckets.some((b) => b.holding === 'unsupported' || !b.holding)
-    if (unsupported && input.retirementInsurance) {
-      const insurance = input.retirementInsurance
-      const phases: ('bridge' | 'pension')[] = ['bridge', 'pension']
-      for (const phase of phases) {
-        const p = insurance[phase]
-        if (!p) continue
-        const relevant = phaseStreams(input.retirementIncomeStreams ?? [], insurance, phase, input.retirementAge, input.planningAge)
-        const manual = phaseManualReasons(insurance, phase, relevant).length > 0
-        if (!manual && (p.status === 'voluntary' || p.status === 'unknown') && capitalMode(p) === 'automatic') {
-          list.push('Nicht unterstützte Anlagen erhalten keine teilweise automatische Abdeckung: manuelle Kapitalertragsbasis oder eigene Gesamtannahme wählen.')
-          break
-        }
-      }
-    }
-    return list
-  }, [portfolioBuckets, lifecycleClassification, lifecycleAcquisitionCost, lifecycleTaxCashId, lifecycleTaxSettings, lifecycleMilestones, lifecycleTransitions, input])
-
-  const lifecycleValid = isValid && lifecycleIssues.length === 0 && parsedInput.success
-
-  const lifecycleCalculation = useMemo(() => {
-    if (!lifecycleValid || !parsedInput.success) return { lifecycleRun: null, lifecycleBootstrap: null, lifecycleError: null as string | null }
-    try {
-      const firstCalendarYear = input.retirementInsurance?.referenceYear ?? new Date().getFullYear()
-      const tax = {
-        allowanceAnnualToday: lifecycleTaxSettings.allowanceAnnualToday ?? 0,
-        churchRate: lifecycleTaxSettings.churchRate ?? 0,
-        basisRate: lifecycleTaxSettings.basisRate ?? 0.032,
-        expenseAllowanceAnnualToday: lifecycleTaxSettings.expenseAllowanceAnnualToday,
-      }
-      const base = runLifecycleScenario({
-        input: parsedInput.data,
-        streams: retirementIncomeStreams,
-        portfolioBuckets,
-        classification: lifecycleClassification,
-        acquisitionCost: lifecycleAcquisitionCost,
-        milestones: lifecycleMilestones ?? [],
-        transitions: lifecycleTransitions ?? [],
-        taxCashId: lifecycleTaxCashId ?? '',
-        tax,
-        historicalSettings,
-        firstCalendarYear,
-      })
-      let bootstrap = null
-      try {
-        bootstrap = runLifecycleBootstrap(base, {
-          input: parsedInput.data,
-          streams: retirementIncomeStreams,
-          portfolioBuckets,
-          classification: lifecycleClassification,
-          historicalSettings,
-          tax,
-          firstCalendarYear,
-        })
-      } catch (error) {
-        return { lifecycleRun: base, lifecycleBootstrap: null, lifecycleError: `Bootstrap unvollständig: ${error instanceof Error ? error.message : String(error)}` }
-      }
-      return { lifecycleRun: { ...base, bootstrap }, lifecycleBootstrap: bootstrap, lifecycleError: null as string | null }
-    } catch (error) {
-      return { lifecycleRun: null, lifecycleBootstrap: null, lifecycleError: `Lebenszyklus-Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)}` }
-    }
-  }, [lifecycleValid, parsedInput, input, retirementIncomeStreams, portfolioBuckets, lifecycleClassification, lifecycleAcquisitionCost, lifecycleMilestones, lifecycleTransitions, lifecycleTaxCashId, lifecycleTaxSettings, historicalSettings])
+  }, [historicalSettings, isValid, parsedInput])
+  const { result, stochasticSummary, calculationError } = calculation
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
@@ -219,19 +129,7 @@ export function useScenarioState() {
   }
 
   const removePortfolioBucket = (id: string) => {
-    setState((current) => {
-      const nextClassification = { ...current.lifecycleClassification }
-      delete nextClassification[id]
-      const nextCosts = { ...current.lifecycleAcquisitionCost }
-      delete nextCosts[id]
-      return {
-        ...current,
-        portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id),
-        lifecycleClassification: nextClassification,
-        lifecycleAcquisitionCost: nextCosts,
-        lifecycleTaxCashId: current.lifecycleTaxCashId === id ? undefined : current.lifecycleTaxCashId,
-      }
-    })
+    setState((current) => ({ ...current, portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id) }))
   }
 
   const updateRetirementIncomeStream = (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => {
@@ -272,81 +170,6 @@ export function useScenarioState() {
     }))
   }
 
-  const updateLifecycleClassification = (id: string, kind: LifecycleClassification | undefined) => {
-    setState((current) => ({ ...current, lifecycleClassification: { ...current.lifecycleClassification, [id]: kind } }))
-  }
-  const updateLifecycleAcquisitionCost = (id: string, cost: number | undefined) => {
-    setState((current) => ({ ...current, lifecycleAcquisitionCost: { ...current.lifecycleAcquisitionCost, [id]: cost } }))
-  }
-  const updateLifecycleTaxCashId = (id: string | undefined) => {
-    setState((current) => ({ ...current, lifecycleTaxCashId: id }))
-  }
-  const updateLifecycleTaxSettings = (patch: Partial<LifecycleTaxSettings>) => {
-    setState((current) => ({ ...current, lifecycleTaxSettings: { ...current.lifecycleTaxSettings, ...patch } }))
-  }
-  const initLifecycleMilestones = () => {
-    setState((current) => {
-      const created = createInitialLifecycleMilestones(current.input.currentAge, current.input.retirementAge, current.portfolioBuckets, current.lifecycleClassification ?? {})
-      return { ...current, lifecycleMilestones: created.milestones, lifecycleTransitions: created.transitions }
-    })
-  }
-  const rePrefillLifecycleMilestones = () => {
-    setState((current) => {
-      if (!current.lifecycleMilestones) return current
-      try {
-        const next = rePrefillLifecycleMilestonesFromHoldings(current.lifecycleMilestones, current.portfolioBuckets, current.lifecycleClassification ?? {})
-        return { ...current, lifecycleMilestones: next }
-      } catch {
-        return current
-      }
-    })
-  }
-  const updateLifecycleMilestone = (index: number, patch: Partial<{ name: string; startAge: number }>) => {
-    setState((current) => {
-      if (!current.lifecycleMilestones) return current
-      const next = current.lifecycleMilestones.map((m, i) => (i === index ? { ...m, ...patch } : m))
-      return { ...current, lifecycleMilestones: next }
-    })
-  }
-  const updateLifecycleTarget = (milestoneIndex: number, bucketId: string, target: { role: 'fixedReserve'; amountToday: number } | { role: 'percent'; share: number }) => {
-    setState((current) => {
-      if (!current.lifecycleMilestones) return current
-      const next = current.lifecycleMilestones.map((m, i) => {
-        if (i !== milestoneIndex) return m
-        return { ...m, targets: { ...m.targets, [bucketId]: target } }
-      })
-      return { ...current, lifecycleMilestones: next }
-    })
-  }
-  const addLifecycleTransition = () => {
-    setState((current) => {
-      const milestones = current.lifecycleMilestones ?? []
-      const transitions = current.lifecycleTransitions ?? []
-      if (!milestones.length) return current
-      const last = milestones[milestones.length - 1]
-      if (!last) return current
-      const nextAge = Math.min(current.input.planningAge, last.startAge + 5)
-      const name = `Etappe ${milestones.length + 1}`
-      const targets: typeof last.targets = {}
-      for (const bucket of current.portfolioBuckets) {
-        const existing = last.targets[bucket.id]
-        targets[bucket.id] = existing ?? { role: 'percent' as const, share: 0 }
-      }
-      return {
-        ...current,
-        lifecycleMilestones: [...milestones, { name, startAge: nextAge, targets }],
-        lifecycleTransitions: [...transitions, { fromMilestone: last.name, toMilestone: name, startAge: nextAge, durationYears: 0 }],
-      }
-    })
-  }
-  const updateLifecycleTransition = (index: number, patch: Partial<{ startAge: number; durationYears: number }>) => {
-    setState((current) => {
-      if (!current.lifecycleTransitions) return current
-      const next = current.lifecycleTransitions.map((t, i) => (i === index ? { ...t, ...patch } : t))
-      return { ...current, lifecycleTransitions: next }
-    })
-  }
-
   const reset = () => {
     const nextState = createDefaultState()
     setState(nextState)
@@ -375,27 +198,6 @@ export function useScenarioState() {
     isValid,
     result,
     stochasticSummary,
-    lifecycleClassification,
-    lifecycleAcquisitionCost,
-    lifecycleTaxCashId,
-    lifecycleTaxSettings,
-    lifecycleMilestones,
-    lifecycleTransitions,
-    lifecycleIssues,
-    lifecycleValid,
-    lifecycleRun: lifecycleCalculation.lifecycleRun,
-    lifecycleBootstrap: lifecycleCalculation.lifecycleBootstrap,
-    lifecycleError: lifecycleCalculation.lifecycleError,
-    updateLifecycleClassification,
-    updateLifecycleAcquisitionCost,
-    updateLifecycleTaxCashId,
-    updateLifecycleTaxSettings,
-    initLifecycleMilestones,
-    rePrefillLifecycleMilestones,
-    updateLifecycleMilestone,
-    updateLifecycleTarget,
-    addLifecycleTransition,
-    updateLifecycleTransition,
     updateField,
     updateRetirementInsurance,
     updatePortfolioBucket,
