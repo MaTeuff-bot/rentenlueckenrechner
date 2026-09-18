@@ -1,3 +1,4 @@
+// NOTE: `*InBatch` / `*Unchecked` helpers are @internal: model-only, must be paired with validation.
 export type {
   AllocationTransition,
   BucketTarget,

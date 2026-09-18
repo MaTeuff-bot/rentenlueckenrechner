@@ -42,13 +42,15 @@ Narrow supported domain only (`isBankOnlySearchSupported`):
   (including terminal) map to explicit `nonconverged`, never false `depleted`; other input errors rethrow.
   No broad tri-state refactor of `ledgerSurvives` (kept boolean for general use).
 - Independent scalar oracle in tests uses own arithmetic/tax formula only (no production
-  survival/leaf financial helpers), own bounding/binary loop, own terminal check; agrees within `€1`.
+  survival/leaf financial helpers), own bounding/binary loop; terminal trivial for bank-only
+  (deposit-only liquidation gain is zero, so production terminal always passes when yearly passes);
+  agrees within `€1`.
 - UI (`LifecycleResults.tsx`) calls `searchLifecycleCapital(run)` with no callback and explains the exact
   narrow domain transparently when `unsupported`.
 
 ## Review fix — full validation plus handwritten deep copy (REVIEW-INTERIM §1+§2)
 
-- `investmentTax/validation.ts`: `checked()` delegates to `checkedFull()` (full recursive numeric sweep on every call, no WeakMap/watermarks, no suffix-only path). `cloneInvestmentState()` is handwritten deep copy element-wise (`buckets/cohorts`, `taxYears`, `pending/amounts`, `taxIncome`, `contributionIncome`, `transactions`, `eventIds`); no shared mutable audit records, no `structuredClone` in production. `transition()` still validates input then clones.
+- `investmentTax/validation.ts`: `checked()` is a structured fast path with the same numeric coverage as `checkedFull()` for the known `InvestmentState` shape (every number checked field-by-field via `finite()` plus `totalValue()` and bucket-level `nonnegative()`); `checkedFull()` keeps the recursive `numbers()` walk for tests only; parity is covered by `structuralSharing.test.ts`. No `WeakMap`/watermarks. Known narrow gap: extra unknown numeric props that `checkedFull()` would catch via the recursive sweep are missed by `checked()`; no financial impact today (unknown props are ignored downstream). `finishTransactionBatch()` always delegates to `checked()` (no suffix-only path; batch counts ignored). `cloneInvestmentState()` is handwritten deep copy element-wise (`buckets/cohorts`, `taxYears`, `pending/amounts`, `taxIncome`, `contributionIncome`, `transactions`, `eventIds`); no shared mutable audit records, no `structuredClone` in production. `transition()` still validates input then clones.
 - `structuralSharing.test.ts`: preserved numeric-rejection/isolation/audit paths and counts; sharing assertions changed to deep-copy (`not.toBe` per element); added exact reviewer regressions for in-place prefix mutation, same-length replacement, truncate-plus-refill, plus nested-copy isolation/parity against `structuredClone`.
 - Disclosure scope (§2): `LifecycleChart.tsx` and `LifecycleResults.tsx` bank-only proxy warnings now qualified cash/deposit-only with explicit fund-loss carve-out (§20 Abs.6) and own-receipt note; `LifecycleYearlyTable.tsx` and `LifecycleResults.tsx` second proxy note unchanged (already scoped). No logic change.
 - No profiling tmp files committed (`src/profile*.tmp.test.ts` absent). No paths/counts dropped, no timeouts altered.
@@ -60,8 +62,10 @@ New red receipts (saved in this folder):
 - `depositProxyHardening.test.ts`: 5 tests — initial red 5 failed (`Negative amount` on signed rates),
   green 5 passed after fix.
 - `structuralSharing.test.ts`: 8 tests — 4 preserved (deep-copy isolation, append-only steps, checked parity, ledger-year parity) plus 4 reviewer regressions (prefix mutation, same-length replacement, truncate-refill, nested-copy parity).
-- `bankOnlySearchHardening.test.ts`: 6 tests — initial red 4 failed (`isBankOnlySearchSupported is not a function`,
-  `openingForCapital is not a function`), green 6 passed after fix.
+- `bankOnlySearchHardening.test.ts`: 9 tests (was 6 at the time of `green-bank-search.log`; 3 added: low-artefact, true-zero, signed-rates-with-church) — initial red 4 failed (`isBankOnlySearchSupported is not a function`,
+  `openingForCapital is not a function`), green 9 passed after fix. Saved `green-bank-search.log` records the earlier 6-test run (historical).
+- Parity suites (no saved gate receipts in this folder at `05592c6`): `ledgerBatchingParity` 13, `insuranceHoistingParity` 10, `lifecycleDedupParity` 2, `registryHoistingParity` 3, `validationMemoParity` 3.
+- `reviewFixFinal.test.ts`: 7 tests locking REVIEW-FINAL B1/B2/B3 plus N4 key encoding (all 7 fail on `05592c6`, all 7 pass after fix).
 
 Updated old tests that enshrined bugs:
 
@@ -76,7 +80,9 @@ conservation/mirror/manual-capital/sensitivity suites pass.
 ## Gates
 
 - `GOMAXPROCS=2 npx vitest run --maxWorkers=1` (full), `npm run lint`, `npx tsc -b --force`, `npm run build`,
-  `git diff --check`. See `gates.log` for exact counts.
+  `git diff --check`. No committed `gates.log` in this folder (only `green-*.log`/`red-*.log`); exact current
+  counts are recorded in `REVIEW-FIX-FINAL-STATUS.md` outside the repo. The `05592c6` message claim
+  `FULL 733/733 in 129.5s` is historical and is not re-claimed here without a committed receipt.
 - No assertions/timeouts weakened. No push/merge/deploy.
 
 ## Remaining limitations

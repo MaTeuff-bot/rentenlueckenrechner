@@ -35,21 +35,14 @@ export function cumulativeInflationFactors(annualRates: number[]): number[] {
   return factors;
 }
 
-const marketCoverageIdsMemo = new WeakMap<LifecycleConfig, { funds: string[]; deposits: string[] }>();
-
 function coverageIdsOf(config: LifecycleConfig): { funds: string[]; deposits: string[] } {
-  let cached = marketCoverageIdsMemo.get(config);
-  if (cached === undefined) {
-    const funds: string[] = [];
-    const deposits: string[] = [];
-    for (const bucket of config.buckets) {
-      if (bucket.kind === 'deposit') deposits.push(bucket.id);
-      else funds.push(bucket.id);
-    }
-    cached = { funds, deposits };
-    marketCoverageIdsMemo.set(config, cached);
+  const funds: string[] = [];
+  const deposits: string[] = [];
+  for (const bucket of config.buckets) {
+    if (bucket.kind === 'deposit') deposits.push(bucket.id);
+    else funds.push(bucket.id);
   }
-  return cached;
+  return { funds, deposits };
 }
 
 function assertMarketCoverage(config: LifecycleConfig, fundPrices: Record<string, number>, depositRates: Record<string, number>, label: string): void {

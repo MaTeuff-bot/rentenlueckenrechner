@@ -42,6 +42,7 @@ function reconcileCoreInPlace(next: InvestmentState, cashId: string, id: string,
   next.transactions.push({ id, year: next.year, kind: 'tax', bucketId: cashId, cash: -payment, basis: 0, assessedVP: 0 })
 }
 
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function reconcileTaxInBatch(next: InvestmentState, seen: Set<string>, cashId: string, id: string, outerSeen?: Set<string>, baseYearIncome?: ReconcileBaseYearIncome): void {
   identifier(id);
   if (next.phase !== 'opening' && next.phase !== 'closing') throw new Error('Invalid event order');

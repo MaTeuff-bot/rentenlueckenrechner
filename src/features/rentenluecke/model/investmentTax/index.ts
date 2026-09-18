@@ -1,3 +1,4 @@
+// NOTE: `*InBatch` / `*Unchecked` helpers are @internal: model-only, must be paired with validation.
 // Inactive public API: no imports from the active simulation or UI.
 export type * from './types'
 export { applyTransaction, applyTransactionInBatch, createInvestmentState, finishTransactionBatch, startTransactionBatch } from './holdings'

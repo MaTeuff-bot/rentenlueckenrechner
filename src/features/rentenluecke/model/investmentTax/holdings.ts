@@ -1,5 +1,5 @@
 import type { InvestmentState, OpeningBucket, Transaction } from './types'
-import { checkBucketRecord, checkIncomeRecord, checkPendingRecord, checkTaxYearRecord, checkTransactionRecord, checked, cloneInvestmentState, deposit, finite, fund, identifier, integer, nonnegative, totalValue, transition } from './validation'
+import { checked, cloneInvestmentState, deposit, finite, fund, identifier, integer, nonnegative, transition } from './validation'
 import { recordIncome } from './taxLedger'
 
 export function createInvestmentState(firstYear: number, buckets: OpeningBucket[]): InvestmentState {
@@ -26,6 +26,7 @@ export interface TransactionBatch {
   seen: Set<string>;
   baseCounts: { transactions: number; taxIncome: number; contributionIncome: number; eventIds: number };
 }
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function startTransactionBatch(state: InvestmentState): TransactionBatch {
   const next = cloneInvestmentState(state);
   return {
@@ -40,6 +41,7 @@ export function startTransactionBatch(state: InvestmentState): TransactionBatch 
   };
 }
 
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function applyTransactionInBatch(next: InvestmentState, seen: Set<string>, event: Transaction, outerSeen?: Set<string>): void {
   if (/^(begin|receipt|market|close|vp|interest|annual-tax|terminal):/.test(event.id)) throw new Error('Reserved event identifier')
   identifier(event.id);
@@ -50,37 +52,14 @@ export function applyTransactionInBatch(next: InvestmentState, seen: Set<string>
   applyCoreInPlace(next, event);
 }
 
+/**
+ * @internal Batch finish helper. Always runs the full `checked()` validation.
+ * Suffix-only revalidation is unsound against prefix mutation, same-length
+ * replacement, and truncate-plus-refill, so the batch counts are ignored.
+ */
 export function finishTransactionBatch(next: InvestmentState, batch?: Pick<TransactionBatch, 'baseCounts'>): InvestmentState {
-  if (!batch) return checked(next);
-  const { transactions, taxIncome, contributionIncome, eventIds } = batch.baseCounts;
-  if (
-    next.transactions.length < transactions ||
-    next.taxIncome.length < taxIncome ||
-    next.contributionIncome.length < contributionIncome ||
-    next.eventIds.length < eventIds
-  ) {
-    return checked(next);
-  }
-  // Scoped equivalent of checked() for batch-produced states. Batch ops only append
-  // to the three audit histories and to eventIds, and never mutate their prefix
-  // elements in place (taxYears/buckets/pending are fully re-scanned below; shrinking
-  // histories fall back to the full walk above), so re-scanning the validated prefix
-  // is redundant: every previously appended identifier was already covered by the
-  // batch that appended it. Every field covered by checked() is still checked:
-  // buckets, taxYears and pending in full, plus exactly the appended audit entries
-  // and appended event identifiers.
-  finite(next.year, 'year');
-  for (const bucket of next.buckets) checkBucketRecord(bucket);
-  for (const taxYear of next.taxYears) checkTaxYearRecord(taxYear);
-  for (const pendingEntry of next.pending) checkPendingRecord(pendingEntry);
-  for (let i = taxIncome; i < next.taxIncome.length; i++) checkIncomeRecord(next.taxIncome[i]);
-  for (let i = contributionIncome; i < next.contributionIncome.length; i++) checkIncomeRecord(next.contributionIncome[i]);
-  for (let i = transactions; i < next.transactions.length; i++) checkTransactionRecord(next.transactions[i]);
-  for (let i = eventIds; i < next.eventIds.length; i++) {
-    if (typeof next.eventIds[i] !== 'string') throw new Error('Invalid eventId');
-  }
-  totalValue(next);
-  return next;
+  void batch;
+  return checked(next);
 }
 
 function applyCoreInPlace(next: InvestmentState, event: Transaction): void {

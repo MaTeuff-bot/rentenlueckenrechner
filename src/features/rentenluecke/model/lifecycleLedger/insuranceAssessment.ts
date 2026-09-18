@@ -114,48 +114,46 @@ export function isCapitalIndependentInsuranceSpec(spec: LedgerInsuranceSpec): bo
 const LEDGER_CONTRIBUTION_CACHE_LIMIT = 512;
 const ledgerContributionCache = new Map<string, ContributionResult>();
 
+function deepFreezeContributionResult<T>(value: T, seen: WeakSet<object> = new WeakSet()): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value as object)) return value;
+  seen.add(value as object);
+  if (Array.isArray(value)) {
+    for (const entry of value) deepFreezeContributionResult(entry, seen);
+  } else {
+    for (const entry of Object.values(value as Record<string, unknown>)) deepFreezeContributionResult(entry, seen);
+  }
+  return Object.freeze(value);
+}
+
 /**
  * Contribution assessment for ledger-built insurance inputs, memoized on the full
- * input triple. `calculateContributions` re-parses its input through the zod schema
- * on every call; the ledger invokes it once per simulated year per bootstrap path,
- * and with deterministic (e.g. fixed-manual) inflation the inputs repeat identically
- * across all 1000 paths of a run. The cache key covers every input (spec, inflation
- * factor, capital assessment), so a hit is byte-identical to recomputation by
- * construction and can never go stale. Callers must treat the returned object as
- * read-only; the ledger only reads scalars out of it. Bounded LRU-style eviction
- * keeps memory flat when inflation varies per path.
+ * content-keyed input triple. `calculateContributions` re-parses its input through
+ * the zod schema on every call; the ledger invokes it once per simulated year per
+ * bootstrap path, and with deterministic (e.g. fixed-manual) inflation the inputs
+ * repeat identically across all 1000 paths of a run. The cache key covers every
+ * input (spec, inflation factor, capital assessment), so a hit is byte-identical to
+ * recomputation by construction. No identity shortcut is used: in-place spec
+ * mutation changes the content key and recomputes. Cached results are deeply
+ * frozen; callers must treat the returned object as read-only (the ledger only
+ * reads scalars out of it). Bounded LRU-style eviction keeps memory flat when
+ * inflation varies per path.
  */
-const ledgerContributionIdentityCache = new WeakMap<object, Map<string, ContributionResult>>();
 export function calculateLedgerContributions(
   spec: LedgerInsuranceSpec,
   capitalAssessmentAnnual: number,
   inflationFactor: number,
 ): ContributionResult {
-  let identityInner = ledgerContributionIdentityCache.get(spec);
-  const identityKey = `${inflationFactor}|${capitalAssessmentAnnual}`;
-  const identityHit = identityInner?.get(identityKey);
-  if (identityHit !== undefined) return identityHit;
   const key = JSON.stringify([spec, inflationFactor, capitalAssessmentAnnual]);
   const cached = ledgerContributionCache.get(key);
-  if (cached !== undefined) {
-    if (identityInner === undefined) {
-      identityInner = new Map();
-      ledgerContributionIdentityCache.set(spec, identityInner);
-    }
-    identityInner.set(identityKey, cached);
-    return cached;
-  }
+  if (cached !== undefined) return cached;
   const result = calculateContributions(buildContributionInput(spec, capitalAssessmentAnnual, inflationFactor));
+  deepFreezeContributionResult(result);
   if (ledgerContributionCache.size >= LEDGER_CONTRIBUTION_CACHE_LIMIT) {
     const oldest = ledgerContributionCache.keys().next();
     if (!oldest.done) ledgerContributionCache.delete(oldest.value);
   }
   ledgerContributionCache.set(key, result);
-  if (identityInner === undefined) {
-    identityInner = new Map();
-    ledgerContributionIdentityCache.set(spec, identityInner);
-  }
-  identityInner.set(identityKey, result);
   return result;
 }
 

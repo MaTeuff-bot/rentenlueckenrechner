@@ -52,24 +52,17 @@ interface LifecycleConfigDerived {
   depositIds: string[];
 }
 
-const lifecycleConfigDerivedCache = new WeakMap<LifecycleConfig, LifecycleConfigDerived>();
-
 function derivedOf(config: LifecycleConfig): LifecycleConfigDerived {
-  let derived = lifecycleConfigDerivedCache.get(config);
-  if (derived === undefined) {
-    const kinds: Record<string, LifecycleBucketKind> = {};
-    const priorities: Record<string, number> = {};
-    const fundIds: string[] = [];
-    const depositIds: string[] = [];
-    for (const b of config.buckets) {
-      kinds[b.id] = b.kind;
-      priorities[b.id] = b.priority;
-      (b.kind === 'deposit' ? depositIds : fundIds).push(b.id);
-    }
-    derived = { kinds, priorities, fundIds, depositIds };
-    lifecycleConfigDerivedCache.set(config, derived);
+  const kinds: Record<string, LifecycleBucketKind> = {};
+  const priorities: Record<string, number> = {};
+  const fundIds: string[] = [];
+  const depositIds: string[] = [];
+  for (const b of config.buckets) {
+    kinds[b.id] = b.kind;
+    priorities[b.id] = b.priority;
+    (b.kind === 'deposit' ? depositIds : fundIds).push(b.id);
   }
-  return derived;
+  return { kinds, priorities, fundIds, depositIds };
 }
 
 function kindsOf(config: LifecycleConfig): Record<string, LifecycleBucketKind> {

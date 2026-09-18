@@ -1,3 +1,4 @@
+// NOTE: `*InBatch` / `*Unchecked` helpers are @internal: model-only, must be paired with validation.
 export type * from './types.js';
 export { RequiredCapitalCalculationError } from './types.js';
 export { outstandingByYear, settleArrears } from './arrears.js';

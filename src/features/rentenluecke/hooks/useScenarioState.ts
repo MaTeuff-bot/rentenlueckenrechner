@@ -45,7 +45,14 @@ import { phaseManualReasons, phaseStreams } from '../model/retirementInsurance.j
 export { parsePersistedScenarioState } from './scenarioState/persistence'
 
 export function stableStringifyLifecycleKey(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (value === undefined) return '{"$undefined":true}';
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '{"$nan":true}';
+    if (Object.is(value, -0)) return '{"$negZero":true}';
+    if (value === Infinity) return '{"$infinity":true}';
+    if (value === -Infinity) return '{"$negInfinity":true}';
+  }
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? '{"$undefined":true}';
   if (Array.isArray(value)) return `[${value.map(stableStringifyLifecycleKey).join(',')}]`;
   const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringifyLifecycleKey(v)}`).join(',')}}`;

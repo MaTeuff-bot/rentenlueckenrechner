@@ -2,18 +2,7 @@ import type { AllocationTransition, BucketTarget, LifecycleConfig, Milestone } f
 
 export const PERCENT_SUM_TOLERANCE = 1e-12;
 
-const lifecycleConfigValidationCache = new WeakMap<LifecycleConfig, string | null>();
-
 export function validateLifecycleConfig(config: LifecycleConfig): string | null {
-  if (config === null || typeof config !== 'object') return validateLifecycleConfigUncached(config);
-  const cached = lifecycleConfigValidationCache.get(config);
-  if (cached !== undefined) return cached;
-  const result = validateLifecycleConfigUncached(config);
-  lifecycleConfigValidationCache.set(config, result);
-  return result;
-}
-
-function validateLifecycleConfigUncached(config: LifecycleConfig): string | null {
   if (!config || !Array.isArray(config.buckets) || config.buckets.length === 0) return 'Lifecycle config needs at least one bucket';
   const ids = new Set<string>();
   const priorities = new Set<number>();
@@ -140,19 +129,12 @@ interface LifecycleTargetsDerived {
   priorities: Map<string, number>;
 }
 
-const lifecycleTargetsDerivedCache = new WeakMap<LifecycleConfig, LifecycleTargetsDerived>();
-
 function derivedOf(config: LifecycleConfig): LifecycleTargetsDerived {
-  let derived = lifecycleTargetsDerivedCache.get(config);
-  if (derived === undefined) {
-    derived = {
-      sortedTransitions: [...config.transitions].sort((a, b) => a.startAge - b.startAge),
-      milestonesByName: new Map(config.milestones.map((m) => [m.name, m])),
-      priorities: new Map(config.buckets.map((b) => [b.id, b.priority])),
-    };
-    lifecycleTargetsDerivedCache.set(config, derived);
-  }
-  return derived;
+  return {
+    sortedTransitions: [...config.transitions].sort((a, b) => a.startAge - b.startAge),
+    milestonesByName: new Map(config.milestones.map((m) => [m.name, m])),
+    priorities: new Map(config.buckets.map((b) => [b.id, b.priority])),
+  };
 }
 
 function milestoneByName(config: LifecycleConfig, name: string): Milestone {
@@ -216,7 +198,7 @@ export function resolveYearlyTargetsEuro(
 }
 
 /**
- * Target resolution without the config-structure validation. The caller must have
+ * @internal Target resolution without the config-structure validation. The caller must have
  * validated `config` via `validateLifecycleConfig` already; the config is treated as
  * immutable afterwards. Value checks on the anchor and inflation factor are kept, so
  * invalid yearly inputs still throw exactly as with `resolveYearlyTargetsEuro`.

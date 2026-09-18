@@ -13,6 +13,7 @@ export function beginInvestmentYear(state: InvestmentState, year: number, allowa
   next.year = year; next.phase = 'opening'
   return receivePendingVP(next)
 }
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function beginInvestmentYearInBatch(next: InvestmentState, seen: Set<string>, year: number, allowance: number, churchRate: TaxYear['churchRate']): void {
   integer(year, 'year')
   if (year !== next.year + 1) throw new Error('Years must be consecutive')
@@ -27,6 +28,7 @@ export function beginInvestmentYearInBatch(next: InvestmentState, seen: Set<stri
   next.year = year; next.phase = 'opening'
   receivePendingVPInBatch(next, seen)
 }
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function applyAnnualPricesAndInterestInBatch(next: InvestmentState, seen: Set<string>, prices: Record<string, number>, rates: Record<string, number>): void {
   const marketId = `market:${next.year}`
   identifier(marketId)

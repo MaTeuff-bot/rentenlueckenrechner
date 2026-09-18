@@ -33,6 +33,7 @@ export function closeWithPendingVP(state: InvestmentState, firstPrices: Record<s
   next.phase = 'closed'
   return checked(next)
 }
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function closeWithPendingVPInBatch(next: InvestmentState, seen: Set<string>, firstPrices: Record<string, number>, basisRate: number): void {
   const id = `close:${next.year}`
   identifier(id)
@@ -61,6 +62,7 @@ export function closeWithPendingVPInBatch(next: InvestmentState, seen: Set<strin
   if (tax.paid > tax.liability) throw new Error('Reconcile same-year refund before closing')
   next.phase = 'closed'
 }
+/** @internal Batch-only helper; every batch must be closed with `finishTransactionBatch`. */
 export function receivePendingVPInBatch(next: InvestmentState, seen: Set<string>): void {
   const id = `receipt:${next.year}`
   identifier(id)
