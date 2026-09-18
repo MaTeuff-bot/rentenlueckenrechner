@@ -67,6 +67,19 @@ npm run preview
 
 `npm run build` prüft TypeScript und erzeugt den Produktionsbuild in `dist`; `npm run preview` zeigt diesen lokal an.
 
+## Verifikation (Gates)
+
+Vor jedem PR-Handoff laufen dieselben Gates wie in CI:
+
+```sh
+npm run lint        # eslint: 0 Fehler ist Pflicht
+npm test -- --run   # Vitest-Suite (Merge-Gate)
+npm run build       # tsc -b && vite build
+```
+
+- Verschachtelte Git-Worktrees niemals anlegen oder committen: `.worktrees/` ist in `.gitignore` und `eslint.config.js` ignoriert. Eine verschachtelte `tsconfig.json` stört die Projekt-Auflösung von typescript-eslint für das gesamte Repo (historische Ursache: 194 Parsing-Fehler auf ansonsten sauberem Baum).
+- Reproduzierbare Browser-Verifikationen ausgelieferter Features liegen unter `docs/verification/`.
+
 ## Codeübersicht
 
 - `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Kapitalbedarfssuche, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
