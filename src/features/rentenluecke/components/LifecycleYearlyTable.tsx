@@ -12,7 +12,6 @@ export function LifecycleYearlyTable({ lifecycleRun }: Props) {
     <div>
       <h3>Jahrestabelle Lebenszyklus (gemeinsame Jahreszeilen)</h3>
       <p className="portfolio-note">Entnahme gedeckt/ungedeckt, laufende und nachgezahlte Steuern, offene Verbindlichkeiten, KV/PV gedeckt/ungedeckt, Schluss- und Ankerwerte aus derselben Simulation. Keine frischen Steuerjahre bei Abwicklung.</p>
-      <p className="portfolio-note">Cash-Proxy: nominale Bewegung mindert Bestand; nur positiver Zins ist Steuer-/GKV-Einkommen (einmal). Kein Verlusttopf aus Proxy-Rückgang.</p>
       <table>
         <thead>
           <tr>

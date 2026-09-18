@@ -123,22 +123,8 @@ interface BlendSlice {
   progress: number;
 }
 
-interface LifecycleTargetsDerived {
-  sortedTransitions: AllocationTransition[];
-  milestonesByName: Map<string, Milestone>;
-  priorities: Map<string, number>;
-}
-
-function derivedOf(config: LifecycleConfig): LifecycleTargetsDerived {
-  return {
-    sortedTransitions: [...config.transitions].sort((a, b) => a.startAge - b.startAge),
-    milestonesByName: new Map(config.milestones.map((m) => [m.name, m])),
-    priorities: new Map(config.buckets.map((b) => [b.id, b.priority])),
-  };
-}
-
 function milestoneByName(config: LifecycleConfig, name: string): Milestone {
-  const m = derivedOf(config).milestonesByName.get(name);
+  const m = config.milestones.find((x) => x.name === name);
   if (!m) throw new Error(`Unknown milestone ${name}`);
   return m;
 }
@@ -149,7 +135,7 @@ function milestoneByName(config: LifecycleConfig, name: string): Milestone {
 // at the same age supersedes any same-age d=0 switch. Scan in sorted order and let
 // the last active transition win instead of returning on the first match.
 function activeSlice(config: LifecycleConfig, age: number): ActiveSlice | BlendSlice {
-  const sorted = derivedOf(config).sortedTransitions;
+  const sorted = [...config.transitions].sort((a, b) => a.startAge - b.startAge);
   let candidate: ActiveSlice | BlendSlice | null = null;
   for (const t of sorted) {
     if (t.durationYears === 0) {
@@ -176,9 +162,9 @@ function activeSlice(config: LifecycleConfig, age: number): ActiveSlice | BlendS
 }
 
 function priorityOf(config: LifecycleConfig, id: string): number {
-  const priority = derivedOf(config).priorities.get(id);
-  if (priority === undefined) throw new Error(`Unknown bucket ${id}`);
-  return priority;
+  const b = config.buckets.find((x) => x.id === id);
+  if (!b) throw new Error(`Unknown bucket ${id}`);
+  return b.priority;
 }
 
 /**
@@ -192,31 +178,14 @@ export function resolveYearlyTargetsEuro(
   remainderAnchorNominal: number,
   inflationFactor: number,
 ): { targetsNominal: Record<string, number>; shortfall: number } {
-  const err = validateLifecycleConfig(config);
-  if (err) throw new Error(err);
-  return resolveYearlyTargetsEuroUnchecked(config, age, remainderAnchorNominal, inflationFactor);
-}
-
-/**
- * @internal Target resolution without the config-structure validation. The caller must have
- * validated `config` via `validateLifecycleConfig` already; the config is treated as
- * immutable afterwards. Value checks on the anchor and inflation factor are kept, so
- * invalid yearly inputs still throw exactly as with `resolveYearlyTargetsEuro`.
- * Used by the per-path solver loops, which resolve the same validated config dozens
- * of times per path and would otherwise re-run the structural validation every time.
- */
-export function resolveYearlyTargetsEuroUnchecked(
-  config: LifecycleConfig,
-  age: number,
-  remainderAnchorNominal: number,
-  inflationFactor: number,
-): { targetsNominal: Record<string, number>; shortfall: number } {
   if (!Number.isFinite(remainderAnchorNominal) || remainderAnchorNominal < 0) {
     throw new Error(`Invalid wealth anchor ${remainderAnchorNominal} at age ${age}`);
   }
   if (!Number.isFinite(inflationFactor) || inflationFactor <= 0) {
     throw new Error(`Invalid cumulative inflation factor ${inflationFactor} at age ${age}`);
   }
+  const err = validateLifecycleConfig(config);
+  if (err) throw new Error(err);
   const anchor = remainderAnchorNominal;
   const slice = activeSlice(config, age);
   if (slice.kind === 'single') return solveMilestone(config, slice.milestone, anchor, inflationFactor);

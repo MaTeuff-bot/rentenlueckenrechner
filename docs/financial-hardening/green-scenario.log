@@ -1,9 +1,0 @@
-
- RUN  v4.1.10 /workspace/repos/rentenlueckenrechner-hardening-t_acd138c3
-
-
- Test Files  1 passed (1)
-      Tests  15 passed (15)
-   Start at  07:21:40
-   Duration  6.56s (transform 1.58s, setup 0ms, import 2.10s, tests 4.00s, environment 0ms)
-

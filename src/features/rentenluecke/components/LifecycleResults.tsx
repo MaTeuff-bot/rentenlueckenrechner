@@ -1,26 +1,52 @@
 import { useMemo, useState } from 'react'
+import { calculatePortfolioBucketTotal } from '../model/portfolioBuckets'
+import type { PortfolioBucket } from '../model/portfolioBuckets'
 import { searchLifecycleCapital } from '../model/lifecycleScenario'
 import type { LifecycleRun } from '../model/lifecycleScenario'
 
 type Props = {
   lifecycleRun: LifecycleRun
+  portfolioBuckets: PortfolioBucket[]
+  acquisitionCost: Record<string, number | undefined>
 }
 
 const currency = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const currencyPrecise = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
 
-export function LifecycleResults({ lifecycleRun }: Props) {
+export function LifecycleResults({ lifecycleRun, portfolioBuckets, acquisitionCost }: Props) {
   const [searchRequested, setSearchRequested] = useState(false)
   const summary = lifecycleRun.summary
   const bootstrap = lifecycleRun.bootstrap
   const search = useMemo(() => {
     if (!searchRequested) return null
+    const total = calculatePortfolioBucketTotal(portfolioBuckets)
     try {
-      return searchLifecycleCapital(lifecycleRun)
+      return searchLifecycleCapital(lifecycleRun, (capital: number) => {
+        if (total <= 0) {
+          return {
+            portfolioBuckets: portfolioBuckets.map((b) => ({ ...b, value: 0 })),
+            acquisitionCost: { ...acquisitionCost },
+          }
+        }
+        const scale = capital / total
+        return {
+          portfolioBuckets: portfolioBuckets.map((b) => ({ ...b, value: Math.max(0, b.value * scale) })),
+          acquisitionCost: Object.fromEntries(
+            Object.entries(acquisitionCost).map(([id, cost]) => {
+              const bucket = portfolioBuckets.find((b) => b.id === id)
+              const oldValue = bucket ? Math.max(0, bucket.value) : 0
+              const newValue = bucket ? Math.max(0, bucket.value * scale) : 0
+              if (oldValue <= 0) return [id, cost ?? 0]
+              const ratio = newValue / oldValue
+              return [id, (cost ?? 0) * ratio]
+            }),
+          ),
+        }
+      })
     } catch (error) {
       return { status: 'nonconverged', reason: error instanceof Error ? error.message : String(error) }
     }
-  }, [searchRequested, lifecycleRun])
+  }, [searchRequested, lifecycleRun, portfolioBuckets, acquisitionCost])
 
   const depleted = summary.depleted
   const nonconverged = summary.nonconverged
@@ -48,8 +74,6 @@ export function LifecycleResults({ lifecycleRun }: Props) {
           <h4>Bootstrap (Jahres-Resampling, gleiche Ledger-Engine)</h4>
           {bootstrap.summaryBlocked ? (
             <p role="status" className="field-error">Bootstrap blockiert: {bootstrap.failureCount} Pfade nicht konvergiert/fehlerhaft. Keine Erfolgswahrscheinlichkeit. Referenz bleibt sichtbar, Teilsummen werden nicht als Erfolg dargestellt.</p>
-          ) : summary.depleted || summary.nonconverged ? (
-            <p>Referenz aufgebraucht. {bootstrap.paths.filter((p) => p.status === 'survived').length} von {bootstrap.paths.length} Pfaden überlebt, {bootstrap.depletionCount} aufgebraucht.</p>
           ) : (
             <p>Referenz tragfähig. {bootstrap.paths.filter((p) => p.status === 'survived').length} von {bootstrap.paths.length} Pfaden überlebt, {bootstrap.depletionCount} aufgebraucht.</p>
           )}
@@ -61,13 +85,11 @@ export function LifecycleResults({ lifecycleRun }: Props) {
         {!searchRequested ? (
           <button type="button" className="secondary-button" onClick={() => setSearchRequested(true)}>Benötigtes Kapital berechnen</button>
         ) : null}
-        <p className="portfolio-note">Bank-only-Suche: ein Topf (Deposit), Einzahlung und Abwicklung gleiche ID, 100%-Ziele ohne feste Reserven, monotoner Faktor F, Eröffnung &gt; 0; nur kapitalunabhängige KV/PV (manuell, KVdR oder manuelle Kapitalbewertung). Fonds, mehrere Töpfe, automatische freiwillige Kapitalbewertung, feste Reserven, Nullstart und nicht monotone Pfade bleiben explizit unsupported. Negativzins-(Cash-/Deposit-)Proxy mindert nur den Cash-Bestand; aus diesem Proxy entsteht kein Steuerverlust/Verlusttopf. Fonds-Verluste bleiben nach §20 Abs.6 gesondert prüfbar.</p>
-        <p className="portfolio-note">Ausgewählte Proxys sind keine vertraglichen Sparprognosen; ein negativer Proxy-Verlauf belegt keine abzugsfähige Gebühr und keinen Ausfall. Nachgewiesene GKV-Ausgaben können abweichen.</p>
         {search ? (
           search.status === 'converged' && search.requiredCapital !== undefined ? (
-            <p>Benötigtes Startkapital heute (Eröffnung, proportional skaliert): {currency.format(search.requiredCapital)} (Euro-Bracket).</p>
+            <p>Benötigtes Startkapital heute (Eröffnung, skaliert heutige Bestände): {currency.format(search.requiredCapital)} (Euro-Bracket, ohne Beweis-Flags).</p>
           ) : (
-            <p role="status" className="field-error">Keine Kapitalzahl: {search.reason ?? search.status}. Nur Bank-only (ein Deposit, 100% ohne Reserven, monotone F, Eröffnung &gt; 0, kapitalunabhängige Versicherung) konvergiert; sonst explizit unsupported, kein Bypass.</p>
+            <p role="status" className="field-error">Keine Kapitalzahl: {search.reason ?? search.status}. Feste Reserven, nicht monotone Inflation oder Nullstart ohne Beweis bleiben explizit unsupported; kein Bypass.</p>
           )
         ) : null}
       </div>

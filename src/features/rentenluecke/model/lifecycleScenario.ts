@@ -16,7 +16,6 @@ import { isFixedInflationSource } from './historicalReturns/inflationSeriesRegis
 import type { HistoricalBootstrapSettings } from './historicalReturns/types.js'
 import { createSeededRandom } from './stochasticReturns.js'
 import type { OpeningBucket } from './investmentTax/index.js'
-import { cloneInvestmentState } from './investmentTax/index.js'
 import { liquidateLifecycle } from './lifecycleAllocation/index.js'
 import type { LifecycleConfig } from './lifecycleAllocation/types.js'
 import {
@@ -35,6 +34,7 @@ import type {
 } from './lifecycleLedger/index.js'
 import { activeIncomeStreams, phaseManualReasons, phaseStreams } from './retirementInsurance.js'
 import type { PortfolioBucket } from './portfolioBuckets.js'
+import { calculatePortfolioBucketTotal } from './portfolioBuckets.js'
 import type { RentenlueckeInput, RetirementIncomeStream } from './types.js'
 import { LIFECYCLE_REFERENCE_PRICE } from './lifecycleDraft.js'
 import type { LifecycleClassification } from './lifecycleDraft.js'
@@ -152,41 +152,6 @@ function rentalAssessmentNominal(streams: RetirementIncomeStream[], age: number,
   }
   return total / 12
 }
-const ledgerInsuranceSpecMemo = new WeakMap<object, WeakMap<object, Map<string, LedgerInsuranceSpec>>>();
-
-function memoizedLedgerInsuranceSpecForYear(
-  streams: RetirementIncomeStream[],
-  insurance: RentenlueckeInput['retirementInsurance'],
-  ages: { currentAge: number; retirementAge: number; planningAge: number },
-  args: {
-    input: RentenlueckeInput
-    streams: RetirementIncomeStream[]
-    age: number
-    calendarYear: number
-    inflationFactor: number
-    pensionsCashMonthly: number
-    rentalMonthly: number
-  },
-): LedgerInsuranceSpec {
-  if (insurance === undefined || insurance === null) return buildLedgerInsuranceSpecForYear(args);
-  let byInsurance = ledgerInsuranceSpecMemo.get(streams);
-  let inner = byInsurance?.get(insurance);
-  const key = `${ages.currentAge}|${ages.retirementAge}|${ages.planningAge}|${args.age}|${args.calendarYear}|${args.inflationFactor}|${args.pensionsCashMonthly}|${args.rentalMonthly}`;
-  const hit = inner?.get(key);
-  if (hit !== undefined) return hit;
-  const spec = buildLedgerInsuranceSpecForYear(args);
-  if (byInsurance === undefined) {
-    byInsurance = new WeakMap();
-    ledgerInsuranceSpecMemo.set(streams, byInsurance);
-  }
-  if (inner === undefined) {
-    inner = new Map();
-    byInsurance.set(insurance, inner);
-  }
-  inner.set(key, spec);
-  return spec;
-}
-
 export function buildLedgerInsuranceSpecForYear(args: {
   input: RentenlueckeInput
   streams: RetirementIncomeStream[]
@@ -282,12 +247,9 @@ export function deriveMarketYears(
     }
   })
   const factors = cumulativeInflationFactors(annualRates.length ? annualRates : Array.from({ length: years }, () => annualInflationRate))
-  const bucketStatics = portfolioBuckets.map((bucket) => {
-    if (!bucketReturnSupported(bucket)) throw new Error(`Unknown return series for ${bucket.id}`)
-    return { bucket, kind: classification[bucket.id], component: componentForBucket(bucket) }
-  })
   const prices: Record<string, number> = {}
-  for (const { bucket, kind } of bucketStatics) {
+  for (const bucket of portfolioBuckets) {
+    const kind = classification[bucket.id]
     if (kind !== 'equityFund' && kind !== 'bondFund') continue
     prices[bucket.id] = LIFECYCLE_REFERENCE_PRICE
   }
@@ -297,14 +259,18 @@ export function deriveMarketYears(
     const inflation = annualRates[i] ?? annualInflationRate
     const fundPrices: Record<string, number> = {}
     const depositRates: Record<string, number> = {}
-    for (const { bucket, kind, component } of bucketStatics) {
+    for (const bucket of portfolioBuckets) {
+      const kind = classification[bucket.id]
+      if (!bucketReturnSupported(bucket)) throw new Error(`Unknown return series for ${bucket.id}`)
+      const component = componentForBucket(bucket)
       let nominal: number
       if (rng) {
         nominal = applySourceCostTreatment(resolveComponentNominalReturn(component, sampledYear, inflation, rng), bucket.returnSeriesId, bucket.annualCostRate ?? 0)
       } else {
         nominal = resolveComponentExpectedNominalReturn(component, sampledYear, inflation)
       }
-      if (!Number.isFinite(nominal) || nominal < -1) throw new Error(`Invalid nominal return for ${bucket.id}`)
+      if (!Number.isFinite(nominal) || nominal <= -1) throw new Error(`Invalid nominal return for ${bucket.id}`)
+      if (kind === 'deposit' && nominal < 0) throw new Error(`Deposit nominal return ${nominal} for ${bucket.id} is negative and not supported by the deposit ledger (nonnegative rates only)`)
       if (kind === 'deposit') {
         depositRates[bucket.id] = nominal
       } else if (kind === 'equityFund' || kind === 'bondFund') {
@@ -343,7 +309,7 @@ export function buildLedgerYears(args: {
     const withdrawalNeed = age < input.retirementAge
       ? 0
       : input.monthlyDesiredSpendingToday * 12 * inflationFactor
-    const insurance = memoizedLedgerInsuranceSpecForYear(streams, input.retirementInsurance, input, {
+    const insurance = buildLedgerInsuranceSpecForYear({
       input,
       streams,
       age,
@@ -384,7 +350,7 @@ export function summarizeLedgerResult(result: LedgerResult, terminalInflation: n
   const closingNominal = last?.closingValue ?? 0
   let incrementalInsuranceAnnual = 0
   let terminalAssumption = 'none'
-  const clone = cloneInvestmentState(result.state)
+  const clone = structuredClone(result.state)
   const { nominal, outstandingLiability } = liquidateLifecycle(clone, taxCashId, terminalInflation)
   let liquidationNominal = nominal
   const liquidationOutstandingLiability = outstandingLiability
@@ -414,16 +380,11 @@ export function summarizeLedgerResult(result: LedgerResult, terminalInflation: n
     terminalAssumption,
   }
 }
-const expectedBucketReturnsMemo = new WeakMap<object, WeakMap<object, Map<number, Record<string, number>>>>();
-
 export function expectedBucketReturns(
   portfolioBuckets: PortfolioBucket[],
   settings: HistoricalBootstrapSettings,
   annualInflationRate: number,
 ): Record<string, number> {
-  let bySettings = expectedBucketReturnsMemo.get(portfolioBuckets);
-  const cached = bySettings?.get(settings)?.get(annualInflationRate);
-  if (cached !== undefined) return cached;
   const inflationSource = getRequiredInflationSource(settings.inflationSourceId, annualInflationRate)
   const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
   const years = validYears.length ? validYears : [0]
@@ -444,16 +405,6 @@ export function expectedBucketReturns(
     }
     out[bucket.id] = sum / years.length
   }
-  if (bySettings === undefined) {
-    bySettings = new WeakMap();
-    expectedBucketReturnsMemo.set(portfolioBuckets, bySettings);
-  }
-  let byRate = bySettings.get(settings);
-  if (byRate === undefined) {
-    byRate = new Map();
-    bySettings.set(settings, byRate);
-  }
-  byRate.set(annualInflationRate, out);
   return out
 }
 export function deriveDeterministicMarketYears(
@@ -477,7 +428,8 @@ export function deriveDeterministicMarketYears(
     for (const bucket of portfolioBuckets) {
       const kind = classification[bucket.id]
       const nominal = expectedReturns[bucket.id] ?? 0
-      if (!Number.isFinite(nominal) || nominal < -1) throw new Error(`Invalid nominal return for ${bucket.id}`)
+      if (!Number.isFinite(nominal) || nominal <= -1) throw new Error(`Invalid nominal return for ${bucket.id}`)
+      if (kind === 'deposit' && nominal < 0) throw new Error(`Deposit nominal return ${nominal} for ${bucket.id} is negative and not supported by the deposit ledger (nonnegative rates only)`)
       if (kind === 'deposit') {
         depositRates[bucket.id] = nominal
       } else if (kind === 'equityFund' || kind === 'bondFund') {
@@ -555,24 +507,28 @@ export function runLifecycleBootstrap(
     const market = deriveMarketYears(portfolioBuckets, classification, historicalSettings, input.annualInflationRate, yearsCount, sampledYears, createSeededRandom(returnSeed))
     const fullYears = buildLedgerYears({ input, streams, portfolioBuckets, classification, tax, marketYears: market, firstCalendarYear })
     return {
-      // The adapter consumes fullYears and never reads this market-only copy.
-      years: [],
+      years: market.map((m) => ({ fundPrices: m.fundPrices, depositRates: m.depositRates, inflationFactor: m.inflationFactor })),
       fullYears,
     }
   })
   const { runLedgerBootstrap: runBootstrap } = { runLedgerBootstrap }
-  // base.result is exactly runLedgerDeterministic(base.config, base.opening,
-  // base.years[0].year, base.years): same references, validated first-year match.
-  // Threading it through skips a byte-identical recomputation of the reference.
-  return runBootstrap(base.config, base.opening, base.years[0]?.year ?? 0, base.years, paths, base.result)
+  return runBootstrap(base.config, base.opening, base.years[0]?.year ?? 0, base.years, paths)
 }
-export function searchLifecycleCapital(base: LifecycleRun): LifecycleRun['requiredCapital'] {
+export function searchLifecycleCapital(
+  base: LifecycleRun,
+  totalWealthForCapital: (capital: number) => { portfolioBuckets: PortfolioBucket[]; acquisitionCost: Record<string, number | undefined> },
+): LifecycleRun['requiredCapital'] {
   const years = base.years
   if (!years.length) return { status: 'unsupported', reason: 'No horizon' }
   const terminalInflation = years.at(-1)?.inflationFactor ?? 1
   try {
     const out = searchLedgerCapital(base.config, years, {
-      actualOpening: base.opening,
+      openingForCapital: (capital: number) => {
+        const mapped = totalWealthForCapital(capital)
+        const total = calculatePortfolioBucketTotal(mapped.portfolioBuckets)
+        if (total <= 0 && capital > 0) throw new Error('Capital mapping must preserve positive total')
+        return buildOpeningBuckets(mapped.portfolioBuckets, Object.fromEntries(base.config.buckets.map((b) => [b.id, b.kind])) as Record<string, LifecycleClassification>, mapped.acquisitionCost)
+      },
       terminalInflation,
     })
     if (out.status === 'converged') return { status: 'converged', requiredCapital: out.requiredCapital }

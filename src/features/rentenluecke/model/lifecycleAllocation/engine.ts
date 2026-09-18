@@ -107,7 +107,7 @@ function validateYearInput(config: LifecycleConfig, input: LifecycleYearInput): 
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`Year ${input.year}: invalid fund price`);
   }
   for (const v of Object.values(input.depositRates)) {
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < -1) throw new Error(`Year ${input.year}: invalid deposit rate`);
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`Year ${input.year}: invalid deposit rate`);
   }
 }
 
@@ -369,7 +369,7 @@ export function simulateLifecycleYear(
   let iterations = 0;
   let exhausted = false;
   for (let k = 0; k < MAX_SOLVER_ITERATIONS; k++) {
-    const trialBase: InvestmentState = next;
+    const trialBase: InvestmentState = structuredClone(next);
     const trialExec = executeUnified(config, trialBase, valuesAfterInflows, planTargets, cappedWithdrawal, input.fundPrices, `lifecycle:${input.year}:trial:${k}`);
     let trial = trialExec.state;
     trial = reconcileTax(trial, config.taxCashId, `lifecycle:${input.year}:trial:${k}:tax`);

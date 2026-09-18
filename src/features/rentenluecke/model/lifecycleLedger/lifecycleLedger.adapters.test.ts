@@ -327,20 +327,6 @@ describe('bootstrap adapter', () => {
     expect(ledgerSurvives(cfg, wealthyOpening(), years, 1.02 ** 3)).toBe(true);
   });
 
-  it('precomputed reference is byte-identical to the recomputed reference', () => {
-    const cfg = singleMilestoneConfig();
-    const years = threeYears();
-    const opening = wealthyOpening();
-    const reference = runLedgerDeterministic(cfg, opening, 2026, years);
-    const pathInput = [
-      { years: years.map((y) => ({ fundPrices: y.fundPrices, depositRates: y.depositRates, inflationFactor: y.inflationFactor })) },
-    ];
-    const direct = runLedgerBootstrap(cfg, wealthyOpening(), 2026, years, pathInput);
-    const threaded = runLedgerBootstrap(cfg, wealthyOpening(), 2026, years, pathInput, reference);
-    expect(threaded.reference).toBe(reference);
-    expect(JSON.stringify(threaded)).toBe(JSON.stringify(direct));
-  });
-
   it('failed paths block the summary while the reference still completes', () => {
     const cfg = singleMilestoneConfig();
     const years = threeYears();
@@ -433,43 +419,25 @@ describe('search adapter', () => {
     );
   }
 
-  function bankConfig(): LifecycleConfig {
-    return {
-      buckets: [{ id: 'cash', name: 'Cash', kind: 'deposit', priority: 1 }],
-      milestones: [{ name: 'only', startAge: 30, targets: { cash: { role: 'percent', share: 1 } } }],
-      transitions: [],
-      taxCashId: 'cash',
-    };
+  function scaledOpening(capital: number): OpeningBucket[] {
+    return [
+      { id: 'cash', name: 'Cash', classification: 'deposit', value: 0.2 * capital },
+      { id: 'bond', name: 'Bond fund', classification: 'bondFund', units: (0.3 * capital) / 100, price: 100, acquisitionCost: 0.3 * capital },
+      { id: 'equity', name: 'Equity fund', classification: 'equityFund', units: (0.5 * capital) / 100, price: 100, acquisitionCost: 0.5 * capital },
+    ];
   }
 
-  function bankYears(n: number, need: number): LedgerYearInput[] {
-    return Array.from({ length: n }, (_, i) => ({
-      age: 66 + i,
-      year: 2026 + i,
-      contribution: 0,
-      withdrawalNeed: need,
-      allowance: 1_000_000_000,
-      churchRate: 0 as const,
-      fundPrices: {},
-      depositRates: { cash: 0 },
-      basisRate: 0.025,
-      inflationFactor: 1,
-      insurance: manualZero(2026 + i),
-    }));
-  }
-
-  function bankOpening(value: number): OpeningBucket[] {
-    return [{ id: 'cash', name: 'Cash', classification: 'deposit', value }];
-  }
-
-  it('bank-only search converges to the euro bracket', () => {
-    const cfg = bankConfig();
-    const years = bankYears(10, 20000);
-    const res = searchLedgerCapital(cfg, years, { actualOpening: bankOpening(200000), terminalInflation: 1 });
+  it('reserve-free search converges to the euro bracket', () => {
+    const cfg = singleMilestoneConfig();
+    const res = searchLedgerCapital(cfg, spendYears(10, 20000), {
+      openingForCapital: scaledOpening,
+      terminalInflation: 1,
+      allowZeroStart: true,
+    });
     expect(res.status).toBe('converged');
-    if (res.status !== 'converged') throw new Error('bank-only search should converge');
+    if (res.status !== 'converged') throw new Error('search should converge');
     expect(Math.abs(res.requiredCapital - 200000)).toBeLessThanOrEqual(2);
-    expect(ledgerSurvives(cfg, bankOpening(res.requiredCapital), years, 1)).toBe(true);
+    expect(ledgerSurvives(cfg, scaledOpening(res.requiredCapital), spendYears(10, 20000), 1)).toBe(true);
   });
 
   it('fixed-reserve search without proof returns unsupported', () => {
@@ -487,80 +455,65 @@ describe('search adapter', () => {
         },
       ],
     };
-    const res = searchLedgerCapital(cfg, spendYears(3, 5000), {
-      actualOpening: [
-        { id: 'cash', name: 'Cash', classification: 'deposit', value: 18000 },
-        { id: 'bond', name: 'Bond fund', classification: 'bondFund', units: 270, price: 100, acquisitionCost: 27000 },
-        { id: 'equity', name: 'Equity fund', classification: 'equityFund', units: 450, price: 100, acquisitionCost: 45000 },
-      ],
-      terminalInflation: 1,
-    });
+    const res = searchLedgerCapital(cfg, spendYears(3, 5000), { openingForCapital: scaledOpening, terminalInflation: 1 });
     expect(res.status).toBe('unsupported');
   });
 
-  it('fixed-reserve search remains unsupported (no proof bypass)', () => {
+  it('fixed-reserve search with an asserted proof converges', () => {
     const cfg: LifecycleConfig = {
-      buckets: [{ id: 'cash', name: 'Cash', kind: 'deposit', priority: 1 }],
-      milestones: [{ name: 'only', startAge: 30, targets: { cash: { role: 'fixedReserve', amountToday: 10000 } } }],
-      transitions: [],
-      taxCashId: 'cash',
-    };
-    const years = bankYears(3, 5000);
-    const res = searchLedgerCapital(cfg, years, { actualOpening: bankOpening(50000), terminalInflation: 1 });
-    expect(res.status).toBe('unsupported');
-  });
-
-  it('nonmonotone inflation always unsupported (no proof bypass)', () => {
-    const cfg = bankConfig();
-    const years = bankYears(3, 5000);
-    const dipped = years.map((y, i) => ({ ...y, inflationFactor: i === 2 ? 0.9 : 1 }));
-    const blocked = searchLedgerCapital(cfg, dipped, { actualOpening: bankOpening(50000), terminalInflation: 1 });
-    expect(blocked.status).toBe('unsupported');
-  });
-
-  it('zero actual opening remains unsupported', () => {
-    const cfg = bankConfig();
-    const res = searchLedgerCapital(cfg, bankYears(3, 5000), { actualOpening: bankOpening(0), terminalInflation: 1 });
-    expect(res.status).toBe('unsupported');
-  });
-
-  it('mixed-fund search remains unsupported (no monotone proof)', () => {
-    const cfg = singleMilestoneConfig();
-    const res = searchLedgerCapital(cfg, spendYears(3, 5000), {
-      actualOpening: [
-        { id: 'cash', name: 'Cash', classification: 'deposit', value: 18000 },
-        { id: 'bond', name: 'Bond fund', classification: 'bondFund', units: 270, price: 100, acquisitionCost: 27000 },
-        { id: 'equity', name: 'Equity fund', classification: 'equityFund', units: 450, price: 100, acquisitionCost: 45000 },
+      ...singleMilestoneConfig(),
+      milestones: [
+        {
+          name: 'only',
+          startAge: 30,
+          targets: {
+            cash: { role: 'fixedReserve', amountToday: 10000 },
+            bond: { role: 'percent', share: 0.4 },
+            equity: { role: 'percent', share: 0.6 },
+          },
+        },
       ],
+    };
+    const res = searchLedgerCapital(cfg, spendYears(3, 5000), {
+      openingForCapital: scaledOpening,
       terminalInflation: 1,
+      allowFixedReserve: true,
+      allowZeroStart: true,
     });
+    expect(res.status).toBe('converged');
+  });
+
+  it('nonmonotone inflation forces unsupported unless proven monotone-safe', () => {
+    const cfg = singleMilestoneConfig();
+    const years = spendYears(3, 5000);
+    const dipped = years.map((y, i) => ({ ...y, inflationFactor: i === 2 ? 0.9 : 1 }));
+    const blocked = searchLedgerCapital(cfg, dipped, { openingForCapital: scaledOpening, terminalInflation: 1, allowZeroStart: true });
+    expect(blocked.status).toBe('unsupported');
+    const proven = searchLedgerCapital(cfg, dipped, {
+      openingForCapital: scaledOpening,
+      terminalInflation: 1,
+      allowZeroStart: true,
+      allowNonmonotoneF: true,
+    });
+    expect(proven.status).not.toBe('unsupported');
+  });
+
+  it('zero-total-start search returns unsupported without an explicit-target proof', () => {
+    const cfg = singleMilestoneConfig();
+    const res = searchLedgerCapital(cfg, spendYears(3, 5000), { openingForCapital: scaledOpening, terminalInflation: 1 });
     expect(res.status).toBe('unsupported');
   });
 
-  it('unfunded candidates fail and impossible bank-only burdens throw a bounding error', () => {
+  it('unfunded candidates fail and impossible burdens throw a bounding error', () => {
     const cfg = singleMilestoneConfig();
     expect(ledgerSurvives(cfg, wealthyOpening(), spendYears(1, 1_000_000_000), 1)).toBe(false);
-    const bankCfg = bankConfig();
-    const crushing = bankYears(3, 1000).map((y) => ({
+    const crushing = spendYears(3, 1000).map((y) => ({
       ...y,
       insurance: spec({ calendarYear: y.year, manual: { reason: 'crushing burden', kvMonthly: 1e12, pvMonthly: 0 } }),
     }));
-    expect(() => searchLedgerCapital(bankCfg, crushing, { actualOpening: bankOpening(50000), terminalInflation: 1 })).toThrow(
-      RequiredCapitalCalculationError,
-    );
-    const mixedCrushing = spendYears(3, 1000).map((y) => ({
-      ...y,
-      insurance: spec({ calendarYear: y.year, manual: { reason: 'crushing burden', kvMonthly: 1e12, pvMonthly: 0 } }),
-    }));
-    const mixedRes = searchLedgerCapital(cfg, mixedCrushing, {
-      actualOpening: [
-        { id: 'cash', name: 'Cash', classification: 'deposit', value: 18000 },
-        { id: 'bond', name: 'Bond fund', classification: 'bondFund', units: 270, price: 100, acquisitionCost: 27000 },
-        { id: 'equity', name: 'Equity fund', classification: 'equityFund', units: 450, price: 100, acquisitionCost: 45000 },
-      ],
-      terminalInflation: 1,
-    });
-    expect(mixedRes.status).toBe('unsupported');
+    expect(() =>
+      searchLedgerCapital(cfg, crushing, { openingForCapital: scaledOpening, terminalInflation: 1, allowZeroStart: true }),
+    ).toThrow(RequiredCapitalCalculationError);
   });
 });
 

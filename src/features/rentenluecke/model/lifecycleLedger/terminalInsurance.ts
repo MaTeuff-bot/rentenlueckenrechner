@@ -1,6 +1,6 @@
 import { calculateContributions } from '../contributions/contributionEngine.js';
 import { indexedContributionThresholds } from '../contributions/rules2026.js';
-import { cloneInvestmentState, valueHypotheticalLiquidation } from '../investmentTax/index.js';
+import { valueHypotheticalLiquidation } from '../investmentTax/index.js';
 import type { InvestmentState } from '../investmentTax/index.js';
 import { LedgerInsuranceError } from './annualCashflow.js';
 import { buildContributionInput } from './insuranceAssessment.js';
@@ -25,7 +25,7 @@ export function liquidationAssessableGain(
     throw new Error('Terminal needs a cumulative inflation factor > 0');
   }
   const before = state.contributionIncome.length;
-  const result = valueHypotheticalLiquidation(cloneInvestmentState(state), taxCashId, cumulativeInflation, cutoff);
+  const result = valueHypotheticalLiquidation(structuredClone(state), taxCashId, cumulativeInflation, cutoff);
   const gain = result.state.contributionIncome
     .slice(before)
     .reduce((n, r) => n + r.amount, 0);
