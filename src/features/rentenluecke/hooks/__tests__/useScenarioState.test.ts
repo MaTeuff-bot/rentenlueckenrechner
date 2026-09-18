@@ -9,8 +9,6 @@ import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../.
 import { useScenarioState } from '../useScenarioState'
 import { createDefaultState } from '../scenarioState/defaults'
 import { parsePersistedScenarioState, serializeScenarioState } from '../scenarioState/persistence'
-import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
-import { createInitialLifecycleMilestones } from '../../model/lifecycleDraft'
 
 beforeEach(() => {
   localStorage.clear()
@@ -21,7 +19,7 @@ function persistedJson(value: unknown): string {
 }
 
 describe('parsePersistedScenarioState', () => {
-  it('roundtrips a v16 scenario with income streams and annual bucket costs', () => {
+  it('roundtrips a v15 scenario with income streams and annual bucket costs', () => {
     const scenario = {
       ...createDefaultState(),
       portfolioBuckets: [
@@ -33,7 +31,7 @@ describe('parsePersistedScenarioState', () => {
 
     expect(parsePersistedScenarioState(serializeScenarioState(scenario))).toEqual(scenario)
     expect(JSON.parse(serializeScenarioState(scenario))).toMatchObject({
-      version: 16,
+      version: 15,
       portfolioBuckets: scenario.portfolioBuckets,
     })
     expect(JSON.parse(serializeScenarioState(scenario))).not.toHaveProperty('allocation')
@@ -41,7 +39,7 @@ describe('parsePersistedScenarioState', () => {
     expect(JSON.parse(serializeScenarioState(scenario)).portfolioBuckets.every((bucket: object) => !('role' in bucket))).toBe(true)
   })
 
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])('falls back to defaults for a v%i shape', (version) => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])('falls back to defaults for a v%i shape', (version) => {
     expect(parsePersistedScenarioState(persistedJson({
       version,
       input: { ...DEFAULT_INPUT, currentCapital: 123_456 },
@@ -71,8 +69,8 @@ describe('createDefaultState', () => {
 describe('useScenarioState', () => {
   it('keeps new scenarios incomplete until insurance questions are answered', () => {
     const { result } = renderHook(useScenarioState)
-    expect(result.current.lifecycleRun).toBeNull()
-    expect(result.current.lifecycleValid).toBe(false)
+    expect(result.current.result).toBeNull()
+    expect(result.current.stochasticSummary).toBeNull()
     expect(result.current.insuranceIssues.length).toBeGreaterThan(0)
   })
 
@@ -87,7 +85,7 @@ describe('useScenarioState', () => {
       { id: 'zero', name: 'Zero', value: 0, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
     ]
     localStorage.setItem(
-      'rentenlueckenrechner.scenario.v16',
+      'rentenlueckenrechner.scenario.v15',
       serializeScenarioState(persisted),
     )
 
@@ -131,33 +129,19 @@ describe('useScenarioState', () => {
     expect(result.current.allocation.fixed).toBeCloseTo(0.8)
   })
 
-  it('updates lifecycle output and supports adding/removing retirement income streams', () => {
+  it('updates output and supports adding/removing retirement income streams', () => {
     const state = createDefaultState()
-    state.insuranceCoverageAnswers = completedCoverage()
-    state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
-    state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
-    state.retirementIncomeStreams = state.retirementIncomeStreams.map((stream) => ({ ...stream, support: 'standard' as const }))
-    state.lifecycleClassification = { equity: 'equityFund', bonds: 'bondFund', fixed: 'deposit' }
-    state.lifecycleAcquisitionCost = { equity: 0, bonds: 0 }
-    state.lifecycleTaxCashId = 'fixed'
-    const created = createInitialLifecycleMilestones(65, state.input.retirementAge, state.portfolioBuckets, state.lifecycleClassification)
-    state.lifecycleMilestones = created.milestones
-    state.lifecycleTransitions = created.transitions
-    localStorage.setItem('rentenlueckenrechner.scenario.v16', serializeScenarioState(state))
+    state.input = { ...state.input, currentAge: 65, planningAge: 70 }
+    localStorage.setItem('rentenlueckenrechner.scenario.v15', serializeScenarioState(state))
     const { result } = renderHook(() => useScenarioState())
-    expect(result.current.lifecycleValid).toBe(true)
-    expect(result.current.lifecycleRun).not.toBeNull()
+    act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
     const pension = result.current.retirementIncomeStreams[0]
-    const beforeContribution = result.current.lifecycleRun?.years.find((y) => y.age === state.input.retirementAge)?.contribution ?? NaN
-    const beforeLiquidation = result.current.lifecycleRun?.summary.liquidationNominal ?? NaN
-    expect(Number.isFinite(beforeContribution)).toBe(true)
-    const pensionAmount = pension.amountMonthlyToday
+    const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
 
-    act(() => result.current.updateRetirementIncomeStream(pension.id, { amountMonthlyToday: pensionAmount + 200, amountBasis: 'gross', deductionMode: 'effectiveHaircut', effectiveDeductionRate: 0 }))
-    const afterContribution = result.current.lifecycleRun?.years.find((y) => y.age === state.input.retirementAge)?.contribution ?? NaN
-    const afterLiquidation = result.current.lifecycleRun?.summary.liquidationNominal ?? NaN
-    expect(afterContribution).toBeGreaterThan(beforeContribution)
-    expect(afterLiquidation).toBeGreaterThan(beforeLiquidation)
+    act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
+    expect(result.current.result!.retirementRows[0].retirementIncomeNet)
+      .toBeCloseTo(result.current.result!.retirementRows[0].retirementIncomeGross * 0.8)
+    expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
 
     act(() => result.current.addRetirementIncomeStream())
     expect(result.current.retirementIncomeStreams).toHaveLength(2)

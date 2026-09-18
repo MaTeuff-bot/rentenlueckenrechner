@@ -5,7 +5,6 @@ import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   FIXED_INFLATION_SOURCE_ID,
 } from '../../model/historicalReturns'
-import { createDefaultLifecycleTaxSettings } from '../../model/lifecycleDraft.js'
 import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import type { RentenlueckeInput } from '../../model/types'
@@ -23,12 +22,6 @@ export function createDefaultState(): ScenarioState {
     retirementIncomeStreams,
     portfolioBuckets: createDefaultPortfolioBuckets(DEFAULT_INPUT.currentCapital, DEFAULT_ASSET_ALLOCATION),
     historical: createDefaultHistoricalState(),
-    lifecycleClassification: {},
-    lifecycleAcquisitionCost: {},
-    lifecycleTaxCashId: undefined,
-    lifecycleTaxSettings: createDefaultLifecycleTaxSettings(),
-    lifecycleMilestones: undefined,
-    lifecycleTransitions: undefined,
   }
 }
 
