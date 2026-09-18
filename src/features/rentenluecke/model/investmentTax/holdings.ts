@@ -1,5 +1,5 @@
 import type { InvestmentState, OpeningBucket, Transaction } from './types'
-import { checked, deposit, finite, fund, identifier, integer, nonnegative, transition } from './validation'
+import { checkBucketRecord, checkIncomeRecord, checkPendingRecord, checkTaxYearRecord, checkTransactionRecord, checked, cloneInvestmentState, deposit, finite, fund, identifier, integer, nonnegative, totalValue, transition } from './validation'
 import { recordIncome } from './taxLedger'
 
 export function createInvestmentState(firstYear: number, buckets: OpeningBucket[]): InvestmentState {
@@ -12,7 +12,7 @@ export function createInvestmentState(firstYear: number, buckets: OpeningBucket[
       if (ids.has(b.id)) throw new Error('Duplicate bucket')
       ids.add(b.id)
       if (b.classification === 'deposit') { nonnegative(b.value); return { ...b } }
-      if (!['equityFund', 'bondFund'].includes(b.classification)) throw new Error('Invalid classification')
+      if (b.classification !== 'equityFund' && b.classification !== 'bondFund') throw new Error('Invalid classification')
       nonnegative(b.units); nonnegative(b.price); nonnegative(b.acquisitionCost)
       if (b.units === 0 && b.acquisitionCost !== 0) throw new Error('Basis without units')
       return { id: b.id, name: b.name, classification: b.classification, price: b.price,
@@ -21,9 +21,69 @@ export function createInvestmentState(firstYear: number, buckets: OpeningBucket[
   }
   return checked(state)
 }
-export function applyTransaction(state: InvestmentState, event: Transaction): InvestmentState {
+export interface TransactionBatch {
+  next: InvestmentState;
+  seen: Set<string>;
+  baseCounts: { transactions: number; taxIncome: number; contributionIncome: number; eventIds: number };
+}
+export function startTransactionBatch(state: InvestmentState): TransactionBatch {
+  const next = cloneInvestmentState(state);
+  return {
+    next,
+    seen: new Set(state.eventIds),
+    baseCounts: {
+      transactions: state.transactions.length,
+      taxIncome: state.taxIncome.length,
+      contributionIncome: state.contributionIncome.length,
+      eventIds: state.eventIds.length,
+    },
+  };
+}
+
+export function applyTransactionInBatch(next: InvestmentState, seen: Set<string>, event: Transaction, outerSeen?: Set<string>): void {
   if (/^(begin|receipt|market|close|vp|interest|annual-tax|terminal):/.test(event.id)) throw new Error('Reserved event identifier')
-  const next = transition(state, event.id, ['opening', 'closing'])
+  identifier(event.id);
+  if (next.phase !== 'opening' && next.phase !== 'closing') throw new Error('Invalid event order');
+  if (seen.has(event.id) || outerSeen?.has(event.id)) throw new Error(`Duplicate event ${event.id}`);
+  seen.add(event.id);
+  next.eventIds.push(event.id);
+  applyCoreInPlace(next, event);
+}
+
+export function finishTransactionBatch(next: InvestmentState, batch?: Pick<TransactionBatch, 'baseCounts'>): InvestmentState {
+  if (!batch) return checked(next);
+  const { transactions, taxIncome, contributionIncome, eventIds } = batch.baseCounts;
+  if (
+    next.transactions.length < transactions ||
+    next.taxIncome.length < taxIncome ||
+    next.contributionIncome.length < contributionIncome ||
+    next.eventIds.length < eventIds
+  ) {
+    return checked(next);
+  }
+  // Scoped equivalent of checked() for batch-produced states. Batch ops only append
+  // to the three audit histories and to eventIds, and never mutate their prefix
+  // elements in place (taxYears/buckets/pending are fully re-scanned below; shrinking
+  // histories fall back to the full walk above), so re-scanning the validated prefix
+  // is redundant: every previously appended identifier was already covered by the
+  // batch that appended it. Every field covered by checked() is still checked:
+  // buckets, taxYears and pending in full, plus exactly the appended audit entries
+  // and appended event identifiers.
+  finite(next.year, 'year');
+  for (const bucket of next.buckets) checkBucketRecord(bucket);
+  for (const taxYear of next.taxYears) checkTaxYearRecord(taxYear);
+  for (const pendingEntry of next.pending) checkPendingRecord(pendingEntry);
+  for (let i = taxIncome; i < next.taxIncome.length; i++) checkIncomeRecord(next.taxIncome[i]);
+  for (let i = contributionIncome; i < next.contributionIncome.length; i++) checkIncomeRecord(next.contributionIncome[i]);
+  for (let i = transactions; i < next.transactions.length; i++) checkTransactionRecord(next.transactions[i]);
+  for (let i = eventIds; i < next.eventIds.length; i++) {
+    if (typeof next.eventIds[i] !== 'string') throw new Error('Invalid eventId');
+  }
+  totalValue(next);
+  return next;
+}
+
+function applyCoreInPlace(next: InvestmentState, event: Transaction): void {
   let cashDelta = 0, basis = 0, assessedVP = 0, bucketId: string
   if (event.kind === 'external') {
     finite(event.amount)
@@ -39,7 +99,7 @@ export function applyTransaction(state: InvestmentState, event: Transaction): In
     const holding = fund(next, event.fundId), cash = deposit(next, event.cashId)
     bucketId = holding.id
     // Pending receipts must be posted first, even for a worthless or fully sold holding.
-    if (next.pending.some(p => p.bucketId === holding.id)) throw new Error('Receive pending VP before sale or purchase')
+    for (const p of next.pending) { if (p.bucketId === holding.id) throw new Error('Receive pending VP before sale or purchase'); }
     if (event.kind === 'purchase') {
       nonnegative(event.amount)
       if (holding.price <= 0 || event.amount > cash.value) throw new Error('Unfunded purchase or zero price')
@@ -49,7 +109,8 @@ export function applyTransaction(state: InvestmentState, event: Transaction): In
       basis = event.amount; cashDelta = -event.amount
     } else {
       nonnegative(event.units)
-      const units = holding.cohorts.reduce((n, c) => finite(n + c.units), 0)
+      let units = 0;
+      for (const c of holding.cohorts) units = finite(units + c.units)
       if (event.units > units) throw new Error('Oversale')
       const fraction = units === 0 ? 0 : event.units / units
       cashDelta = finite(event.units * holding.price)
@@ -58,7 +119,7 @@ export function applyTransaction(state: InvestmentState, event: Transaction): In
         basis += releasedBasis; assessedVP += releasedVP
         cohort.units *= 1 - fraction; cohort.basis -= releasedBasis; cohort.assessedVP -= releasedVP
       }
-      holding.cohorts = holding.cohorts.filter(c => c.units > 0)
+      { const kept: typeof holding.cohorts = []; for (const c of holding.cohorts) { if (c.units > 0) kept.push(c); } holding.cohorts = kept; }
       recordIncome(next, { id: event.id, bucketId, kind: 'sale', ledgerYear: next.year, receiptYear: next.year,
         gross: finite(cashDelta - basis - assessedVP), exemptFraction: holding.classification === 'equityFund' ? 0.3 : 0 })
       basis = -basis; assessedVP = -assessedVP
@@ -66,5 +127,11 @@ export function applyTransaction(state: InvestmentState, event: Transaction): In
     cash.value += cashDelta
   }
   next.transactions.push({ id: event.id, year: next.year, kind: event.kind, bucketId, cash: cashDelta, basis, assessedVP })
+}
+
+export function applyTransaction(state: InvestmentState, event: Transaction): InvestmentState {
+  if (/^(begin|receipt|market|close|vp|interest|annual-tax|terminal):/.test(event.id)) throw new Error('Reserved event identifier')
+  const next = transition(state, event.id, ['opening', 'closing'])
+  applyCoreInPlace(next, event)
   return checked(next)
 }

@@ -7,7 +7,6 @@ import {
   buildLifecycleConfig,
   buildOpeningBuckets,
   deriveDeterministicMarketYears,
-  deriveMarketYears,
   runLifecycleBootstrap,
   runLifecycleScenario,
   searchLifecycleCapital,
@@ -260,7 +259,7 @@ describe('lifecycle scenario adapters', () => {
     expect(resolveComponentExpectedNominalReturn(billsComponent, 1950, inflation)).toBeCloseTo(nominalBills - 0.01, 10)
     expect(applySourceCostTreatment(resolveComponentNominalReturn(billsComponent, 1950, inflation, () => 0.5), bills.id, 0.01)).toBeCloseTo(nominalBills - 0.01, 10)
   })
-  it('rejects negative deposit nominals in both market builders instead of clamping', () => {
+  it('accepts signed deposit nominals in [-1,infty) and rejects malformed <-100% without clamping', () => {
     const depositBuckets: PortfolioBucket[] = [
       { id: 'cash', name: 'Cash', value: 50000, returnSeriesId: 'jst-r6-developed-equal-weight-bills-real-post1950', annualCostRate: 0 },
     ]
@@ -270,8 +269,14 @@ describe('lifecycle scenario adapters', () => {
       inflationSourceId: 'fixed-manual',
       simulations: 2,
     }
-    expect(() => deriveMarketYears(depositBuckets, classification, historicalSettings, 0.02, 1, [1951], () => 0.5)).toThrow(/nonnegative/)
-    expect(() => deriveDeterministicMarketYears(depositBuckets, classification, 0.02, [0.02], { cash: -0.05 })).toThrow(/nonnegative/)
+    expect(() => deriveDeterministicMarketYears(depositBuckets, classification, 0.02, [0.02], { cash: -1.01 })).toThrow(/Invalid nominal return/)
+    expect(() => deriveDeterministicMarketYears(depositBuckets, classification, 0.02, [0.02], { cash: NaN })).toThrow(/Invalid nominal return/)
+    const negative = deriveDeterministicMarketYears(depositBuckets, classification, 0.02, [0.02], { cash: -0.05 })
+    expect(negative[0]?.depositRates['cash']).toBeCloseTo(-0.05, 12)
+    const floored = deriveDeterministicMarketYears(depositBuckets, classification, 0.02, [0.02], { cash: -1 })
+    expect(floored[0]?.depositRates['cash']).toBeCloseTo(-1, 12)
+    void historicalSettings
+    void depositBuckets
   })
   it.each([40, 50, 60])('keeps %i-year no-tax identity with nonzero inflation (nominal conserved, real deflated)', (horizon) => {
     const currentAge = 30
@@ -308,7 +313,7 @@ describe('lifecycle scenario adapters', () => {
     expect(summary.remainingLiabilitiesTotal).toBeCloseTo(0, 6)
     expect(summary.liquidationOutstandingLiability).toBeCloseTo(0, 6)
   })
-  it('searches required opening capital explicitly without proof bypass', () => {
+  it('searches required opening capital only for bank-only without bypass', () => {
     const classification = { cash: 'deposit' as const, equity: 'equityFund' as const }
     const created = runLifecycleScenario({
       input: input(),
@@ -323,17 +328,10 @@ describe('lifecycle scenario adapters', () => {
       historicalSettings: settings(),
       firstCalendarYear: 2026,
     })
-    const total = buckets().reduce((n, b) => n + b.value, 0)
-    const converged = searchLifecycleCapital(created, (capital: number) => {
-      const scale = total > 0 ? capital / total : 0
-      return {
-        portfolioBuckets: buckets().map((b) => ({ ...b, value: Math.max(0, b.value * scale) })),
-        acquisitionCost: { equity: 0 },
-      }
-    })
-    if (converged === null) throw new Error('missing capital result')
-    expect(converged.status).toBe('unsupported')
-    if (converged.status === 'unsupported') expect(converged.reason).toMatch(/zero-total-start/)
+    const mixed = searchLifecycleCapital(created)
+    if (mixed === null) throw new Error('missing capital result')
+    expect(mixed.status).toBe('unsupported')
+    if (mixed.status === 'unsupported') expect(mixed.reason).toMatch(/bank-only/)
     const reserveBase: typeof created = {
       ...created,
       config: {
@@ -341,7 +339,7 @@ describe('lifecycle scenario adapters', () => {
         milestones: [{ name: 'only', startAge: 40, targets: { cash: { role: 'fixedReserve', amountToday: 1000 }, equity: { role: 'percent', share: 1 } } }],
       },
     }
-    const reserveSearch = searchLifecycleCapital(reserveBase, () => ({ portfolioBuckets: buckets(), acquisitionCost: { equity: 0 } }))
+    const reserveSearch = searchLifecycleCapital(reserveBase)
     if (reserveSearch === null) throw new Error('missing reserve search result')
     expect(reserveSearch.status).toBe('unsupported')
     expect(runLifecycleBootstrap).toBeDefined()
@@ -363,29 +361,65 @@ describe('lifecycle scenario adapters', () => {
       historicalSettings: shortSettings,
       firstCalendarYear: 2026,
     })
-    let bootstrap
-    try {
-      bootstrap = runLifecycleBootstrap(created, {
-        input: shortInput,
-        streams: shortInput.retirementIncomeStreams ?? [],
-        portfolioBuckets: buckets(),
-        classification,
-        historicalSettings: shortSettings,
-        tax: { allowanceAnnualToday: 1000, churchRate: 0, basisRate: 0.032 },
-        firstCalendarYear: 2026,
-      })
-    } catch (error) {
-      expect(String(error instanceof Error ? error.message : error)).toMatch(/nonnegative|Deposit nominal/)
-      return
-    }
+    const bootstrap = runLifecycleBootstrap(created, {
+      input: shortInput,
+      streams: shortInput.retirementIncomeStreams ?? [],
+      portfolioBuckets: buckets(),
+      classification,
+      historicalSettings: shortSettings,
+      tax: { allowanceAnnualToday: 1000, churchRate: 0, basisRate: 0.032 },
+      firstCalendarYear: 2026,
+    })
     expect(bootstrap.paths).toHaveLength(2)
-    for (const path of bootstrap.paths) {
-      if (path.status === 'survived' || path.status === 'depleted') {
-        expect(path.yearlyClosingNominal).toHaveLength(created.years.length)
-        expect(path.yearlyAnchorNominal).toHaveLength(created.years.length)
-        expect(path.yearlyInflationFactors).toHaveLength(created.years.length)
-      }
+    expect(bootstrap.failureCount).toBe(0)
+    expect(bootstrap.summaryBlocked).toBe(false)
+    const completed = bootstrap.paths.filter((p) => p.status === 'survived' || p.status === 'depleted')
+    expect(completed).toHaveLength(2)
+    for (const path of completed) {
+      expect(path.yearlyClosingNominal).toHaveLength(created.years.length)
+      expect(path.yearlyAnchorNominal).toHaveLength(created.years.length)
+      expect(path.yearlyInflationFactors).toHaveLength(created.years.length)
     }
     expect(bootstrap.reference.reports).toHaveLength(created.years.length)
+  })
+  it('keeps all valid bootstrap paths with negative signed deposit draws and no deductible loss', async () => {
+    const { runLedgerBootstrap } = await import('./lifecycleLedger/adapters.js')
+    const classification = { cash: 'deposit' as const, equity: 'equityFund' as const }
+    const shortInput = { ...input(), currentAge: 65, retirementAge: 67, planningAge: 70 }
+    const created = runLifecycleScenario({
+      input: shortInput,
+      streams: shortInput.retirementIncomeStreams ?? [],
+      portfolioBuckets: buckets(),
+      classification,
+      acquisitionCost: { equity: 0 },
+      milestones: [{ name: 'only', startAge: 65, targets: { cash: { role: 'percent', share: 0.4 }, equity: { role: 'percent', share: 0.6 } } }],
+      transitions: [],
+      taxCashId: 'cash',
+      tax: { allowanceAnnualToday: 1000, churchRate: 0, basisRate: 0.032 },
+      historicalSettings: { ...settings(), simulations: 2 },
+      firstCalendarYear: 2026,
+    })
+    const baseYears = created.years
+    const negativeFullYears = baseYears.map((y, i) => ({
+      ...y,
+      fundPrices: { ...y.fundPrices },
+      depositRates: { ...y.depositRates, cash: i === 1 ? -0.05 : y.depositRates['cash'] ?? 0 },
+    }))
+    expect(negativeFullYears[1]?.depositRates['cash']).toBeLessThan(0)
+    const result = runLedgerBootstrap(created.config, created.opening, baseYears[0]?.year ?? 2026, baseYears, [
+      { years: [], fullYears: baseYears },
+      { years: [], fullYears: negativeFullYears },
+    ])
+    expect(result.paths).toHaveLength(2)
+    expect(result.failureCount).toBe(0)
+    expect(result.summaryBlocked).toBe(false)
+    for (const path of result.paths) {
+      expect(path.status === 'survived' || path.status === 'depleted').toBe(true)
+      if (path.status === 'survived' || path.status === 'depleted') {
+        expect(path.yearlyClosingNominal).toHaveLength(baseYears.length)
+        expect(path.yearlyAnchorNominal).toHaveLength(baseYears.length)
+        expect(path.yearlyInflationFactors).toHaveLength(baseYears.length)
+      }
+    }
   })
 })

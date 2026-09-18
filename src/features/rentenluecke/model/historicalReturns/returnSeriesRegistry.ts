@@ -17,12 +17,29 @@ export const SYNTHETIC_RETURN_SERIES: SyntheticReturnSeries[] = ASSET_CLASS_ASSU
   createSyntheticReturnSeries(assumption),
 )
 
+let historicalSeriesById: Map<string, HistoricalReturnSeries> | null = null;
+let syntheticSeriesById: Map<string, SyntheticReturnSeries> | null = null;
+
+function historicalMap(): Map<string, HistoricalReturnSeries> {
+  if (historicalSeriesById === null) {
+    historicalSeriesById = new Map(HISTORICAL_RETURN_SERIES.map((series) => [series.id, series]));
+  }
+  return historicalSeriesById;
+}
+
+function syntheticMap(): Map<string, SyntheticReturnSeries> {
+  if (syntheticSeriesById === null) {
+    syntheticSeriesById = new Map(SYNTHETIC_RETURN_SERIES.map((series) => [series.id, series]));
+  }
+  return syntheticSeriesById;
+}
+
 export function findHistoricalReturnSeries(id: string): HistoricalReturnSeries | undefined {
-  return HISTORICAL_RETURN_SERIES.find((series) => series.id === id)
+  return historicalMap().get(id);
 }
 
 export function findSyntheticReturnSeries(id: string): SyntheticReturnSeries | undefined {
-  return SYNTHETIC_RETURN_SERIES.find((series) => series.id === id)
+  return syntheticMap().get(id);
 }
 
 export function isSyntheticReturnSeriesId(id: string): boolean {

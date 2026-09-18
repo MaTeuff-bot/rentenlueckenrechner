@@ -150,7 +150,7 @@ export function RentenlueckeCalculator() {
             </section>
           ) : (
             <>
-              <LifecycleResults lifecycleRun={lifecycleRun} portfolioBuckets={portfolioBuckets} acquisitionCost={lifecycleAcquisitionCost} />
+              <LifecycleResults lifecycleRun={lifecycleRun} />
               <LifecycleChart lifecycleRun={lifecycleRun} />
               <details className="panel"><summary>Jährliche Abrechnung anzeigen</summary><LifecycleYearlyTable lifecycleRun={lifecycleRun} /></details>
             </>

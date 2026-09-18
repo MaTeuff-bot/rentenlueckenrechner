@@ -1,18 +1,22 @@
 import {
-  applyAnnualPricesAndInterest,
-  applyTransaction,
+  applyAnnualPricesAndInterestInBatch,
+  applyTransactionInBatch,
   beginInvestmentYear,
+  beginInvestmentYearInBatch,
   bucketValue,
-  closeWithPendingVP,
-  reconcileTax,
+  closeWithPendingVPInBatch,
+  finite,
+  finishTransactionBatch,
+  reconcileTaxInBatch,
+  startTransactionBatch,
   totalValue,
   unpaidTax,
 } from '../investmentTax/index.js';
-import type { InvestmentState } from '../investmentTax/index.js';
+import type { InvestmentState, ReconcileBaseYearIncome } from '../investmentTax/index.js';
 import {
   buildRebalancePlan,
   createLifecycleState,
-  resolveYearlyTargetsEuro,
+  resolveYearlyTargetsEuroUnchecked,
   validateLifecycleConfig,
 } from '../lifecycleAllocation/index.js';
 import type {
@@ -21,8 +25,8 @@ import type {
   LifecycleTrade,
 } from '../lifecycleAllocation/index.js';
 import type { OpeningBucket } from '../investmentTax/index.js';
-import { outstandingByYear, settleArrears } from './arrears.js';
-import { resolveInsuranceBurden } from './insuranceAssessment.js';
+import { outstandingByYear } from './arrears.js';
+import { isCapitalIndependentInsuranceSpec, resolveInsuranceBurden, sumAssessmentIncomeAnnual } from './insuranceAssessment.js';
 import type {
   LedgerResult,
   LedgerYearInput,
@@ -32,7 +36,6 @@ import type {
 export const LEDGER_DUST_EUR = 0.01;
 export const LEDGER_MAX_SOLVER_ITERATIONS = 8;
 export const LEDGER_SOLVER_TOLERANCE_EUR = 0.005;
-
 export class LedgerInsuranceError extends Error {
   readonly diagnostics: string[];
   constructor(diagnostics: string[]) {
@@ -42,24 +45,47 @@ export class LedgerInsuranceError extends Error {
   }
 }
 
+interface LifecycleConfigDerived {
+  kinds: Record<string, LifecycleBucketKind>;
+  priorities: Record<string, number>;
+  fundIds: string[];
+  depositIds: string[];
+}
+
+const lifecycleConfigDerivedCache = new WeakMap<LifecycleConfig, LifecycleConfigDerived>();
+
+function derivedOf(config: LifecycleConfig): LifecycleConfigDerived {
+  let derived = lifecycleConfigDerivedCache.get(config);
+  if (derived === undefined) {
+    const kinds: Record<string, LifecycleBucketKind> = {};
+    const priorities: Record<string, number> = {};
+    const fundIds: string[] = [];
+    const depositIds: string[] = [];
+    for (const b of config.buckets) {
+      kinds[b.id] = b.kind;
+      priorities[b.id] = b.priority;
+      (b.kind === 'deposit' ? depositIds : fundIds).push(b.id);
+    }
+    derived = { kinds, priorities, fundIds, depositIds };
+    lifecycleConfigDerivedCache.set(config, derived);
+  }
+  return derived;
+}
+
 function kindsOf(config: LifecycleConfig): Record<string, LifecycleBucketKind> {
-  const kinds: Record<string, LifecycleBucketKind> = {};
-  for (const b of config.buckets) kinds[b.id] = b.kind;
-  return kinds;
+  return derivedOf(config).kinds;
 }
 
 function prioritiesOf(config: LifecycleConfig): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const b of config.buckets) out[b.id] = b.priority;
-  return out;
+  return derivedOf(config).priorities;
 }
 
 function fundIds(config: LifecycleConfig): string[] {
-  return config.buckets.filter((b) => b.kind !== 'deposit').map((b) => b.id);
+  return derivedOf(config).fundIds;
 }
 
 function depositIds(config: LifecycleConfig): string[] {
-  return config.buckets.filter((b) => b.kind === 'deposit').map((b) => b.id);
+  return derivedOf(config).depositIds;
 }
 
 function assertStateMatchesConfig(config: LifecycleConfig, state: InvestmentState, year: number): void {
@@ -87,7 +113,9 @@ function priceOf(state: InvestmentState, fundId: string): number {
 function unitsHeld(state: InvestmentState, fundId: string): number {
   const b = state.buckets.find((x) => x.id === fundId);
   if (!b || b.classification === 'deposit') throw new Error(`Unknown fund ${fundId}`);
-  return b.cohorts.reduce((n, c) => n + c.units, 0);
+  let total = 0;
+  for (const c of b.cohorts) total += c.units;
+  return total;
 }
 
 function cashOf(state: InvestmentState, cashId: string): number {
@@ -106,7 +134,7 @@ function validateLedgerYearInput(config: LifecycleConfig, input: LedgerYearInput
   ] as const) {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`Year ${input.year}: ${label} must be >= 0`);
   }
-  if (![0, 0.08, 0.09].includes(input.churchRate)) throw new Error(`Year ${input.year}: invalid church rate`);
+  if (input.churchRate !== 0 && input.churchRate !== 0.08 && input.churchRate !== 0.09) throw new Error(`Year ${input.year}: invalid church rate`);
   if (!Number.isFinite(input.basisRate)) throw new Error(`Year ${input.year}: invalid basis rate`);
   if (!Number.isFinite(input.inflationFactor) || input.inflationFactor <= 0) {
     throw new Error(`Year ${input.year}: invalid cumulative inflation factor`);
@@ -125,12 +153,12 @@ function validateLedgerYearInput(config: LifecycleConfig, input: LedgerYearInput
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`Year ${input.year}: invalid fund price`);
   }
   for (const v of Object.values(input.depositRates)) {
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(`Year ${input.year}: invalid deposit rate`);
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < -1) throw new Error(`Year ${input.year}: invalid deposit rate`);
   }
   const spec = input.insurance;
   if (!spec || typeof spec !== 'object') throw new Error(`Year ${input.year}: insurance spec is required`);
-  if (!['kvdr', 'voluntary', 'unknown'].includes(spec.status)) throw new Error(`Year ${input.year}: invalid insurance status`);
-  if (!['bridge', 'pension'].includes(spec.phase)) throw new Error(`Year ${input.year}: invalid insurance phase`);
+  if (spec.status !== 'kvdr' && spec.status !== 'voluntary' && spec.status !== 'unknown') throw new Error(`Year ${input.year}: invalid insurance status`);
+  if (spec.phase !== 'bridge' && spec.phase !== 'pension') throw new Error(`Year ${input.year}: invalid insurance phase`);
   if (!Number.isInteger(spec.calendarYear)) throw new Error(`Year ${input.year}: invalid insurance calendar year`);
   if (spec.calendarYear !== input.year) {
     throw new LedgerInsuranceError([
@@ -164,16 +192,13 @@ function planLegs(
   priorities: Record<string, number>,
 ): { sells: RebalanceLeg[]; buys: RebalanceLeg[] } {
   if (Math.abs(LEDGER_DUST_EUR - 0.01) > 1e-12) throw new Error('Ledger dust must mirror allocation dust');
-  const plan = buildRebalancePlan(valuesBefore, targets, priorities);
-  return {
-    sells: plan.sells.map((l) => ({ bucketId: l.bucketId, euros: l.euros })),
-    buys: plan.buys.map((l) => ({ bucketId: l.bucketId, euros: l.euros })),
-  };
+  return buildRebalancePlan(valuesBefore, targets, priorities);
 }
 
-function executeLedgerUnified(
+function applyLedgerTradesInBatch(
+  next: InvestmentState,
+  seen: Set<string>,
   config: LifecycleConfig,
-  state: InvestmentState,
   valuesBefore: Record<string, number>,
   targets: Record<string, number>,
   withdrawal: number,
@@ -181,24 +206,25 @@ function executeLedgerUnified(
   idPrefix: string,
   reserve = 0,
   enforceReserve = false,
-): { state: InvestmentState; trades: LifecycleTrade[]; fundedWithdrawal: number } {
+): { trades: LifecycleTrade[]; fundedWithdrawal: number } {
   const kinds = kindsOf(config);
   const settlement = config.taxCashId;
   const plan = planLegs(valuesBefore, targets, prioritiesOf(config));
   const trades: LifecycleTrade[] = [];
-  let next = state;
   let seq = 0;
   const id = (op: string): string => `${idPrefix}:${seq++}:${op}`;
 
-  const sells = plan.sells.filter((l) => l.bucketId !== settlement);
-  const buys = plan.buys.filter((l) => l.bucketId !== settlement);
+  const sells: typeof plan.sells = [];
+  const buys: typeof plan.buys = [];
+  for (const l of plan.sells) { if (l.bucketId !== settlement) sells.push(l); }
+  for (const l of plan.buys) { if (l.bucketId !== settlement) buys.push(l); }
 
   for (const leg of sells) {
     if (kinds[leg.bucketId] === 'deposit') {
       const available = cashOf(next, leg.bucketId);
       const amount = Math.min(leg.euros, available);
       if (amount < LEDGER_DUST_EUR) continue;
-      next = applyTransaction(next, { id: id(`sell-${leg.bucketId}`), kind: 'transfer', fromId: leg.bucketId, toId: settlement, amount });
+      applyTransactionInBatch(next, seen, { id: id(`sell-${leg.bucketId}`), kind: 'transfer', fromId: leg.bucketId, toId: settlement, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'sell', euros: amount, units: amount });
     } else {
       const price = prices[leg.bucketId] ?? priceOf(next, leg.bucketId);
@@ -209,7 +235,7 @@ function executeLedgerUnified(
       units = Math.min(units, held);
       if (units <= 0) continue;
       if (leg.euros > 0 && units === 0) continue;
-      next = applyTransaction(next, { id: id(`sell-${leg.bucketId}`), kind: 'sale', fundId: leg.bucketId, cashId: settlement, units });
+      applyTransactionInBatch(next, seen, { id: id(`sell-${leg.bucketId}`), kind: 'sale', fundId: leg.bucketId, cashId: settlement, units });
       trades.push({ bucketId: leg.bucketId, kind: 'sell', euros: units * price, units });
     }
   }
@@ -217,7 +243,8 @@ function executeLedgerUnified(
   let funded = 0;
   if (withdrawal > 0) {
     const need = withdrawal;
-    const buyByBucket = new Map(buys.map((l) => [l.bucketId, l.euros]));
+    const buyByBucket = new Map<string, number>();
+    for (const l of buys) buyByBucket.set(l.bucketId, l.euros);
     if (!enforceReserve) {
       while (need > 0 && cashOf(next, settlement) < need) {
         const missing = need - cashOf(next, settlement);
@@ -240,7 +267,7 @@ function executeLedgerUnified(
         if (kinds[best] === 'deposit') {
           const amount = Math.min(missing, cashOf(next, best));
           if (amount < LEDGER_DUST_EUR) break;
-          next = applyTransaction(next, { id: id(`draw-${best}`), kind: 'transfer', fromId: best, toId: settlement, amount });
+          applyTransactionInBatch(next, seen, { id: id(`draw-${best}`), kind: 'transfer', fromId: best, toId: settlement, amount });
           trades.push({ bucketId: best, kind: 'sell', euros: amount, units: amount });
           const pending = buyByBucket.get(best) ?? 0;
           if (pending > 0) buyByBucket.set(best, Math.max(0, pending - amount));
@@ -250,7 +277,7 @@ function executeLedgerUnified(
           if (!(price > 0) || held <= 0) break;
           const units = Math.min(missing / price, held);
           if (units <= 0) break;
-          next = applyTransaction(next, { id: id(`draw-${best}`), kind: 'sale', fundId: best, cashId: settlement, units });
+          applyTransactionInBatch(next, seen, { id: id(`draw-${best}`), kind: 'sale', fundId: best, cashId: settlement, units });
           trades.push({ bucketId: best, kind: 'sell', euros: units * price, units });
           const pending = buyByBucket.get(best) ?? 0;
           if (pending > 0) buyByBucket.set(best, Math.max(0, pending - units * price));
@@ -264,7 +291,7 @@ function executeLedgerUnified(
     const available = cashOf(next, settlement);
     funded = enforceReserve ? Math.min(need, Math.max(0, available - reserve)) : Math.min(need, available);
     if (funded > 0) {
-      next = applyTransaction(next, { id: id('withdraw'), kind: 'external', cashId: settlement, amount: -funded });
+      applyTransactionInBatch(next, seen, { id: id('withdraw'), kind: 'external', cashId: settlement, amount: -funded });
     }
   }
 
@@ -275,7 +302,7 @@ function executeLedgerUnified(
     if (kinds[leg.bucketId] === 'deposit') {
       const amount = Math.min(leg.euros, cash);
       if (amount < LEDGER_DUST_EUR) continue;
-      next = applyTransaction(next, { id: id(`buy-${leg.bucketId}`), kind: 'transfer', fromId: settlement, toId: leg.bucketId, amount });
+      applyTransactionInBatch(next, seen, { id: id(`buy-${leg.bucketId}`), kind: 'transfer', fromId: settlement, toId: leg.bucketId, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'buy', euros: amount, units: amount });
     } else {
       const price = prices[leg.bucketId] ?? 0;
@@ -288,26 +315,124 @@ function executeLedgerUnified(
       const amount = Math.min(leg.euros, cash);
       if (amount < LEDGER_DUST_EUR) continue;
       if (amount / price === 0) continue;
-      next = applyTransaction(next, { id: id(`buy-${leg.bucketId}`), kind: 'purchase', fundId: leg.bucketId, cashId: settlement, amount });
+      applyTransactionInBatch(next, seen, { id: id(`buy-${leg.bucketId}`), kind: 'purchase', fundId: leg.bucketId, cashId: settlement, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'buy', euros: amount, units: amount / price });
     }
   }
 
-  return { state: next, trades, fundedWithdrawal: funded };
+  return { trades, fundedWithdrawal: funded };
 }
 
-function executeOpeningLedger(
+export function executeLedgerTrialUnified(
   config: LifecycleConfig,
   state: InvestmentState,
   valuesBefore: Record<string, number>,
   targets: Record<string, number>,
+  withdrawal: number,
+  prices: Record<string, number>,
+  idPrefix: string,
+  taxId: string,
+): { state: InvestmentState; trades: LifecycleTrade[]; fundedWithdrawal: number } {
+  const batch = startTransactionBatch(state);
+  const applied = applyLedgerTradesInBatch(batch.next, batch.seen, config, valuesBefore, targets, withdrawal, prices, idPrefix);
+  reconcileTaxInBatch(batch.next, batch.seen, config.taxCashId, taxId);
+  const finished = finishTransactionBatch(batch.next, batch);
+  return { state: finished, trades: applied.trades, fundedWithdrawal: applied.fundedWithdrawal };
+}
+
+class TrialSeenSet extends Set<string> {
+  private readonly baseIds: ReadonlySet<string>;
+  constructor(baseIds: ReadonlySet<string>) {
+    super();
+    this.baseIds = baseIds;
+  }
+  has(id: string): boolean {
+    return this.baseIds.has(id) || super.has(id);
+  }
+}
+
+export interface LedgerTrialWorkspace {
+  readonly next: InvestmentState;
+  readonly baseSeen: ReadonlySet<string>;
+}
+
+export function startLedgerTrialWorkspace(state: InvestmentState): LedgerTrialWorkspace {
+  const batch = startTransactionBatch(state);
+  return { next: batch.next, baseSeen: batch.seen };
+}
+
+export function executeLedgerTrialInWorkspace(
+  workspace: LedgerTrialWorkspace,
+  config: LifecycleConfig,
+  valuesBefore: Record<string, number>,
+  targets: Record<string, number>,
+  withdrawal: number,
+  prices: Record<string, number>,
+  idPrefix: string,
+  taxId: string,
+  baseYearIncome?: ReconcileBaseYearIncome,
+): { trial: InvestmentState; trades: LifecycleTrade[]; fundedWithdrawal: number; rollback: () => void } {
+  const next = workspace.next;
+  const snapshot = {
+    buckets: next.buckets.map((bucket) =>
+      bucket.classification === 'deposit'
+        ? { ...bucket }
+        : { ...bucket, cohorts: bucket.cohorts.map((cohort) => ({ ...cohort })) },
+    ),
+    taxYears: next.taxYears.map((taxYear) => ({ ...taxYear })),
+    transactions: next.transactions.length,
+    taxIncome: next.taxIncome.length,
+    contributionIncome: next.contributionIncome.length,
+    eventIds: next.eventIds.length,
+    pending: next.pending.length,
+    year: next.year,
+    phase: next.phase,
+  };
+  let rolledBack = false;
+  const rollback = (): void => {
+    if (rolledBack) return;
+    rolledBack = true;
+    next.buckets = snapshot.buckets;
+    next.taxYears = snapshot.taxYears;
+    next.transactions.length = snapshot.transactions;
+    next.taxIncome.length = snapshot.taxIncome;
+    next.contributionIncome.length = snapshot.contributionIncome;
+    next.eventIds.length = snapshot.eventIds;
+    if (next.pending.length !== snapshot.pending || next.year !== snapshot.year || next.phase !== snapshot.phase) {
+      throw new Error('Ledger trial touched immutable trial scope (pending/year/phase)');
+    }
+  };
+  try {
+    const seen = new TrialSeenSet(workspace.baseSeen);
+    const applied = applyLedgerTradesInBatch(next, seen, config, valuesBefore, targets, withdrawal, prices, idPrefix);
+    reconcileTaxInBatch(next, seen, config.taxCashId, taxId, undefined, baseYearIncome);
+    finishTransactionBatch(next, {
+      baseCounts: {
+        transactions: snapshot.transactions,
+        taxIncome: snapshot.taxIncome,
+        contributionIncome: snapshot.contributionIncome,
+        eventIds: snapshot.eventIds,
+      },
+    });
+    return { trial: next, trades: applied.trades, fundedWithdrawal: applied.fundedWithdrawal, rollback };
+  } catch (error) {
+    rollback();
+    throw error;
+  }
+}
+
+function applyOpeningTradesInBatch(
+  next: InvestmentState,
+  seen: Set<string>,
+  config: LifecycleConfig,
+  valuesBefore: Record<string, number>,
+  targets: Record<string, number>,
   year: number,
-): { state: InvestmentState; trades: LifecycleTrade[] } {
+): LifecycleTrade[] {
   const kinds = kindsOf(config);
   const settlement = config.taxCashId;
   const plan = planLegs(valuesBefore, targets, prioritiesOf(config));
   const trades: LifecycleTrade[] = [];
-  let next = state;
   let seq = 0;
   const id = (op: string): string => `lifecycle:${year}:opening:${seq++}:${op}`;
   for (const leg of plan.sells) {
@@ -315,7 +440,7 @@ function executeOpeningLedger(
     if (kinds[leg.bucketId] === 'deposit') {
       const amount = Math.min(leg.euros, cashOf(next, leg.bucketId));
       if (amount < LEDGER_DUST_EUR) continue;
-      next = applyTransaction(next, { id: id(`sell-${leg.bucketId}`), kind: 'transfer', fromId: leg.bucketId, toId: settlement, amount });
+      applyTransactionInBatch(next, seen, { id: id(`sell-${leg.bucketId}`), kind: 'transfer', fromId: leg.bucketId, toId: settlement, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'sell', euros: amount, units: amount });
     } else {
       const price = priceOf(next, leg.bucketId);
@@ -323,7 +448,7 @@ function executeOpeningLedger(
       if (held <= 0 || !(price > 0)) continue;
       const units = Math.min(leg.euros / price, held);
       if (units <= 0) continue;
-      next = applyTransaction(next, { id: id(`sell-${leg.bucketId}`), kind: 'sale', fundId: leg.bucketId, cashId: settlement, units });
+      applyTransactionInBatch(next, seen, { id: id(`sell-${leg.bucketId}`), kind: 'sale', fundId: leg.bucketId, cashId: settlement, units });
       trades.push({ bucketId: leg.bucketId, kind: 'sell', euros: units * price, units });
     }
   }
@@ -333,7 +458,7 @@ function executeOpeningLedger(
     if (kinds[leg.bucketId] === 'deposit') {
       const amount = Math.min(leg.euros, cashOf(next, settlement));
       if (amount < LEDGER_DUST_EUR) continue;
-      next = applyTransaction(next, { id: id(`buy-${leg.bucketId}`), kind: 'transfer', fromId: settlement, toId: leg.bucketId, amount });
+      applyTransactionInBatch(next, seen, { id: id(`buy-${leg.bucketId}`), kind: 'transfer', fromId: settlement, toId: leg.bucketId, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'buy', euros: amount, units: amount });
     } else {
       const price = priceOf(next, leg.bucketId);
@@ -345,11 +470,11 @@ function executeOpeningLedger(
       }
       const amount = Math.min(leg.euros, cashOf(next, settlement));
       if (amount < LEDGER_DUST_EUR || amount / price === 0) continue;
-      next = applyTransaction(next, { id: id(`buy-${leg.bucketId}`), kind: 'purchase', fundId: leg.bucketId, cashId: settlement, amount });
+      applyTransactionInBatch(next, seen, { id: id(`buy-${leg.bucketId}`), kind: 'purchase', fundId: leg.bucketId, cashId: settlement, amount });
       trades.push({ bucketId: leg.bucketId, kind: 'buy', euros: amount, units: amount / price });
     }
   }
-  return { state: next, trades };
+  return trades;
 }
 
 export function createLedgerState(
@@ -375,26 +500,44 @@ export function simulateLedgerYear(
   const firstPrices: Record<string, number> = {};
   for (const id of fundIds(config)) firstPrices[id] = priceOf(state, id);
 
-  let next = beginInvestmentYear(state, input.year, input.allowance, input.churchRate);
   const openingTrades: LifecycleTrade[] = [];
+  let next: InvestmentState;
   if (isFirstYear) {
+    next = beginInvestmentYear(state, input.year, input.allowance, input.churchRate);
     const values0 = valuesSnapshot(next);
     const anchor0 = Math.max(0, totalValue(next));
-    const { targetsNominal } = resolveYearlyTargetsEuro(config, input.age, anchor0, input.inflationFactor);
-    const executed = executeOpeningLedger(config, next, values0, targetsNominal, input.year);
-    next = executed.state;
-    openingTrades.push(...executed.trades);
-  }
-
-  next = applyAnnualPricesAndInterest(next, input.fundPrices, input.depositRates);
-
-  if (input.contribution > 0) {
-    next = applyTransaction(next, {
-      id: `lifecycle:${input.year}:contrib:external`,
-      kind: 'external',
-      cashId: config.taxCashId,
-      amount: input.contribution,
-    });
+    const { targetsNominal } = resolveYearlyTargetsEuroUnchecked(config, input.age, anchor0, input.inflationFactor);
+    const seen = new Set(next.eventIds);
+    const baseCounts = {
+      transactions: next.transactions.length,
+      taxIncome: next.taxIncome.length,
+      contributionIncome: next.contributionIncome.length,
+      eventIds: next.eventIds.length,
+    };
+    openingTrades.push(...applyOpeningTradesInBatch(next, seen, config, values0, targetsNominal, input.year));
+    applyAnnualPricesAndInterestInBatch(next, seen, input.fundPrices, input.depositRates);
+    if (input.contribution > 0) {
+      applyTransactionInBatch(next, seen, {
+        id: `lifecycle:${input.year}:contrib:external`,
+        kind: 'external',
+        cashId: config.taxCashId,
+        amount: input.contribution,
+      });
+    }
+    next = finishTransactionBatch(next, { baseCounts });
+  } else {
+    const baseBatch = startTransactionBatch(state);
+    beginInvestmentYearInBatch(baseBatch.next, baseBatch.seen, input.year, input.allowance, input.churchRate);
+    applyAnnualPricesAndInterestInBatch(baseBatch.next, baseBatch.seen, input.fundPrices, input.depositRates);
+    if (input.contribution > 0) {
+      applyTransactionInBatch(baseBatch.next, baseBatch.seen, {
+        id: `lifecycle:${input.year}:contrib:external`,
+        kind: 'external',
+        cashId: config.taxCashId,
+        amount: input.contribution,
+      });
+    }
+    next = finishTransactionBatch(baseBatch.next, baseBatch);
   }
 
   const wealthAfterInflows = totalValue(next);
@@ -402,25 +545,61 @@ export function simulateLedgerYear(
   const cappedWithdrawal = Math.min(input.withdrawalNeed, wealthAfterInflows);
   const priorUnpaid = unpaidTax(next);
   let anchor = wealthAfterInflows - cappedWithdrawal - priorUnpaid;
-  let solved = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor);
+  let solved = resolveYearlyTargetsEuroUnchecked(config, input.age, Math.max(0, anchor), input.inflationFactor);
   let planTargets = solved.targetsNominal;
   let executedShortfall = solved.shortfall;
   let iterations = 0;
   let exhausted = false;
   let lastLiability = 0;
   let lastBurden = 0;
+  const hoistedCapitalIndependent = isCapitalIndependentInsuranceSpec(input.insurance);
+  let hoistedBurdenAnnual = 0;
+  let hoistedBurden: Extract<ReturnType<typeof resolveInsuranceBurden>, { converged: true }> | null = null;
+  if (hoistedCapitalIndependent) {
+    const hoisted = resolveInsuranceBurden(input.insurance, next, input.year, input.inflationFactor);
+    if (!hoisted.converged) throw new LedgerInsuranceError(hoisted.diagnostics);
+    hoistedBurden = hoisted;
+    hoistedBurdenAnnual = (hoisted.result.ownKvMonthly + hoisted.result.ownPvMonthly) * 12;
+  }
+  const baseSeen = new Set(next.eventIds);
+  const trialWorkspace: LedgerTrialWorkspace = { next, baseSeen };
+  let trialBaseYearIncome = 0;
+  for (const incomeRecord of next.taxIncome) {
+    if (incomeRecord.ledgerYear === input.year) trialBaseYearIncome = finite(incomeRecord.amount + trialBaseYearIncome);
+  }
+  const trialBase: ReconcileBaseYearIncome = { base: trialBaseYearIncome, fromIndex: next.taxIncome.length };
   for (let k = 0; k < LEDGER_MAX_SOLVER_ITERATIONS; k++) {
-    const trialBase: InvestmentState = structuredClone(next);
-    const trialExec = executeLedgerUnified(config, trialBase, valuesAfterInflows, planTargets, cappedWithdrawal, input.fundPrices, `lifecycle:${input.year}:trial:${k}`);
-    let trial = trialExec.state;
-    trial = reconcileTax(trial, config.taxCashId, `lifecycle:${input.year}:trial:${k}:tax`);
-    const trialLiability = trial.taxYears.find((t) => t.year === input.year)?.liability ?? 0;
-    const burden = resolveInsuranceBurden(input.insurance, trial, input.year, input.inflationFactor);
-    if (!burden.converged) throw new LedgerInsuranceError(burden.diagnostics);
-    const trialBurden = (burden.result.ownKvMonthly + burden.result.ownPvMonthly) * 12;
+    const trialExec = executeLedgerTrialInWorkspace(
+      trialWorkspace,
+      config,
+      valuesAfterInflows,
+      planTargets,
+      cappedWithdrawal,
+      input.fundPrices,
+      `lifecycle:${input.year}:trial:${k}`,
+      `lifecycle:${input.year}:trial:${k}:tax`,
+      trialBase,
+    );
+    let trialLiability!: number;
+    let trialBurden!: number;
+    let following!: number;
+    try {
+      const trial = trialExec.trial;
+      trialLiability = 0;
+      for (const t of trial.taxYears) { if (t.year === input.year) { trialLiability = t.liability; break; } }
+      if (hoistedBurden !== null) {
+        trialBurden = hoistedBurdenAnnual;
+      } else {
+        const burden = resolveInsuranceBurden(input.insurance, trial, input.year, input.inflationFactor);
+        if (!burden.converged) throw new LedgerInsuranceError(burden.diagnostics);
+        trialBurden = (burden.result.ownKvMonthly + burden.result.ownPvMonthly) * 12;
+      }
+      following = wealthAfterInflows - cappedWithdrawal - priorUnpaid - trialLiability - trialBurden;
+    } finally {
+      trialExec.rollback();
+    }
     lastLiability = trialLiability;
     lastBurden = trialBurden;
-    const following = wealthAfterInflows - cappedWithdrawal - priorUnpaid - trialLiability - trialBurden;
     iterations = k + 1;
     if (Math.abs(following - anchor) < LEDGER_SOLVER_TOLERANCE_EUR) break;
     if (k === LEDGER_MAX_SOLVER_ITERATIONS - 1) {
@@ -428,28 +607,73 @@ export function simulateLedgerYear(
       break;
     }
     anchor = following;
-    solved = resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchor), input.inflationFactor);
+    solved = resolveYearlyTargetsEuroUnchecked(config, input.age, Math.max(0, anchor), input.inflationFactor);
     planTargets = solved.targetsNominal;
     executedShortfall = solved.shortfall;
   }
 
   const reserve = priorUnpaid + lastLiability + lastBurden;
   const enforceReserve = anchor <= 0;
-  const finalExec = executeLedgerUnified(config, next, valuesAfterInflows, planTargets, cappedWithdrawal, input.fundPrices, `lifecycle:${input.year}`, reserve, enforceReserve);
-  next = finalExec.state;
-  const fundedWithdrawal = input.withdrawalNeed === 0 ? 0 : finalExec.fundedWithdrawal;
+  // Trials only roll back: eventIds are length-truncated with order preserved, so the
+  // id set is unchanged since baseSeen was captured. Reuse it instead of rebuilding
+  // an identical set (TrialSeenSet never mutates its base; all trial sets are done).
+  const finalSeen = baseSeen;
+  const finalCounts = {
+    transactions: next.transactions.length,
+    taxIncome: next.taxIncome.length,
+    contributionIncome: next.contributionIncome.length,
+    eventIds: next.eventIds.length,
+  };
+  const finalApplied = applyLedgerTradesInBatch(next, finalSeen, config, valuesAfterInflows, planTargets, cappedWithdrawal, input.fundPrices, `lifecycle:${input.year}`, reserve, enforceReserve);
 
-  next = reconcileTax(next, config.taxCashId, `lifecycle:${input.year}:tax`);
-  const currentEntry = next.taxYears.find((t) => t.year === input.year);
-  const taxPaidCurrentYear = currentEntry?.paid ?? 0;
-  const finalLiability = currentEntry?.liability ?? 0;
+  const fundedWithdrawal = input.withdrawalNeed === 0 ? 0 : finalApplied.fundedWithdrawal;
+  reconcileTaxInBatch(next, finalSeen, config.taxCashId, `lifecycle:${input.year}:tax`);
+  let taxPaidCurrentYear = 0;
+  let finalLiability = 0;
+  for (const t of next.taxYears) { if (t.year === input.year) { taxPaidCurrentYear = t.paid; finalLiability = t.liability; break; } }
+  if (!Number.isInteger(input.year)) throw new Error(`Invalid ledger year ${input.year}`);
+  if (next.year !== input.year) throw new Error(`Year ${input.year}: arrears settle on the executed closing state of the same year`);
+  if (next.phase !== 'closing') throw new Error(`Year ${input.year}: arrears settle after reconcileTax in closing phase`);
+  const arrearsPaidByYear: Record<number, number> = {};
+  {
+    for (const entry of next.taxYears) {
+      if (!(entry.year < input.year && entry.liability - entry.paid > 0)) continue;
+      let live: (typeof next.taxYears)[number] | undefined;
+      for (const t of next.taxYears) { if (t.year === entry.year) { live = t; break; } }
+      if (!live) throw new Error(`Year ${input.year}: dated liability for ${entry.year} vanished`);
+      const outstanding = Math.max(0, live.liability - live.paid);
+      if (outstanding <= 0) continue;
+      const arrearsCash = cashOf(next, config.taxCashId);
+      if (arrearsCash <= 0) break;
+      const payment = Math.min(arrearsCash, outstanding);
+      if (payment <= 0) break;
+      applyTransactionInBatch(next, finalSeen, {
+        id: `lifecycle:${input.year}:arrears:${entry.year}`,
+        kind: 'external',
+        cashId: config.taxCashId,
+        amount: -payment,
+      });
+      let updated: (typeof next.taxYears)[number] | undefined;
+      for (const t of next.taxYears) { if (t.year === entry.year) { updated = t; break; } }
+      if (!updated) throw new Error(`Year ${input.year}: dated liability for ${entry.year} vanished`);
+      updated.paid += payment;
+      if (updated.paid > updated.liability) throw new Error(`Year ${input.year}: arrears overpayment for ${entry.year}`);
+      arrearsPaidByYear[entry.year] = payment;
+    }
+  }
+  void unpaidTax(next);
+  let arrearsTotal = 0;
+  for (const k in arrearsPaidByYear) { if (Object.hasOwn(arrearsPaidByYear, k)) arrearsTotal += arrearsPaidByYear[k] as number; }
 
-  const arrears = settleArrears(next, config.taxCashId, input.year);
-  next = arrears.state;
-  const arrearsTotal = Object.values(arrears.paidByYear).reduce((n, v) => n + v, 0);
-
-  const insurance = resolveInsuranceBurden(input.insurance, next, input.year, input.inflationFactor);
-  if (!insurance.converged) throw new LedgerInsuranceError(insurance.diagnostics);
+  let insurance: Extract<ReturnType<typeof resolveInsuranceBurden>, { converged: true }>;
+  if (hoistedBurden !== null) {
+    const finalAssessmentIncomeAnnual = sumAssessmentIncomeAnnual(next, input.year);
+    insurance = { ...hoistedBurden, assessmentIncomeAnnual: finalAssessmentIncomeAnnual };
+  } else {
+    const fresh = resolveInsuranceBurden(input.insurance, next, input.year, input.inflationFactor);
+    if (!fresh.converged) throw new LedgerInsuranceError(fresh.diagnostics);
+    insurance = fresh;
+  }
   const kvAnnual = insurance.result.ownKvMonthly * 12;
   const pvAnnual = insurance.result.ownPvMonthly * 12;
   let insurancePaidKv = 0;
@@ -457,22 +681,23 @@ export function simulateLedgerYear(
   const settlementBalance = (): number => cashOf(next, config.taxCashId);
   const kvPay = Math.min(settlementBalance(), kvAnnual);
   if (kvPay > 0) {
-    next = applyTransaction(next, { id: `lifecycle:${input.year}:insurance:kv`, kind: 'external', cashId: config.taxCashId, amount: -kvPay });
+    applyTransactionInBatch(next, finalSeen, { id: `lifecycle:${input.year}:insurance:kv`, kind: 'external', cashId: config.taxCashId, amount: -kvPay });
     insurancePaidKv = kvPay;
   }
   const pvPay = Math.min(settlementBalance(), pvAnnual);
   if (pvPay > 0) {
-    next = applyTransaction(next, { id: `lifecycle:${input.year}:insurance:pv`, kind: 'external', cashId: config.taxCashId, amount: -pvPay });
+    applyTransactionInBatch(next, finalSeen, { id: `lifecycle:${input.year}:insurance:pv`, kind: 'external', cashId: config.taxCashId, amount: -pvPay });
     insurancePaidPv = pvPay;
   }
 
-  next = closeWithPendingVP(next, firstPrices, input.basisRate);
+  closeWithPendingVPInBatch(next, finalSeen, firstPrices, input.basisRate);
+  next = finishTransactionBatch(next, { baseCounts: finalCounts });
 
   const burdenAnnual = kvAnnual + pvAnnual;
   const anchorFinalMeasured = wealthAfterInflows - fundedWithdrawal - priorUnpaid - finalLiability - burdenAnnual;
   const accepted = exhausted
     ? { targetsNominal: planTargets, shortfall: executedShortfall }
-    : resolveYearlyTargetsEuro(config, input.age, Math.max(0, anchorFinalMeasured), input.inflationFactor);
+    : resolveYearlyTargetsEuroUnchecked(config, input.age, Math.max(0, anchorFinalMeasured), input.inflationFactor);
   const anchorFinal = Math.max(0, anchorFinalMeasured);
 
   const report: LedgerYearReport = {
@@ -487,13 +712,13 @@ export function simulateLedgerYear(
     anchorNominal: anchorFinal,
     iterations,
     solverExhausted: exhausted,
-    trades: [...openingTrades, ...finalExec.trades],
+    trades: [...openingTrades, ...finalApplied.trades],
     targetsNominal: accepted.targetsNominal,
     valuesNominal: valuesSnapshot(next),
     shortfall: accepted.shortfall,
     unfundedWithdrawal: input.withdrawalNeed - fundedWithdrawal,
     taxPaidCurrentYear,
-    arrearsPaidByYear: arrears.paidByYear,
+    arrearsPaidByYear: arrearsPaidByYear,
     remainingLiabilities: outstandingByYear(next),
     insurancePaidKv,
     insurancePaidPv,
