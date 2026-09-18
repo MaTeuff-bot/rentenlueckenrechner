@@ -92,6 +92,7 @@ export function LifecycleChart({ lifecycleRun }: Props) {
       ) : (
         <p>Referenzverlauf aus denselben Ledger-Jahreszeilen, real (heutige Kaufkraft).</p>
       )}
+      <p className="portfolio-note">Ausgewählte Proxys sind keine vertraglichen Sparprognosen; ein negativer Cash-/Deposit-Proxy-Verlauf mindert nur den Cash-Bestand; aus diesem Proxy entsteht kein Steuerverlust/Verlusttopf und kein GKV-Negativeinkommen. Fonds-Verluste bleiben nach §20 Abs.6 gesondert prüfbar; nachgewiesene Kosten/Ausfälle brauchen eigene Belege.</p>
       <div className="chart-controls" aria-label="Diagrammeinstellungen">
         <label className="toggle"><input type="checkbox" checked={showSurvival} onChange={(e) => setShowSurvival(e.target.checked)} />Überlebenswahrscheinlichkeit anzeigen</label>
         <label className="field"><span className="field-label">Geschlecht für Sterbetafel</span><select value={sex} onChange={(e) => setSex(e.target.value as LifeTableSex)}>{sexOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>

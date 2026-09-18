@@ -44,6 +44,73 @@ import { phaseManualReasons, phaseStreams } from '../model/retirementInsurance.j
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
 
+export function stableStringifyLifecycleKey(value: unknown): string {
+  if (value === undefined) return '{"$undefined":true}';
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '{"$nan":true}';
+    if (Object.is(value, -0)) return '{"$negZero":true}';
+    if (value === Infinity) return '{"$infinity":true}';
+    if (value === -Infinity) return '{"$negInfinity":true}';
+  }
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? '{"$undefined":true}';
+  if (Array.isArray(value)) return `[${value.map(stableStringifyLifecycleKey).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringifyLifecycleKey(v)}`).join(',')}}`;
+}
+
+function canonicalizeLifecycleKeyValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeLifecycleKeyValue);
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      // The insurance phase flag is truthiness-checked everywhere downstream
+      // (phaseManualReasons and its callers), so false and absent are identical inputs.
+      if (k === 'manual' && v === false) continue;
+      out[k] = canonicalizeLifecycleKeyValue(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+export function lifecycleCalculationCacheKey(args: {
+  parsedData: unknown;
+  streams: unknown;
+  portfolioBuckets: unknown;
+  classification: unknown;
+  acquisitionCost: unknown;
+  milestones: unknown;
+  transitions: unknown;
+  taxCashId: unknown;
+  taxSettings: unknown;
+  historicalSettings: unknown;
+  firstCalendarYear: unknown;
+}): string {
+  return stableStringifyLifecycleKey(canonicalizeLifecycleKeyValue(args));
+}
+
+type LifecycleCalculationResult = { lifecycleRun: unknown; lifecycleBootstrap: unknown; lifecycleError: string | null };
+const lifecycleCalculationCache = new Map<string, LifecycleCalculationResult>();
+const LIFECYCLE_CALCULATION_CACHE_LIMIT = 10;
+
+export function getCachedLifecycleCalculation(key: string): LifecycleCalculationResult | undefined {
+  return lifecycleCalculationCache.get(key);
+}
+
+export function setCachedLifecycleCalculation(key: string, value: LifecycleCalculationResult): void {
+  if (lifecycleCalculationCache.has(key)) lifecycleCalculationCache.delete(key);
+  lifecycleCalculationCache.set(key, value);
+  while (lifecycleCalculationCache.size > LIFECYCLE_CALCULATION_CACHE_LIMIT) {
+    const oldest = lifecycleCalculationCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    lifecycleCalculationCache.delete(oldest);
+  }
+}
+
+export function clearLifecycleCalculationCache(): void {
+  lifecycleCalculationCache.clear();
+}
+
 let nextPortfolioBucketId = 1
 let nextRetirementIncomeStreamId = 1
 
@@ -138,6 +205,21 @@ export function useScenarioState() {
         basisRate: lifecycleTaxSettings.basisRate ?? 0.032,
         expenseAllowanceAnnualToday: lifecycleTaxSettings.expenseAllowanceAnnualToday,
       }
+      const cacheKey = lifecycleCalculationCacheKey({
+        parsedData: parsedInput.data,
+        streams: retirementIncomeStreams,
+        portfolioBuckets,
+        classification: lifecycleClassification,
+        acquisitionCost: lifecycleAcquisitionCost,
+        milestones: lifecycleMilestones ?? [],
+        transitions: lifecycleTransitions ?? [],
+        taxCashId: lifecycleTaxCashId ?? '',
+        taxSettings: lifecycleTaxSettings,
+        historicalSettings,
+        firstCalendarYear,
+      })
+      const cached = getCachedLifecycleCalculation(cacheKey)
+      if (cached) return cached as { lifecycleRun: never; lifecycleBootstrap: never; lifecycleError: string | null }
       const base = runLifecycleScenario({
         input: parsedInput.data,
         streams: retirementIncomeStreams,
@@ -163,9 +245,13 @@ export function useScenarioState() {
           firstCalendarYear,
         })
       } catch (error) {
-        return { lifecycleRun: base, lifecycleBootstrap: null, lifecycleError: `Bootstrap unvollständig: ${error instanceof Error ? error.message : String(error)}` }
+        const partial = { lifecycleRun: base, lifecycleBootstrap: null, lifecycleError: `Bootstrap unvollständig: ${error instanceof Error ? error.message : String(error)}` }
+        setCachedLifecycleCalculation(cacheKey, partial as LifecycleCalculationResult)
+        return partial
       }
-      return { lifecycleRun: { ...base, bootstrap }, lifecycleBootstrap: bootstrap, lifecycleError: null as string | null }
+      const full = { lifecycleRun: { ...base, bootstrap }, lifecycleBootstrap: bootstrap, lifecycleError: null as string | null }
+      setCachedLifecycleCalculation(cacheKey, full as unknown as LifecycleCalculationResult)
+      return full
     } catch (error) {
       return { lifecycleRun: null, lifecycleBootstrap: null, lifecycleError: `Lebenszyklus-Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)}` }
     }

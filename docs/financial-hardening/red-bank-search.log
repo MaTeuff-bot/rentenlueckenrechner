@@ -1,0 +1,68 @@
+
+ RUN  v4.1.10 /workspace/repos/rentenlueckenrechner-hardening-t_acd138c3
+
+ ❯ src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts (4 tests | 4 failed) 21ms
+     × supported bank-only converges and matches independent scalar oracle within 1 euro 11ms
+     × closed-form zero-rate sum 5ms
+     × mixed funds, multiple deposits, automatic voluntary, fixed reserve, actual zero, nonmonotone all unsupported 2ms
+     × solver/insurance failure is nonconverged, never false depletion 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts > bank-only search hardening (Defect B) > supported bank-only converges and matches independent scalar oracle within 1 euro
+TypeError: isBankOnlySearchSupported is not a function
+ ❯ src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts:61:18
+     59|     const years = [0, 1, 2].map((i) => yr({ withdrawalNeed: 5000, allo…
+     60|     const actual = opening(50000)
+     61|     const gate = isBankOnlySearchSupported(cfg, years, actual, 1)
+       |                  ^
+     62|     expect(gate).toMatchObject({ supported: true })
+     63|     const res = searchLedgerCapital(cfg, years, { actualOpening: actua…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts > bank-only search hardening (Defect B) > closed-form zero-rate sum
+TypeError: options.openingForCapital is not a function
+ ❯ searchLedgerCapital src/features/rentenluecke/model/lifecycleLedger/adapters.ts:252:28
+    250|     }
+    251|   }
+    252|   if (openingTotal(options.openingForCapital(0)) <= 0 && !options.allo…
+       |                            ^
+    253|     return {
+    254|       status: 'unsupported',
+ ❯ src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts:81:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts > bank-only search hardening (Defect B) > mixed funds, multiple deposits, automatic voluntary, fixed reserve, actual zero, nonmonotone all unsupported
+TypeError: options.openingForCapital is not a function
+ ❯ searchLedgerCapital src/features/rentenluecke/model/lifecycleLedger/adapters.ts:252:28
+    250|     }
+    251|   }
+    252|   if (openingTotal(options.openingForCapital(0)) <= 0 && !options.allo…
+       |                            ^
+    253|     return {
+    254|       status: 'unsupported',
+ ❯ src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts:90:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts > bank-only search hardening (Defect B) > solver/insurance failure is nonconverged, never false depletion
+TypeError: options.openingForCapital is not a function
+ ❯ searchLedgerCapital src/features/rentenluecke/model/lifecycleLedger/adapters.ts:252:28
+    250|     }
+    251|   }
+    252|   if (openingTotal(options.openingForCapital(0)) <= 0 && !options.allo…
+       |                            ^
+    253|     return {
+    254|       status: 'unsupported',
+ ❯ src/features/rentenluecke/model/lifecycleLedger/bankOnlySearchHardening.test.ts:125:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  07:16:45
+   Duration  1.64s (transform 694ms, setup 0ms, import 1.25s, tests 21ms, environment 0ms)
+

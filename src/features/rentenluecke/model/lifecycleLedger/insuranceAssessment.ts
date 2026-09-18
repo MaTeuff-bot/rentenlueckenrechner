@@ -16,9 +16,11 @@ export function expenseAllowanceForYear(inflationFactor: number, overrideAnnual?
 }
 
 export function sumAssessmentIncomeAnnual(state: InvestmentState, ledgerYear: number): number {
-  return state.contributionIncome
-    .filter((r) => r.ledgerYear === ledgerYear)
-    .reduce((n, r) => n + r.amount, 0);
+  let total = 0;
+  for (const assessmentRecord of state.contributionIncome) {
+    if (assessmentRecord.ledgerYear === ledgerYear) total += assessmentRecord.amount;
+  }
+  return total;
 }
 
 export function mapCapitalAssessmentAnnual(
@@ -102,6 +104,59 @@ export function buildContributionInput(
   return input;
 }
 
+export function isCapitalIndependentInsuranceSpec(spec: LedgerInsuranceSpec): boolean {
+  if (spec.manual != null) return true;
+  if (spec.status === 'kvdr') return true;
+  if (spec.manualCapitalAssessmentMonthlyToday !== undefined) return true;
+  return false;
+}
+
+const LEDGER_CONTRIBUTION_CACHE_LIMIT = 512;
+const ledgerContributionCache = new Map<string, ContributionResult>();
+
+function deepFreezeContributionResult<T>(value: T, seen: WeakSet<object> = new WeakSet()): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value as object)) return value;
+  seen.add(value as object);
+  if (Array.isArray(value)) {
+    for (const entry of value) deepFreezeContributionResult(entry, seen);
+  } else {
+    for (const entry of Object.values(value as Record<string, unknown>)) deepFreezeContributionResult(entry, seen);
+  }
+  return Object.freeze(value);
+}
+
+/**
+ * Contribution assessment for ledger-built insurance inputs, memoized on the full
+ * content-keyed input triple. `calculateContributions` re-parses its input through
+ * the zod schema on every call; the ledger invokes it once per simulated year per
+ * bootstrap path, and with deterministic (e.g. fixed-manual) inflation the inputs
+ * repeat identically across all 1000 paths of a run. The cache key covers every
+ * input (spec, inflation factor, capital assessment), so a hit is byte-identical to
+ * recomputation by construction. No identity shortcut is used: in-place spec
+ * mutation changes the content key and recomputes. Cached results are deeply
+ * frozen; callers must treat the returned object as read-only (the ledger only
+ * reads scalars out of it). Bounded LRU-style eviction keeps memory flat when
+ * inflation varies per path.
+ */
+export function calculateLedgerContributions(
+  spec: LedgerInsuranceSpec,
+  capitalAssessmentAnnual: number,
+  inflationFactor: number,
+): ContributionResult {
+  const key = JSON.stringify([spec, inflationFactor, capitalAssessmentAnnual]);
+  const cached = ledgerContributionCache.get(key);
+  if (cached !== undefined) return cached;
+  const result = calculateContributions(buildContributionInput(spec, capitalAssessmentAnnual, inflationFactor));
+  deepFreezeContributionResult(result);
+  if (ledgerContributionCache.size >= LEDGER_CONTRIBUTION_CACHE_LIMIT) {
+    const oldest = ledgerContributionCache.keys().next();
+    if (!oldest.done) ledgerContributionCache.delete(oldest.value);
+  }
+  ledgerContributionCache.set(key, result);
+  return result;
+}
+
 export function resolveInsuranceBurden(
   spec: LedgerInsuranceSpec,
   trialState: InvestmentState,
@@ -118,7 +173,7 @@ export function resolveInsuranceBurden(
     };
   }
   if (spec.manual) {
-    const result = calculateContributions(buildContributionInput(spec, 0, inflationFactor));
+    const result = calculateLedgerContributions(spec, 0, inflationFactor);
     if (result.status === 'automatic' || result.status === 'manual') {
       return { converged: true, result, capitalAssessmentAnnual: 0, assessmentIncomeAnnual, assumption: 'manual-replacement' };
     }
@@ -152,7 +207,7 @@ export function resolveInsuranceBurden(
       : mapCapitalAssessmentAnnual(trialState, ledgerYear, inflationFactor, spec.expenseAllowanceAnnual);
   const capitalAssessmentAnnual =
     manualToday !== undefined ? manualToday * 12 * inflationFactor : automaticCapitalAnnual;
-  const result = calculateContributions(buildContributionInput(spec, automaticCapitalAnnual, inflationFactor));
+  const result = calculateLedgerContributions(spec, automaticCapitalAnnual, inflationFactor);
   if (result.status === 'automatic' || result.status === 'manual') {
     return {
       converged: true,
