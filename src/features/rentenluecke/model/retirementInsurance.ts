@@ -34,7 +34,6 @@ export const retirementInsuranceSchema = z.object({
 })
 export type InsurancePhase = z.infer<typeof insurancePhaseSchema>
 export type RetirementInsurance = z.infer<typeof retirementInsuranceSchema>
-export type InsuranceStatus = 'kvdr' | 'voluntary' | 'unknown'
 export function createDefaultRetirementInsurance(pensionAge?: number): RetirementInsurance {
   return { pensionAge, referenceYear: new Date().getFullYear(), childBirthYears: [], bridge: {}, pension: {} }
 }

@@ -105,11 +105,3 @@ export function getFieldErrors(error: z.ZodError): Partial<Record<InputFieldName
 
   return fieldErrors
 }
-
-export function getInsuranceRateError(value: number): string | undefined {
-  return rate.safeParse(value).success ? undefined : 'Bitte einen Beitragssatz zwischen 0 und 100 % eingeben.'
-}
-
-export function getInsuranceBaseError(value: number): string | undefined {
-  return money.safeParse(value).success ? undefined : 'Bitte eine Beitragsbasis ab 0 € eingeben.'
-}

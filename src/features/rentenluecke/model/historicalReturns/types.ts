@@ -1,5 +1,5 @@
 import type { AssetClassKey, PortfolioComponent, StochasticPercentileRow } from '../stochasticReturns'
-import type { RentenlueckeInput, SimulationResult } from '../types'
+import type { SimulationResult } from '../types'
 
 export type DatasetRole = 'equity' | 'bond' | 'cash' | 'inflation' | 'other'
 export type DatasetGeography = 'DE' | 'EU' | 'Global'
@@ -139,8 +139,3 @@ export type HistoricalBootstrapSimulationSummary = {
 }
 
 export type HistoricalBootstrapScenarioResult = SimulationResult & { metadata: HistoricalBootstrapMetadata }
-
-export type HistoricalBootstrapSeedInput = {
-  input: RentenlueckeInput
-  settings: HistoricalBootstrapSettings
-}
