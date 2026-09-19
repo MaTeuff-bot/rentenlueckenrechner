@@ -82,6 +82,8 @@ npm run build       # tsc -b && vite build
 
 ## Codeübersicht
 
+Modulgrenzen und Zonenzuständigkeiten: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 - `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Kapitalbedarfssuche, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
 - `src/features/rentenluecke/charting/`: Aus Simulationsergebnissen abgeleitete Diagrammdaten und Risikokarten.
 - `src/features/rentenluecke/mortality/`: Destatis-Sterbetafel und Überlebenswahrscheinlichkeiten; erzeugt aus GENESIS `12621-0001` über `scripts/generateDestatisLifeTable.mjs`.

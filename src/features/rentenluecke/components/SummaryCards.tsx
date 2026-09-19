@@ -1,4 +1,4 @@
-import { formatApproxCurrency } from '../model/format'
+import { formatApproxCurrency } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
 
