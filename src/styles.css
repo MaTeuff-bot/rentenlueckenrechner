@@ -799,3 +799,15 @@ summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-v
 .coverage-checklist input { flex: 0 0 auto; }
 .insurance-flow { overflow-wrap: anywhere; }
 .insurance-flow .secondary-button { white-space: normal; min-width: 0; max-width: 100%; }
+
+.input-tabs { display: flex; flex-wrap: wrap; gap: .65rem; margin-block: 1rem; }
+.input-tabs [role="tab"] { display: grid; gap: 2px; padding: .6rem .8rem; border: 1px solid currentColor; border-radius: .4rem; background: #fff; cursor: pointer; text-align: left; }
+.input-tabs [role="tab"][aria-selected="true"] { background: #eef4ee; font-weight: 700; }
+.tab-title { display: flex; align-items: center; gap: .5rem; font-weight: 700; }
+.tab-summary { font-size: .8rem; color: #5a6877; }
+.input-tabpanel { grid-column: 1 / -1; min-width: 0; }
+.input-tabpanel[hidden] { display: none; }
+.portfolio-block { display: grid; gap: 12px; margin-block: 1rem; }
+.portfolio-block > h4 { margin: 0; }
+.portfolio-total { display: flex; flex-wrap: wrap; gap: 10px 18px; color: #344355; }
+.portfolio-strategy { grid-template-columns: minmax(210px, 1.5fr); }

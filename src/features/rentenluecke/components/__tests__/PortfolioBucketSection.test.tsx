@@ -56,7 +56,7 @@ describe('PortfolioBucketSection', () => {
     const notes = document.getElementById(sourceSelect.getAttribute('aria-describedby')!)!
     expect(notes).toHaveClass('portfolio-row-notes')
     expect(notes).toHaveTextContent('Kategorie: Aktien')
-    expect(notes.previousElementSibling).toHaveClass('portfolio-cost-field')
+    expect(notes.previousElementSibling).toHaveClass('field')
     expect(notes.parentElement).toBe(sourceSelect.closest('.portfolio-bucket'))
     expect(sourceSelect.closest('label')).not.toContainElement(notes)
     expect(sourceSelect).toHaveAccessibleDescription('Kategorie: Aktien')
@@ -105,7 +105,7 @@ describe('PortfolioBucketSection', () => {
 
     const selector = screen.getByLabelText('Renditequelle/Proxy von Welt-ETF')
     const notes = document.getElementById(selector.getAttribute('aria-describedby')!)!
-    expect(notes.previousElementSibling).toHaveClass('portfolio-cost-field')
+    expect(notes.previousElementSibling).toHaveClass('field')
     expect(notes).toHaveTextContent('Kategorie: Aktien')
     expect(selector).toHaveAccessibleDescription(/Kategorie: Aktien.*ETF-TER\/OCF/)
     expect(screen.getByText(/ETF-TER\/OCF ist in dieser Renditequelle bereits berücksichtigt/)).toHaveTextContent(/zusätzliche Kosten.*nicht abgezogen/)

@@ -59,7 +59,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toHaveLength(0)
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
     fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
-    fireEvent.click(screen.getByText('Rechenannahmen', { exact: false, selector: 'summary' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
     expect(screen.getByRole('heading', { name: 'Jahrestabelle' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Annahmen und Hinweise' })).toBeInTheDocument()
     expect(screen.getByText(/netto verfügbare Konsumausgaben in heutiger Kaufkraft/)).toBeInTheDocument()
@@ -99,6 +99,7 @@ describe('RentenlueckeCalculator', () => {
   })
   it('updates the derived total, allocation, and result from a bucket value', () => {
     render(<RentenlueckeCalculator />)
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     expect(document.getElementById('currentCapital')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 50.000')
@@ -110,6 +111,7 @@ describe('RentenlueckeCalculator', () => {
 
   it('hides results for an empty portfolio', () => {
     render(<RentenlueckeCalculator />)
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     for (const button of screen.getAllByRole('button', { name: /entfernen$/ }).filter(button => !button.getAttribute('aria-label')?.includes('Rente'))) fireEvent.click(button)
     expect(screen.getAllByText(/Gesamtwert des Portfolios muss größer als 0/).length).toBeGreaterThan(0)

@@ -45,14 +45,13 @@ describe('real controlling-date and disclosure focus (requirements 12 and 14)', 
     const { container } = renderNavigation(input)
     follow(container, 'insurance-transition')
   })
-  it('opens enclosing advanced details before focusing an invalid rate override', () => {
+  it('opens the Rechenannahmen tab before focusing an invalid rate override', () => {
     const input = insuredInput()
     input.retirementInsurance!.rates = { kvGeneralRate: -1 }
     const { container } = renderNavigation(input)
     const field = document.getElementById('insurance-rates-kvGeneralRate')!
-    const details = field.closest('details')!
-    expect(details.open).toBe(false)
+    expect(document.getElementById('input-tabpanel-annahmen')).not.toBeVisible()
     follow(container, field.id)
-    expect(details.open).toBe(true)
+    expect(document.getElementById('input-tabpanel-annahmen')).toBeVisible()
   })
 })
