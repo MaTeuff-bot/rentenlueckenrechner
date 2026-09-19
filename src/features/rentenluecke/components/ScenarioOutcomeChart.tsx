@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { buildDisplayRows, fromLogScaleCapital, type ScenarioOutcomeChartRow } from '../charting/scenarioOutcomeData'
-import { formatCurrency, formatPercent } from '../model/format'
+import { formatCurrency, formatPercent } from './format'
 
 type ScenarioOutcomeChartProps = {
   rows: ScenarioOutcomeChartRow[]

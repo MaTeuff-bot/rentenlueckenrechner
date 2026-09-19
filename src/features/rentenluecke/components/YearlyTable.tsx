@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatCurrency, formatNumber, formatPercent } from '../model/format'
+import { formatCurrency, formatNumber, formatPercent } from './format'
 import type { YearlyPeriodRow } from '../model/types'
 
 type YearlyTableProps = {

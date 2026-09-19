@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { RetirementIncomeStream, YearlyPeriodRow } from '../model/types'
-import { formatCurrency } from '../model/format'
+import { formatCurrency } from './format'
 
 export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[]; streams: RetirementIncomeStream[] }) {
   const [selectedAge, setSelectedAge] = useState<number | undefined>()

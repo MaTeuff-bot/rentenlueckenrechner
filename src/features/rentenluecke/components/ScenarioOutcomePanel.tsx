@@ -6,7 +6,7 @@ import {
   isCapitalDisplayCapped,
   type DepletionRiskChip,
 } from '../charting/scenarioOutcomeData'
-import { formatCurrency, formatPercent } from '../model/format'
+import { formatCurrency, formatPercent } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
 import { DESTATIS_GERMANY_LIFE_TABLE_MAX_EXACT_AGE, type LifeTableSex } from '../mortality/mortality'
