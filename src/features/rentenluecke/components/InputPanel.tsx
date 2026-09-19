@@ -1,5 +1,5 @@
 import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
-import { useEffect } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { TimelineSection } from './InputPanel/TimelineSection'
 import { InsuranceRateAssumptions } from './InputPanel/InsuranceRateAssumptions'
 import { AssumptionsPanel } from './AssumptionsPanel'
@@ -56,6 +56,23 @@ type InputPanelProps = {
   onReset: () => void
 }
 
+type InputTabId = 'plan' | 'vermoegen' | 'versicherung' | 'annahmen'
+
+const inputTabs: Array<{ id: InputTabId; label: string; sections: FlowSection[] }> = [
+  { id: 'plan', label: 'Persönlicher Plan', sections: ['zeitplan', 'ausgaben', 'einkommen'] },
+  { id: 'vermoegen', label: 'Vermögen', sections: ['vermoegen'] },
+  { id: 'versicherung', label: 'Versicherung', sections: ['versicherung'] },
+  { id: 'annahmen', label: 'Rechenannahmen', sections: ['annahmen'] },
+]
+
+function tabForSection(section: FlowSection): InputTabId | null {
+  if (section === 'zeitplan' || section === 'ausgaben' || section === 'einkommen') return 'plan'
+  if (section === 'vermoegen') return 'vermoegen'
+  if (section === 'versicherung') return 'versicherung'
+  if (section === 'annahmen') return 'annahmen'
+  return null
+}
+
 export function InputPanel({
   insuranceCoverageAnswers, onInsuranceCoverageChange,
   issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange, onTransitionChange = () => {},
@@ -79,6 +96,7 @@ export function InputPanel({
   onInflationSourceChange,
   onReset,
 }: InputPanelProps) {
+  const [activeTab, setActiveTab] = useState<InputTabId>('plan')
   useEffect(() => {
     const originals = issues.map((issue, index) => {
       const field = document.getElementById(issue.fieldId)
@@ -130,6 +148,31 @@ export function InputPanel({
       ? 'Keine nutzbaren historischen Jahre'
       : `${historicalValidYears[0]}-${historicalValidYears.at(-1)}, ${historicalValidYears.length} Beobachtungen`
 
+  const summaryFor = (section: FlowSection): string => {
+    if (section === 'annahmen') return validYearLabel
+    const found = sections.find(([id]) => id === section)
+    return (found?.[2] ?? '').replaceAll('NaN', 'offen')
+  }
+  const tabStatus = (tabId: InputTabId): string => {
+    const tabSections = inputTabs.find(tab => tab.id === tabId)?.sections ?? []
+    const relevant = issues.filter(issue => tabSections.includes(issue.section))
+    if (relevant.some(issue => issue.kind === 'invalid')) return 'Prüfen'
+    if (relevant.length > 0) return 'Offen'
+    return 'Vollständig'
+  }
+  const tabSummary = (tabId: InputTabId): string => {
+    const tabSections = inputTabs.find(tab => tab.id === tabId)?.sections ?? []
+    return tabSections.map(summaryFor).join(' · ')
+  }
+  const handleIssueClick = (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
+    event.preventDefault()
+    const tab = tabForSection(issue.section)
+    if (tab) setActiveTab(tab)
+    const fallback = issue.section === 'vermoegen' ? 'portfolio-add' : issue.section
+    focusField(issue.fieldId, fallback)
+    if (tab) window.setTimeout(() => focusField(issue.fieldId, fallback), 0)
+  }
+
   return (
     <section className="panel input-panel" aria-labelledby="inputs-title">
       <div className="panel-heading">
@@ -142,87 +185,109 @@ export function InputPanel({
         </button>
       </div>
 
-      <nav className="flow-navigation" aria-label="Ruhestandsplanung">
-        {sections.map(([id, label]) => <a key={id} href={`#${id}`} onClick={event => { event.preventDefault(); focusField(id) }}>{label}</a>)}
-      </nav>
-      {issues.length > 0 && <div className="validation-summary" role="status"><p>Bitte ergänze offene Angaben oder prüfe markierte Werte.</p><ul>{issues.map((issue, index) => <li key={`${issue.code}-${index}`} id={`flow-issue-${index}`}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); focusField(issue.fieldId, issue.section === 'vermoegen' ? 'portfolio-add' : issue.section) }}>{issue.kind === 'missing' ? 'Offen' : 'Prüfen'}: {issue.message}</a></li>)}</ul></div>}
+      <div className="input-tabs" role="tablist" aria-label="Eingabebereiche">
+        {inputTabs.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`input-tab-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            aria-controls={`input-tabpanel-${tab.id}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <span className="tab-title">{tab.label} <span className="section-status">{tabStatus(tab.id)}</span></span>
+            <span className="tab-summary">{tabSummary(tab.id)}</span>
+          </button>
+        ))}
+      </div>
+      {issues.length > 0 && <div className="validation-summary" role="status"><p>Bitte ergänze offene Angaben oder prüfe markierte Werte.</p><ul>{issues.map((issue, index) => <li key={`${issue.code}-${index}`} id={`flow-issue-${index}`}><a href={`#${issue.fieldId}`} onClick={event => handleIssueClick(event, issue)}>{issue.kind === 'missing' ? 'Offen' : 'Prüfen'}: {issue.message}</a></li>)}</ul></div>}
       {usesJstSource && <p className="source-warning">JST-Quellen: nur nicht kommerzielle Nutzung.</p>}
       {input.retirementInsurance?.rates && Object.values(input.retirementInsurance.rates).some(v => v !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter den Rechenannahmen prüfen.</p>}
       <div className="input-grid">
-        <section id="zeitplan" className="flow-section" tabIndex={-1}>{heading('zeitplan')}
-          <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onStreamChange={onRetirementIncomeStreamChange} onTransitionChange={onTransitionChange} />
-        </section>
-        <section id="ausgaben" className="flow-section" tabIndex={-1}>{heading('ausgaben')}
-          <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
-        </section>
-        <section id="einkommen" className="flow-section" tabIndex={-1}>{heading('einkommen')}
-        <RetirementIncomeStreamsSection
-          input={input}
-          insurance={input.retirementInsurance}
-          streams={retirementIncomeStreams}
-          onUpdate={onRetirementIncomeStreamChange}
-          onAdd={onRetirementIncomeStreamAdd}
-          onRemove={onRetirementIncomeStreamRemove}
-        />
+        <div role="tabpanel" id="input-tabpanel-plan" aria-labelledby="input-tab-plan" className="input-tabpanel" hidden={activeTab !== 'plan'}>
+          <section id="zeitplan" className="flow-section" tabIndex={-1}>{heading('zeitplan')}
+            <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onStreamChange={onRetirementIncomeStreamChange} onTransitionChange={onTransitionChange} />
+          </section>
+          <section id="ausgaben" className="flow-section" tabIndex={-1}>{heading('ausgaben')}
+            <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
+          </section>
+          <section id="einkommen" className="flow-section" tabIndex={-1}>{heading('einkommen')}
+          <RetirementIncomeStreamsSection
+            input={input}
+            insurance={input.retirementInsurance}
+            streams={retirementIncomeStreams}
+            onUpdate={onRetirementIncomeStreamChange}
+            onAdd={onRetirementIncomeStreamAdd}
+            onRemove={onRetirementIncomeStreamRemove}
+          />
 
-        </section>
-        <section id="vermoegen" className="flow-section" tabIndex={-1}>{heading('vermoegen')}
-          <SavingsSection input={input} errors={errors} onChange={onChange} />
-        <PortfolioBucketSection
-          buckets={portfolioBuckets}
-          total={calculatePortfolioBucketTotal(portfolioBuckets)}
-          allocation={allocation}
-          error={portfolioBucketError ?? allocationError}
-          onUpdate={onPortfolioBucketChange}
-          onAdd={onPortfolioBucketAdd}
-          onRemove={onPortfolioBucketRemove}
-        />
+          </section>
+        </div>
+        <div role="tabpanel" id="input-tabpanel-vermoegen" aria-labelledby="input-tab-vermoegen" className="input-tabpanel" hidden={activeTab !== 'vermoegen'}>
+          <section id="vermoegen" className="flow-section" tabIndex={-1}>{heading('vermoegen')}
+            <SavingsSection input={input} errors={errors} onChange={onChange} />
+          <PortfolioBucketSection
+            buckets={portfolioBuckets}
+            total={calculatePortfolioBucketTotal(portfolioBuckets)}
+            allocation={allocation}
+            error={portfolioBucketError ?? allocationError}
+            onUpdate={onPortfolioBucketChange}
+            onAdd={onPortfolioBucketAdd}
+            onRemove={onPortfolioBucketRemove}
+          />
 
-        </section>
-        <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
-          <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} />
-        </section>
-        <details id="annahmen" className="flow-section"><summary>Rechenannahmen <span className="section-status">{sectionStatus(issues, 'annahmen')}</span></summary>
-        <InflationSourceSection
-          input={input}
-          errors={errors}
-          inflationSource={inflationSource}
-          inflationOptions={inflationOptions}
-          selectedInflationSourceId={historical.inflationSourceId}
-          onChange={onChange}
-          onInflationSourceChange={onInflationSourceChange}
-        />
+          </section>
+        </div>
+        <div role="tabpanel" id="input-tabpanel-versicherung" aria-labelledby="input-tab-versicherung" className="input-tabpanel" hidden={activeTab !== 'versicherung'}>
+          <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
+            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} />
+          </section>
+        </div>
+        <div role="tabpanel" id="input-tabpanel-annahmen" aria-labelledby="input-tab-annahmen" className="input-tabpanel" hidden={activeTab !== 'annahmen'}>
+          <section id="annahmen" className="flow-section" tabIndex={-1}>
+            <header><h3>Rechenannahmen <span className="section-status">{sectionStatus(issues, 'annahmen')}</span></h3><p>{validYearLabel}</p></header>
+          <InflationSourceSection
+            input={input}
+            errors={errors}
+            inflationSource={inflationSource}
+            inflationOptions={inflationOptions}
+            selectedInflationSourceId={historical.inflationSourceId}
+            onChange={onChange}
+            onInflationSourceChange={onInflationSourceChange}
+          />
 
-        <fieldset className="wide-fieldset source-overview">
-          <legend>Renditequellen und Details</legend>
-          <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
-            <span>{validYearLabel}</span>
-            <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>
-            <span>Stichprobe mit Zurücklegen</span>
-            {usesJstSource ? <span>JST: nicht kommerziell</span> : null}
-          </div>
-          {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
-            <p className="source-warning">Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil sein.</p>
-          ) : null}
-          {hasHistoricalSource && hasSyntheticSource ? (
-            <p className="source-mixed-note">Gemischte Quellen: Historische Anlagen bestimmen den gemeinsamen Jahrespool; synthetische Anlagen ziehen separat und verkleinern die historische Überlappung nicht.</p>
-          ) : null}
-          <details className="method-details source-overview-details">
-            <summary>Ausgewählte Quellen im Detail</summary>
-            <div className="historical-mode-note"><strong>Historischer Jahres-Bootstrap:</strong> Die Simulation mischt ganze Kalenderjahre aus den gewählten Quellen und zeigt Bandbreiten statt eines einzelnen Planwerts. Historische Aktien, Anleihen und Cash teilen sich dasselbe gezogene Jahr; synthetische Quellen laufen als eigene What-if-Annahmen mit.</div>
-            <div className="source-detail-grid">
-              {selectedReturnSources.map(({ id, label, source }) => source ? <ReturnSourceCard key={id} label={label} source={source} /> : null)}
-              {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
+          <fieldset className="wide-fieldset source-overview">
+            <legend>Renditequellen und Details</legend>
+            <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
+              <span>{validYearLabel}</span>
+              <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>
+              <span>Stichprobe mit Zurücklegen</span>
+              {usesJstSource ? <span>JST: nicht kommerziell</span> : null}
             </div>
-            <EtfProfileCatalog selectedSourceIds={selectedReturnSources.map(({ source }) => source?.id ?? '')} />
-            <h3>Methode und Grenzen</h3>
-            <p>Historische Quellen ziehen Jahre mit Zurücklegen: Dasselbe Jahr kann in einem Verlauf mehrfach vorkommen. Historische Quellen teilen sich dabei das gezogene Kalenderjahr, damit die Jahresbeziehungen zwischen Renditen und Inflation erhalten bleiben.</p>
-            <p>Synthetische Quellen ziehen separat je Anlageklasse und reduzieren die historische Überlappung nicht. Die Bandbreite ist kein Backtest eines konkreten Zeitraums und keine Prognose. Sie ist ein Proxy, nicht die exakte Rendite eines bestimmten ETF, Fonds oder EUR-Anlegers.</p>
-          </details>
-        </fieldset>
-          <InsuranceRateAssumptions insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} />
-          <AssumptionsPanel />
-        </details>
+            {historicalValidYears.length < HISTORICAL_MINIMUM_OBSERVATIONS ? (
+              <p className="source-warning">Warnung: Unter {HISTORICAL_MINIMUM_OBSERVATIONS} Beobachtungen können Bootstrap-Ergebnisse instabil sein.</p>
+            ) : null}
+            {hasHistoricalSource && hasSyntheticSource ? (
+              <p className="source-mixed-note">Gemischte Quellen: Historische Anlagen bestimmen den gemeinsamen Jahrespool; synthetische Anlagen ziehen separat und verkleinern die historische Überlappung nicht.</p>
+            ) : null}
+            <details className="method-details source-overview-details">
+              <summary>Ausgewählte Quellen im Detail</summary>
+              <div className="historical-mode-note"><strong>Historischer Jahres-Bootstrap:</strong> Die Simulation mischt ganze Kalenderjahre aus den gewählten Quellen und zeigt Bandbreiten statt eines einzelnen Planwerts. Historische Aktien, Anleihen und Cash teilen sich dasselbe gezogene Jahr; synthetische Quellen laufen als eigene What-if-Annahmen mit.</div>
+              <div className="source-detail-grid">
+                {selectedReturnSources.map(({ id, label, source }) => source ? <ReturnSourceCard key={id} label={label} source={source} /> : null)}
+                {inflationSource ? <InflationSourceCard source={inflationSource} /> : null}
+              </div>
+              <EtfProfileCatalog selectedSourceIds={selectedReturnSources.map(({ source }) => source?.id ?? '')} />
+              <h3>Methode und Grenzen</h3>
+              <p>Historische Quellen ziehen Jahre mit Zurücklegen: Dasselbe Jahr kann in einem Verlauf mehrfach vorkommen. Historische Quellen teilen sich dabei das gezogene Kalenderjahr, damit die Jahresbeziehungen zwischen Renditen und Inflation erhalten bleiben.</p>
+              <p>Synthetische Quellen ziehen separat je Anlageklasse und reduzieren die historische Überlappung nicht. Die Bandbreite ist kein Backtest eines konkreten Zeitraums und keine Prognose. Sie ist ein Proxy, nicht die exakte Rendite eines bestimmten ETF, Fonds oder EUR-Anlegers.</p>
+            </details>
+          </fieldset>
+            <InsuranceRateAssumptions insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} />
+            <AssumptionsPanel />
+          </section>
+        </div>
       </div>
     </section>
   )

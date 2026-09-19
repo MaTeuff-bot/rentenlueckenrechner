@@ -64,12 +64,12 @@ function renderInputPanel(
       onReset={options.onReset ?? vi.fn()}
     />,
   )
-  fireEvent.click(screen.getAllByText(/Rechenannahmen/, { selector: 'summary' })[0])
 }
 
 describe('InputPanel return source UX', () => {
   it('shows bundled ETF metadata and offers both ETFs as return sources', () => {
     renderInputPanel()
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     expect(screen.queryByText('Ausgewählte ETF-Steckbriefe')).not.toBeInTheDocument()
     expect(screen.queryByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).not.toBeInTheDocument()
@@ -84,6 +84,7 @@ describe('InputPanel return source UX', () => {
 
   it('renders selected source details with source, license, and caveat information', () => {
     renderInputPanel()
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
 
     expect(screen.getByRole('group', { name: 'Renditequellen und Details' })).toBeInTheDocument()
     expect(screen.getByText('Ausgewählte Quellen im Detail')).toBeInTheDocument()
@@ -98,6 +99,7 @@ describe('InputPanel return source UX', () => {
 
   it('shows ETF cost treatment and adjusted-close caveats in selected source details', () => {
     renderInputPanel(undefined, { etfEquity: true })
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
 
     expect(screen.getByText('Ausgewählte ETF-Steckbriefe')).toBeInTheDocument()
     expect(screen.getByText('iShares MSCI ACWI UCITS ETF USD (Acc)')).toBeInTheDocument()
@@ -122,6 +124,7 @@ describe('InputPanel return source UX', () => {
 
   it('explains the bootstrap method with stable user-visible phrases', () => {
     renderInputPanel()
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
 
     fireEvent.click(screen.getByText('Methode und Grenzen'))
 
@@ -145,6 +148,7 @@ describe('InputPanel return source UX', () => {
 
   it('shows synthetic return sources as per-asset options', () => {
     renderInputPanel()
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     expect(screen.getAllByRole('option', { name: 'Aktien — Synthetisch: Aktien (7 % Erwartung, 18 % Volatilität)' })).toHaveLength(3)
     expect(screen.getAllByRole('option', { name: 'Anleihen — Synthetisch: Anleihen (3 % Erwartung, 7 % Volatilität)' })).toHaveLength(3)
@@ -153,6 +157,7 @@ describe('InputPanel return source UX', () => {
 
   it('shows one inflation source selector without nominal return inputs', () => {
     renderInputPanel()
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
 
     expect(screen.getByRole('group', { name: 'Inflation' })).toHaveClass('wide-fieldset')
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Historisch: Deutschland CPI Inflation, 1950-2020')
@@ -168,6 +173,7 @@ describe('InputPanel return source UX', () => {
     renderInputPanel({
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
     })
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
 
     expect(screen.getByLabelText('Inflationsquelle')).toHaveDisplayValue('Manuell: feste Inflation (2 %)')
     expect(inputById('annualInflationRate')).toBeInTheDocument()
@@ -181,11 +187,31 @@ describe('InputPanel return source UX', () => {
       allocationError: 'Die Aufteilung muss zusammen 100 % ergeben.',
       onReset,
     })
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     expect(screen.getAllByText('Die Aufteilung muss zusammen 100 % ergeben.')).not.toHaveLength(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eingaben zurücksetzen' }))
     expect(onReset).toHaveBeenCalledOnce()
+  })
+
+  it('switches task-focused tabs and shows both portfolio blocks on Vermögen', () => {
+    renderInputPanel()
+
+    expect(screen.getByRole('tab', { name: /Persönlicher Plan/ })).toHaveAttribute('aria-selected', 'true')
+    expect(document.getElementById('zeitplan')).toBeVisible()
+    expect(document.getElementById('vermoegen')).not.toBeVisible()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
+    expect(screen.getByRole('tab', { name: /Vermögen/ })).toHaveAttribute('aria-selected', 'true')
+    expect(document.getElementById('vermoegen')).toBeVisible()
+    expect(document.getElementById('zeitplan')).not.toBeVisible()
+    expect(screen.getByText('Was ich besitze')).toBeVisible()
+    expect(screen.getByText('Wie ich anlegen will')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))
+    expect(screen.getByRole('group', { name: 'Inflation' })).toBeVisible()
+    expect(document.getElementById('vermoegen')).not.toBeVisible()
   })
 })
 
