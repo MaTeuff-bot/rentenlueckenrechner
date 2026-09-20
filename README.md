@@ -80,6 +80,10 @@ npm run build       # tsc -b && vite build
 - Verschachtelte Git-Worktrees niemals anlegen oder committen: `.worktrees/` ist in `.gitignore` und `eslint.config.js` ignoriert. Eine verschachtelte `tsconfig.json` stört die Projekt-Auflösung von typescript-eslint für das gesamte Repo (historische Ursache: 194 Parsing-Fehler auf ansonsten sauberem Baum).
 - Reproduzierbare Browser-Verifikationen ausgelieferter Features liegen unter `docs/verification/`.
 
+### Dependabot
+
+Dependabot stellt wöchentlich (Mo 07:00, Europe/Berlin) Gruppen-PRs für npm und GitHub Actions; Sicherheitsupdates kommen einzeln. Alle PRs laufen durch denselben CI-Gate (Lint, Tests, Build).
+
 ## Codeübersicht
 
 Modulgrenzen und Zonenzuständigkeiten: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
