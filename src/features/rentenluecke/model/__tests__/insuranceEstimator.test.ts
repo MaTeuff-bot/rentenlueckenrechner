@@ -4,6 +4,8 @@ import { indexedContributionThresholds } from '../contributions/rules2026'
 import { assessCapitalIncome, calculateVorabpauschale, createEstimatorState,
   simulateEstimatorYear, withdrawProportionally, type EstimatorBucket, type EstimatorState,
   type EstimatorYearInput } from '../capitalIncome/insuranceEstimator'
+import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
+import { assessCore } from '../tax/pureCore'
 
 const fund = (value: number, id = 'fund'): EstimatorBucket => ({ id, value, eligibility: 'accumulating-equity-fund' })
 const bank = (value: number, id = 'bank'): EstimatorBucket => ({ id, value, eligibility: 'ordinary-bank-deposit' })
@@ -372,5 +374,85 @@ describe('aggregate and intermediate monetary range regression', () => {
     expect(() => simulateEstimatorYear(s, year(s, overrides), callback)).toThrow()
     expect(callback).not.toHaveBeenCalled()
     expect(s).toEqual(snapshot)
+  })
+})
+
+describe('accumulation Umschichtung tax (slice 1b)', () => {
+  it('leaves small rebalancing gains untaxed below the scaled allowance (hand-computed)', () => {
+    // Fund 1,000 (cost 500) + bank 1,000, no VP history, basis 0 → VP 0.
+    // Fund +100% → 2,000; bank 0% → 1,000; total 3,000; targets 50/50 → fund sale 500.
+    // Movement gain: 500 − 500×(500/2,000) = 500 − 125 = 375.
+    // Tax base: 375 × 0.7 = 262.5 < 1,000 → tax 0, no funding sale.
+    const s = initial([fund(1000), bank(1000)], 500)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      buckets: [
+        { id: 'fund', totalReturnRate: 1, contribution: 0, targetWeight: 0.5 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0, targetWeight: 0.5 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(375, 9)
+    expect(r.sale.adjustedFundSaleGain).toBeCloseTo(0, 9)
+    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(262.5, 9)
+    expect(r.withdrawalTax!.sparerpauschbetragApplied).toBeCloseTo(262.5, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.paidWithdrawal).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(3_000, 9)
+    expect(r.closingCapital).toBeCloseTo(r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal, 9)
+  })
+
+  it('funds large rebalancing gains through the same tax path with a scaled allowance', () => {
+    // Fund 60,000 (cost 30,000) + bank 40,000; fund +50%, bank +2%; targets 60/40.
+    // The converged trial funds the tax itself, so the sale gain joins the movement gain.
+    // Tax identity (same assessCore path): taxable = (sale + movement + VP) × 0.7.
+    const s = initial([fund(60000), bank(40000)], 30000)
+    const allowance = scaledSparerpauschbetrag(1.05)
+    expect(allowance).toBeCloseTo(1_050, 9)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: allowance },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.5, contribution: 0, targetWeight: 0.6 },
+        { id: 'bank', totalReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThan(0)
+    // Same-path check: engine tax equals hand-applied assessCore on the realized gains.
+    const expected = assessCore(
+      r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
+      r.receivedVorabpauschale, 0, allowance, true)
+    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(expected.taxableWithdrawal, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
+    // Funding: the single paid sale covers the tax (gap and insurance are zero).
+    expect(r.paidWithdrawal).toBeCloseTo(r.withdrawalTax!.capitalIncomeTax, 6)
+    expect(r.requiredWithdrawal).toBeCloseTo(r.withdrawalTax!.capitalIncomeTax, 6)
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal, 9)
+  })
+
+  it('offsets an opening loss before the scaled allowance on rebalancing gains', () => {
+    const s = { ...initial([fund(60000), bank(40000)], 30000), simulatedLossCarryforward: 4_000 }
+    const allowance = scaledSparerpauschbetrag(1.05)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 4_000, allowanceAvailable: allowance },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.5, contribution: 0, targetWeight: 0.6 },
+        { id: 'bank', totalReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    const expected = assessCore(
+      r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
+      r.receivedVorabpauschale, 4_000, allowance, true)
+    expect(r.withdrawalTax!.taxableBase).toBeCloseTo(expected.taxableBase, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThanOrEqual(0)
   })
 })

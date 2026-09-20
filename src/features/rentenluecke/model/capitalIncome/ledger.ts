@@ -1,4 +1,5 @@
 import { createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
+import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { capitalMode } from './setup'
 import { calculateRetirementIncomeForYear } from '../retirementIncomeStreams'
 import { createInflationFactorResolver } from '../simulateAccumulation'
@@ -37,13 +38,16 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const rates = path ? path[index] : defaultReturns
     if (!rates || new Set(rates.map(r => r.id)).size !== rates.length || rates.some(r => !buckets.some(b => b.id === r.id)))
       throw new Error(`Ungültiger Renditepfad im Alter ${age}: Anlagen müssen eindeutig zugeordnet sein.`)
+    // Abgeltungsteuer on realized fund gains + received Vorabpauschale, both for
+    // retirement Entnahmen and accumulation Umschichtungen (same assessCore path).
+    // Single-source loss input: the estimator opening state's simulated loss
+    // carryforward, shared across accumulation and retirement years. The allowance
+    // is the inflation-scaled Sparerpauschbetrag (base 1,000 EUR × factor).
+    const allowanceAvailable = scaledSparerpauschbetrag(inflationFactor)
     const result = simulateEstimatorYear(state, {
       projectedBasisRate: setup.projectedBasisRate, expenseAllowance: 51 * inflationFactor,
       spendingLessOtherIncome: desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0),
-      // Gap-withdrawal flow only: retirement rows assess Abgeltungsteuer on the
-      // realized fund gains + received Vorabpauschale (single-source loss input).
-      // The allowance is a nominal statutory amount (no inflation scaling).
-      ...(!accumulation ? { withdrawalTax: { openingLossCarryforward: state.simulatedLossCarryforward } } : {}),
+      withdrawalTax: { openingLossCarryforward: state.simulatedLossCarryforward, allowanceAvailable },
       buckets: buckets.map((b, n) => {
         const r = rates.find(r => r.id === b.id)
         if (!r && b.value > 0) throw new Error(`Fehlender Renditepfad: ${b.name}`)
@@ -53,7 +57,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     if (!result.closingState) throw new Error(`Kapitalbasis: numerischer Finanzierungsfehler im Alter ${age}; Restabweichung ${result.residual} €.`)
     const income = accumulation ? null : incomeFor(result.assessment.annualAssessment)
     const closingCapital = result.closingCapital
-    const gapWithdrawal = result.requiredWithdrawal
+    // Retirement gap is the required withdrawal (net spending gap + insurance + tax).
+    // Accumulation has no spending gap: it stays zero and the rebalancing tax is a
+    // standalone outflow funded from the portfolio (paidWithdrawal covers it).
+    const gapWithdrawal = accumulation ? 0 : result.requiredWithdrawal
     return { capitalAssessment: result, insurance: income?.insurance,
       yearIndex: index, ageStart: age, ageEnd: age + 1, phase: accumulation ? 'accumulation' : 'retirement', inflationFactor,
       nominalReturnRate: result.openingCapital ? result.investmentReturn / result.openingCapital : rates.reduce((s, r) => s + r.totalReturnRate * weights[buckets.findIndex(b => b.id === r.id)], 0),
@@ -63,11 +70,12 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
       healthInsurance: income?.kv ?? 0, careInsurance: income?.pv ?? 0, portfolioContributionBase: income?.portfolioBase ?? 0,
       retirementIncomeNet: income?.net ?? 0, surplusIncome: Math.max(0, (income?.net ?? 0) - desiredSpending),
       gapWithdrawal, gapWithdrawalToday: gapWithdrawal / inflationFactor,
-      ...(!accumulation && result.withdrawalTax ? {
+      ...(result.withdrawalTax ? {
         capitalIncomeTax: result.withdrawalTax.capitalIncomeTax,
         taxableWithdrawal: result.withdrawalTax.taxableWithdrawal,
         sparerpauschbetragApplied: result.withdrawalTax.sparerpauschbetragApplied,
         // Tax (and insurance) funded first; the gap receives the remainder.
+        // In accumulation years the gap is zero, so this equals the funded remainder (usually zero).
         netGapWithdrawal: Math.max(0, result.paidWithdrawal - result.insurance.kv - result.insurance.pv - result.withdrawalTax.capitalIncomeTax),
       } : {}),
       closingCapital, closingCapitalToday: closingCapital / factor(index + 1),

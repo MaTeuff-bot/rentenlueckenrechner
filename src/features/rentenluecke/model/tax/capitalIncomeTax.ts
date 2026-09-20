@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { assessCore } from './pureCore'
 
-// Kapitalertragsteuer auf Rentenphasen-Entnahmen (Abgeltungsteuer + Solidaritätszuschlag).
+// Kapitalertragsteuer auf Entnahmen im Ruhestand und auf Umschichtungsgewinne der
+// Ansparphase (Abgeltungsteuer + Solidaritätszuschlag).
 // Rule snapshot: docs/kapitalertragsteuer-rules-2026.md (kapitalertragsteuer-2026-reviewed-2026-09-20).
 // Pattern: docs/insurance-capital-estimator.md — zod state, pure functions,
 // scope declaration, disclosures. Framework-free: no React/DOM.
@@ -9,7 +10,7 @@ import { assessCore } from './pureCore'
 export const TAX_SCOPE_DECLARATION = 'single-person-domestic-private-post-2017-no-special-events' as const
 export const TAX_ALLOWANCE_MODE = 'single-sparerpauschbetrag' as const
 
-/** §20(9) EStG: Sparerpauschbetrag, single assessment, per calendar year, use-it-or-lose-it. */
+/** §20(9) EStG: Sparerpauschbetrag, single assessment, per calendar year, use-it-or-lose-it. Base amount; the effective annual allowance scales with scenario inflation (planning assumption). */
 export const SPARERPAUSCHBETRAG_SINGLE = 1_000
 /** §32d EStG: flat rate on taxable capital income; Abgeltungswirkung, no Günstigerprüfung. */
 export const ABGELTUNGSTEUER_RATE = 0.25
@@ -23,12 +24,23 @@ export const TEILFREISTELLUNG_ORDINARY_DEPOSIT = 0
 const money = z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const signed = z.number().finite().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER)
 
+const inflationFactorSchema = z.number().finite().nonnegative()
+
+/** Effective annual Sparerpauschbetrag for a model year: base 1,000 EUR scaled by
+ * the scenario's cumulative inflation factor. Planning assumption — the statute
+ * fixes nominal amounts; scaling keeps the allowance's real value constant.
+ * Schemas are module-level so hot paths (capital search, bootstrap trials) reuse
+ * them instead of rebuilding per call. */
+export function scaledSparerpauschbetrag(inflationFactor: number): number {
+  return money.parse(SPARERPAUSCHBETRAG_SINGLE * inflationFactorSchema.parse(inflationFactor))
+}
+
 export const taxDisclosures = [
   'Kirchensteuer wird nicht modelliert (kein Konfessionsmerkmal im Ein-Personen-Inlandsumfang).',
   'Günstigerprüfung gegen den persönlichen Einkommensteuersatz wird nicht modelliert (immer 25 % + Solidaritätszuschlag).',
   'Verlustverrechnung nur in einem einzigen Kapitalertrag-Verlusttopf; kein getrennter Aktien-/Aktienfonds-Verlusttopf.',
-  'Sparerpauschbetrag nur für Einzelveranlagung (1.000 EUR/Jahr, nominal, ohne Inflationsanpassung); kein Zusammenveranlagungs-Betrag.',
-  'Steuer auf Kapitalerträge außerhalb der Entnahmefinanzierung (z. B. Thesaurierung ohne Entnahme, Ansparphase) wird nicht berechnet oder finanziert.',
+  'Sparerpauschbetrag nur für Einzelveranlagung (Basis 1.000 EUR/Jahr, mit der Szenario-Inflationsrate skaliert als Planungsannahme; gesetzlich nominal); kein Zusammenveranlagungs-Betrag.',
+  'Umschichtungsgewinne der Ansparphase werden nur bei automatischer Kapitalbasis besteuert und aus dem Portfolio finanziert; bei manueller Kapitalbasis bleibt die Steuer eine Entnahme-Näherung ohne Ansparphasen-Modellierung.',
   'Gleichjährige Steuerfinanzierung ist eine Planungsnäherung; keine Abbildung von Vorauszahlungen, Steuerbescheid-Timing oder Abzinsung.',
 ] as const
 
@@ -41,7 +53,8 @@ export const manualApproximationDisclosure =
 const taxStateSchema = z.object({
   scope: z.literal(TAX_SCOPE_DECLARATION),
   allowanceMode: z.literal(TAX_ALLOWANCE_MODE),
-  allowanceAnnual: z.literal(SPARERPAUSCHBETRAG_SINGLE),
+  /** Effective annual allowance for the current model year (base scaled by inflation). */
+  allowanceAnnual: money,
   lossCarryforward: money,
 })
 export type CapitalIncomeTaxState = z.infer<typeof taxStateSchema>
@@ -52,13 +65,20 @@ export function createTaxState(input: {
   scope: 'single-person-domestic-private-post-2017-no-special-events'
   allowanceMode: 'single-sparerpauschbetrag'
   openingLossCarryforward?: number
+  /** Effective annual allowance override (inflation-scaled year amount). Defaults to the base. */
+  allowanceAnnual?: number
+  /** Convenience: derive the effective allowance as base × factor instead of passing it directly. */
+  inflationFactor?: number
 }): CapitalIncomeTaxState {
   z.literal(TAX_SCOPE_DECLARATION).parse(input.scope)
   z.literal(TAX_ALLOWANCE_MODE).parse(input.allowanceMode)
+  const allowanceAnnual = input.allowanceAnnual ?? (input.inflationFactor !== undefined
+    ? scaledSparerpauschbetrag(input.inflationFactor)
+    : SPARERPAUSCHBETRAG_SINGLE)
   return taxStateSchema.parse({
     scope: input.scope,
     allowanceMode: input.allowanceMode,
-    allowanceAnnual: SPARERPAUSCHBETRAG_SINGLE,
+    allowanceAnnual,
     lossCarryforward: input.openingLossCarryforward ?? 0,
   })
 }
@@ -80,7 +100,8 @@ const assessmentSchema = z.object({
 
 /** Per-year Abgeltungsteuer assessment. Order per snapshot: Teilfreistellung on
  * (sale gain + VP income) → loss carryforward offset → Sparerpauschbetrag
- * (consumed in-year, never refunded across years) → 25% + 5.5% Soli. */
+ * (effective annual amount, base scaled by inflation; consumed in-year, never
+ * refunded across years) → 25% + 5.5% Soli. */
 export function assessCapitalIncomeTax(input: z.input<typeof assessmentSchema>) {
   const p = assessmentSchema.parse(input)
   const result = assessCore(
@@ -103,7 +124,8 @@ export function assessCapitalIncomeTax(input: z.input<typeof assessmentSchema>) 
 export type CapitalIncomeTaxAssessment = ReturnType<typeof assessCapitalIncomeTax>
 
 /** One immutable assessment year: pure assessment plus the next rollforward state.
- * The annual allowance never rolls across years; only the loss carryforward does. */
+ * The annual allowance never rolls across years (callers set the scaled amount per
+ * year via state); only the loss carryforward does. */
 export function assessYearTax(
   state: CapitalIncomeTaxState,
   income: { fundSaleGain: number; vorabpauschaleIncome: number; incomeClass: z.infer<typeof incomeClassSchema> },

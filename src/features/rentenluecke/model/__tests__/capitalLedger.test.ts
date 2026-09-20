@@ -125,7 +125,12 @@ describe('integrated capital assessment ledger', () => {
         expect((row.netGapWithdrawal ?? 0) + insurance + (row.capitalIncomeTax ?? 0)).toBeCloseTo(row.capitalAssessment!.paidWithdrawal, 5)
         expect(row.capitalIncomeTax ?? 0).toBeGreaterThan(0)
       } else {
-        expect(row.capitalIncomeTax).toBeUndefined()
+        // Slice 1b: accumulation rows carry the same tax fields (Umschichtung);
+        // the paid sale funds tax only (gap is zero).
+        expect(row.capitalIncomeTax).toBeDefined()
+        expect(row.taxableWithdrawal).toBeDefined()
+        expect(row.sparerpauschbetragApplied).toBeDefined()
+        expect(row.capitalAssessment!.paidWithdrawal).toBeCloseTo((row.capitalIncomeTax ?? 0) + row.unfundedWithdrawal, 5)
       }
       if (row.ageStart >= 67) expect(row.portfolioContributionBase).toBe(0)
     }

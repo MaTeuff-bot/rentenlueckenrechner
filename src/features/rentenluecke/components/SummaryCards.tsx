@@ -55,9 +55,10 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
     result.retirementRows.length > 0
       ? stochasticSummary.rows.find((row) => row.ageStart >= result.retirementRows[0].ageStart && row.p50CapitalToday <= 0)
       : null
-  const totalCapitalIncomeTax = result.retirementRows.reduce((sum, row) => sum + (row.capitalIncomeTax ?? 0), 0)
-  const taxedYears = result.retirementRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
-  const averageCapitalIncomeTax = result.retirementRows.length > 0 ? totalCapitalIncomeTax / result.retirementRows.length : 0
+  const totalCapitalIncomeTax = result.rows.reduce((sum, row) => sum + (row.capitalIncomeTax ?? 0), 0)
+  const taxedRetirementYears = result.retirementRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
+  const taxedAccumulationYears = result.accumulationRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
+  const averageCapitalIncomeTax = result.retirementRows.length > 0 ? totalCapitalIncomeTax / result.rows.length : 0
   const usesHoldingsBreakdown = result.retirementRows.some((row) => row.capitalAssessment !== undefined)
 
   return (
@@ -95,9 +96,9 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           />
         </article>
         <article className="result-card">
-          <span>Kapitalertragsteuer im Ruhestand (gesamt{result.retirementRows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
+          <span>Kapitalertragsteuer Entnahme + Umschichtung (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
           <strong>{formatApproxCurrency(totalCapitalIncomeTax, 50)}</strong>
-          <small>{taxedYears} von {result.retirementRows.length} Ruhestandsjahren mit Steuer</small>
+          <small>{taxedRetirementYears} von {result.retirementRows.length} Ruhestandsjahren mit Entnahmesteuer{taxedAccumulationYears > 0 ? `; ${taxedAccumulationYears} von ${result.accumulationRows.length} Ansparjahren mit Umschichtungssteuer` : ''}</small>
         </article>
         <article className="result-card">
           <span>Monatliche Netto-Rentenlücke in heutiger Kaufkraft</span>
@@ -125,7 +126,8 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
       <details className="method-details">
         <summary>Hinweise zur Kapitalertragsteuer</summary>
         <p>
-          Entnahmen im Ruhestand werden nach Abgeltungsteuer (25 % zuzüglich 5,5 % Solidaritätszuschlag) besteuert;
+          Entnahmen im Ruhestand (Entnahme) und Umschichtungsgewinne der Ansparphase bei automatischer Kapitalbasis
+          (Umschichtung) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 % Solidaritätszuschlag) besteuert;
           das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte Beträge bleiben als nicht gedeckte
           Entnahme sichtbar.
         </p>

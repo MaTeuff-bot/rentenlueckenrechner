@@ -34,7 +34,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
               <th>Kapital vor Cashflow</th>
               <th>Einzahlung</th>
               <th>Entnahme für Nettolücke</th>
-              <th>Kapitalertragsteuer</th>
+              <th title="Ruhestand: Entnahmesteuer; Ansparen: Umschichtungssteuer (automatische Kapitalbasis)">Kapitalertragsteuer</th>
               <th>Endkapital</th>
               <th>Endkapital heutige Kaufkraft</th>
               {showDetails ? (
@@ -51,8 +51,9 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Portfolio-Beitragsbasis (kein Einkommen)</th>
                   <th>Verfügbarer Netto-Cashflow</th>
                   <th>Entnahmelücke</th>
-                  <th>Kapitalertragsteuer</th>
-                  <th>Steuerpflichtige Entnahme</th>
+                  <th title="Ruhestand: Entnahme; Ansparen: Umschichtung">Kapitalertragsteuer (Anlass)</th>
+                  <th>Steueranlass</th>
+                  <th>Steuerpflichtige Entnahme / Umschichtung</th>
                   <th>Sparerpauschbetrag angerechnet</th>
                   <th>Nettoentnahme nach Steuer</th>
                   <th>Konsumierter Überschuss</th>
@@ -89,6 +90,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{formatCurrency(row.retirementIncomeNet)}</td>
                     <td>{formatCurrency(row.gapWithdrawal)}</td>
                     <td>{formatCurrency(row.capitalIncomeTax ?? 0)}</td>
+                    <td>{(row.capitalIncomeTax ?? 0) > 0 ? (row.phase === 'accumulation' ? 'Umschichtung' : 'Entnahme') : '—'}</td>
                     <td>{formatCurrency(row.taxableWithdrawal ?? 0)}</td>
                     <td>{formatCurrency(row.sparerpauschbetragApplied ?? 0)}</td>
                     <td>{formatCurrency(row.netGapWithdrawal ?? row.gapWithdrawal)}</td>

@@ -1,6 +1,6 @@
 import { createInflationFactorResolver } from './simulateAccumulation'
 import { calculateRetirementIncomeForYear } from './retirementIncomeStreams'
-import { createTaxState, type CapitalIncomeTaxState } from './tax/capitalIncomeTax'
+import { createTaxState, scaledSparerpauschbetrag, type CapitalIncomeTaxState } from './tax/capitalIncomeTax'
 import { assessCore } from './tax/pureCore'
 import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
@@ -24,7 +24,8 @@ export function estimateScalarWithdrawalGain(input: {
 
 /** Single retirement-year tax assessment on the gain-proportional base.
  * No Teilfreistellung without a holdings breakdown (conservative, disclosed);
- * allowance and loss carryforward roll through the given state. */
+ * the effective allowance is the inflation-scaled Sparerpauschbetrag held in
+ * state.allowanceAnnual; loss carryforward rolls through the given state. */
 export function assessScalarWithdrawalTax(
   state: CapitalIncomeTaxState,
   input: { capitalBeforeCashflow: number; investmentReturn: number; gapWithdrawal: number },
@@ -96,6 +97,8 @@ export function simulateRetirementRows(
     const surplusIncome = Math.max(0, income.net - desiredSpending)
     const nominalReturnRate = getAnnualReturn?.(yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
     const capitalBeforeCashflow = capital + capital * nominalReturnRate
+    // Effective allowance scales with scenario inflation (planning assumption, legally nominal).
+    taxState = { ...taxState, allowanceAnnual: scaledSparerpauschbetrag(inflationFactor) }
     const assessed = assessScalarWithdrawalTax(taxState, {
       capitalBeforeCashflow, investmentReturn: capital * nominalReturnRate, gapWithdrawal,
     })
