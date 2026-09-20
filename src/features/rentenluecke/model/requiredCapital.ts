@@ -1,4 +1,4 @@
-import { fundRetirementYear, simulateRetirementRows } from './simulateRetirement'
+import { assessScalarWithdrawalTax, createRetirementTaxState, fundRetirementYear, simulateRetirementRows } from './simulateRetirement'
 import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
 export const REQUIRED_CAPITAL_EPSILON = 1
@@ -24,13 +24,23 @@ export function calculateRequiredCapitalAtRetirement(
   const rows = ledger ?? simulateRetirementRows(scenario, 0, getAnnualReturn, getAnnualInflation)
   const nominalGap = rows.reduce((sum, row) => sum + row.gapWithdrawal, 0)
   if (nominalGap === 0) return 0
+  const taxTemplate = createRetirementTaxState()
   const survives = (startingCapital: number) => {
     let capital = startingCapital
+    // Immutable rollforward from the shared validated template: fresh loss per path.
+    let taxState = taxTemplate
     for (const row of rows) {
       // Preserve the existing capital-search convention: the selected plan return
       // unless an explicit resolver was supplied, with this path's actual inflation/cashflows.
+      // The hypothetical path reassesses the gain-proportional withdrawal tax each year
+      // (same function as the ledger) so required capital funds gap + tax.
       const rate = getAnnualReturn?.(row.yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
-      const funded = fundRetirementYear(capital, rate, row.gapWithdrawal)
+      const investmentReturn = capital * rate
+      const assessed = assessScalarWithdrawalTax(taxState, {
+        capitalBeforeCashflow: capital + investmentReturn, investmentReturn, gapWithdrawal: row.gapWithdrawal,
+      })
+      taxState = assessed.nextState
+      const funded = fundRetirementYear(capital, rate, row.gapWithdrawal, { capitalIncomeTax: assessed.result.capitalIncomeTax })
       if (funded.depleted) return false
       capital = funded.closingCapital
     }

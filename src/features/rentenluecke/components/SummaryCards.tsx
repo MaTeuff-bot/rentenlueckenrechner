@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react'
-import { formatApproxCurrency } from './format'
+import { manualApproximationDisclosure, taxDisclosures } from '../model/tax/capitalIncomeTax'
+import { formatApproxCurrency, formatCurrency } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
 import type { FlowSection } from '../model/scenarioIssues'
@@ -54,6 +55,10 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
     result.retirementRows.length > 0
       ? stochasticSummary.rows.find((row) => row.ageStart >= result.retirementRows[0].ageStart && row.p50CapitalToday <= 0)
       : null
+  const totalCapitalIncomeTax = result.retirementRows.reduce((sum, row) => sum + (row.capitalIncomeTax ?? 0), 0)
+  const taxedYears = result.retirementRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
+  const averageCapitalIncomeTax = result.retirementRows.length > 0 ? totalCapitalIncomeTax / result.retirementRows.length : 0
+  const usesHoldingsBreakdown = result.retirementRows.some((row) => row.capitalAssessment !== undefined)
 
   return (
     <section aria-labelledby="capital-answer-title">
@@ -90,6 +95,11 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           />
         </article>
         <article className="result-card">
+          <span>Kapitalertragsteuer im Ruhestand (gesamt{result.retirementRows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
+          <strong>{formatApproxCurrency(totalCapitalIncomeTax, 50)}</strong>
+          <small>{taxedYears} von {result.retirementRows.length} Ruhestandsjahren mit Steuer</small>
+        </article>
+        <article className="result-card">
           <span>Monatliche Netto-Rentenlücke in heutiger Kaufkraft</span>
           <strong>{formatApproxCurrency(summary.monthlyGapToday, 50)}</strong>
           <AdjustLink
@@ -112,6 +122,20 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
       ) : (
         <p className="survival-note">Der Median-Verlauf deckt die Entnahmen bis zum Planungshorizont.</p>
       )}
+      <details className="method-details">
+        <summary>Hinweise zur Kapitalertragsteuer</summary>
+        <p>
+          Entnahmen im Ruhestand werden nach Abgeltungsteuer (25 % zuzüglich 5,5 % Solidaritätszuschlag) besteuert;
+          das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte Beträge bleiben als nicht gedeckte
+          Entnahme sichtbar.
+        </p>
+        <ul>
+          {taxDisclosures.map((disclosure) => (
+            <li key={disclosure}>{disclosure}</li>
+          ))}
+          {!usesHoldingsBreakdown ? <li>{manualApproximationDisclosure}</li> : null}
+        </ul>
+      </details>
     </section>
   )
 }

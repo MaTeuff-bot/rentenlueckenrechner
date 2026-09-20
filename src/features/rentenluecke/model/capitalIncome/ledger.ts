@@ -40,6 +40,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const result = simulateEstimatorYear(state, {
       projectedBasisRate: setup.projectedBasisRate, expenseAllowance: 51 * inflationFactor,
       spendingLessOtherIncome: desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0),
+      // Gap-withdrawal flow only: retirement rows assess Abgeltungsteuer on the
+      // realized fund gains + received Vorabpauschale (single-source loss input).
+      // The allowance is a nominal statutory amount (no inflation scaling).
+      ...(!accumulation ? { withdrawalTax: { openingLossCarryforward: state.simulatedLossCarryforward } } : {}),
       buckets: buckets.map((b, n) => {
         const r = rates.find(r => r.id === b.id)
         if (!r && b.value > 0) throw new Error(`Fehlender Renditepfad: ${b.name}`)
@@ -58,7 +62,15 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
       retirementIncomeDeductions: income?.deductions ?? 0, retirementIncomeOtherDeductions: income?.otherDeductions ?? 0,
       healthInsurance: income?.kv ?? 0, careInsurance: income?.pv ?? 0, portfolioContributionBase: income?.portfolioBase ?? 0,
       retirementIncomeNet: income?.net ?? 0, surplusIncome: Math.max(0, (income?.net ?? 0) - desiredSpending),
-      gapWithdrawal, gapWithdrawalToday: gapWithdrawal / inflationFactor, closingCapital, closingCapitalToday: closingCapital / factor(index + 1),
+      gapWithdrawal, gapWithdrawalToday: gapWithdrawal / inflationFactor,
+      ...(!accumulation && result.withdrawalTax ? {
+        capitalIncomeTax: result.withdrawalTax.capitalIncomeTax,
+        taxableWithdrawal: result.withdrawalTax.taxableWithdrawal,
+        sparerpauschbetragApplied: result.withdrawalTax.sparerpauschbetragApplied,
+        // Tax (and insurance) funded first; the gap receives the remainder.
+        netGapWithdrawal: Math.max(0, result.paidWithdrawal - result.insurance.kv - result.insurance.pv - result.withdrawalTax.capitalIncomeTax),
+      } : {}),
+      closingCapital, closingCapitalToday: closingCapital / factor(index + 1),
       depleted: result.status === 'shortfall', unfundedWithdrawal: result.unfundedWithdrawal }
   }
   let state = initial

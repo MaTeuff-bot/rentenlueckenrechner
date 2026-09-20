@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { SPARERPAUSCHBETRAG_SINGLE } from '../tax/capitalIncomeTax'
+import { assessCore } from '../tax/pureCore'
 
 // Insurance capital-income accounting API. See docs/insurance-capital-estimator.md for scope and ordering.
 const money = z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -34,7 +36,7 @@ export const estimatorDisclosures = [
   'Opening accumulated Vorabpauschalen are zero. Omitted existing history can distort estimates, including overstating sale income.',
   'Fund acquisition costs and assessed adjustments are pooled; sales are proportional, not FIFO or selective bucket sales.',
   'Annual receipt and insurance funding are planning approximations, not insurer assessment or billing timing.',
-  'Investment taxes are not calculated or funded; results are not fully after-tax spending power.',
+  'Kapitalertragsteuer auf Entnahmen im Ruhestand (Abgeltungsteuer + Solidaritätszuschlag) wird berechnet und aus dem Portfolio finanziert; Kirchensteuer, Günstigerprüfung und Steuer außerhalb der Entnahmefinanzierung sind nicht enthalten.',
 ] as const
 
 /** Coverage declarations must be explicit; unknown/unsupported assets cannot disappear even at zero value. */
@@ -123,6 +125,13 @@ const yearSchema = z.object({
   provenDeductibleAnnualExpenses: money.optional(),
   tolerance: z.number().finite().positive().max(1).default(0.000001),
   maxIterations: z.number().int().min(1).max(256).default(100),
+  // Kapitalertragsteuer on the withdrawal-funded capital income. Retirement rows only:
+  // accumulation rebalancing gains stay outside the gap-withdrawal flow (disclosed).
+  // Single source for the loss input: the estimator opening state's simulated loss carryforward.
+  withdrawalTax: z.object({
+    openingLossCarryforward: money,
+    allowanceAvailable: money.default(SPARERPAUSCHBETRAG_SINGLE),
+  }).optional(),
 })
 export type EstimatorYearInput = z.input<typeof yearSchema>
 export type InsuranceBurden = { kv: number; pv: number }
@@ -237,8 +246,19 @@ export function simulateEstimatorYear(
     const movement = maintainAllocation(sale)
     const assessment = assessmentForSale(sale, movement)
     const insurance = burdenSchema.parse(insuranceForAnnualAssessment(assessment.annualAssessment))
-    const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv)))
-    return { sale, movement, assessment, insurance, required, residual: withdrawal - required }
+    // Abgeltungsteuer joins the same funding fixed point as insurance: the sale that
+    // funds the gap also funds its own tax, so required covers spending + insurance + tax.
+    // Pure per trial (no balance consumed); residual stays monotone (tax slope < 1).
+    // YearSchema already validated the loss/allowance numbers; the positional pure
+    // core keeps trials allocation-light (no per-trial object parsing).
+    const tax = p.withdrawalTax ? assessCore(
+      sale.adjustedFundSaleGain + movement.adjustedFundSaleGain,
+      receivedVorabpauschale,
+      p.withdrawalTax.openingLossCarryforward,
+      p.withdrawalTax.allowanceAvailable,
+      true) : null
+    const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0)))
+    return { sale, movement, assessment, insurance, tax, required, residual: withdrawal - required }
   }
   // Bracketed solver: no contractivity assumption. Report discontinuous or otherwise
   // unsolved callbacks instead of silently accepting an arbitrary final iteration.
@@ -284,6 +304,7 @@ export function simulateEstimatorYear(
     investmentReturn: signed.parse(investmentReturn), contribution: money.parse(contribution),
     bankInterest, receivedVorabpauschale, pendingVorabpauschale,
     movement: result.movement, sale: result.sale, assessment: result.assessment, insurance: result.insurance,
+    withdrawalTax: result.tax,
     requiredWithdrawal: result.required, paidWithdrawal: result.sale.paid,
     unfundedWithdrawal: Math.max(0, result.required - result.sale.paid),
     closingCapital: closing.buckets.reduce((sum, b) => sum + b.value, 0),
