@@ -1,13 +1,41 @@
+import type { MouseEvent } from 'react'
 import { formatApproxCurrency } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
+import type { FlowSection } from '../model/scenarioIssues'
+
+export type ResultAdjustHandler = (section: FlowSection, fieldId?: string) => void
 
 type SummaryCardsProps = {
   result: SimulationResult
   stochasticSummary: StochasticSimulationSummary
+  onRequestSection?: ResultAdjustHandler
 }
 
-export function SummaryCards({ result, stochasticSummary }: SummaryCardsProps) {
+function AdjustLink({
+  section,
+  fieldId,
+  label,
+  onRequestSection,
+}: {
+  section: FlowSection
+  fieldId: string
+  label: string
+  onRequestSection?: ResultAdjustHandler
+}) {
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onRequestSection) return
+    event.preventDefault()
+    onRequestSection(section, fieldId)
+  }
+  return (
+    <a href={`#${fieldId}`} aria-label={label} onClick={handleClick}>
+      Anpassen
+    </a>
+  )
+}
+
+export function SummaryCards({ result, stochasticSummary, onRequestSection }: SummaryCardsProps) {
   const { summary } = result
   const retirementAge = result.retirementRows[0]?.ageStart ?? result.rows.at(-1)?.ageEnd
   const retirementPercentileRow = stochasticSummary.rows.find((row) => row.ageStart === retirementAge)
@@ -34,18 +62,42 @@ export function SummaryCards({ result, stochasticSummary }: SummaryCardsProps) {
         <article className="result-card result-card-primary">
           <span>Benötigtes Kapital zum Rentenbeginn, heutige Kaufkraft</span>
           <strong>{formatApproxCurrency(requiredCapitalAtRetirementToday)}</strong>
+          <AdjustLink
+            section="vermoegen"
+            fieldId="portfolio-add"
+            label="Benötigtes Kapital anpassen: Vermögen bearbeiten"
+            onRequestSection={onRequestSection}
+          />
         </article>
         <article className="result-card">
           <span>Median-Kapital zum Rentenbeginn (P50)</span>
           <strong>{formatApproxCurrency(displayedProjectedCapital)}</strong>
+          <AdjustLink
+            section="vermoegen"
+            fieldId="monthlyContributionToday"
+            label="Sparrate anpassen: Vermögen bearbeiten"
+            onRequestSection={onRequestSection}
+          />
         </article>
         <article className={`result-card ${hasShortfall ? 'warning-card' : 'success-card'}`}>
           <span>{hasShortfall ? 'Kapital-Lücke zum Rentenbeginn' : 'Median-Überschuss zum Rentenbeginn'}</span>
           <strong>{formatApproxCurrency(hasShortfall ? displayedShortfall : displayedSurplus)}</strong>
+          <AdjustLink
+            section="zeitplan"
+            fieldId="retirementAge"
+            label="Zeitplan anpassen: Rentenalter bearbeiten"
+            onRequestSection={onRequestSection}
+          />
         </article>
         <article className="result-card">
           <span>Monatliche Netto-Rentenlücke in heutiger Kaufkraft</span>
           <strong>{formatApproxCurrency(summary.monthlyGapToday, 50)}</strong>
+          <AdjustLink
+            section="ausgaben"
+            fieldId="monthlyDesiredSpendingToday"
+            label="Gewünschte Ausgaben anpassen: Ausgaben bearbeiten"
+            onRequestSection={onRequestSection}
+          />
         </article>
       </div>
       {firstMedianDepletionRow ? (

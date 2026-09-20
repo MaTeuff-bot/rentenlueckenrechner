@@ -1,4 +1,6 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState, type MouseEvent } from 'react'
+import type { FlowSection } from '../model/scenarioIssues'
+import type { ResultAdjustHandler } from './SummaryCards'
 import {
   buildRiskChips,
   buildScenarioOutcomeRows,
@@ -19,6 +21,30 @@ type ScenarioOutcomePanelProps = {
   result: SimulationResult
   stochasticSummary: StochasticSimulationSummary
   historicalValidYears: number[]
+  onRequestSection?: ResultAdjustHandler
+}
+
+function OutcomeAdjustLink({
+  section,
+  fieldId,
+  label,
+  onRequestSection,
+}: {
+  section: FlowSection
+  fieldId: string
+  label: string
+  onRequestSection?: ResultAdjustHandler
+}) {
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!onRequestSection) return
+    event.preventDefault()
+    onRequestSection(section, fieldId)
+  }
+  return (
+    <a href={`#${fieldId}`} aria-label={label} onClick={handleClick}>
+      Anpassen
+    </a>
+  )
 }
 
 const sexOptions: { value: LifeTableSex; label: string }[] = [
@@ -43,6 +69,7 @@ export function ScenarioOutcomePanel({
   result,
   stochasticSummary,
   historicalValidYears,
+  onRequestSection,
 }: ScenarioOutcomePanelProps) {
   const [showSurvivalProbability, setShowSurvivalProbability] = useState(true)
   const [useLogCapitalScale, setUseLogCapitalScale] = useState(false)
@@ -69,11 +96,26 @@ export function ScenarioOutcomePanel({
           <h2 id="outcome-title">Kapitalverlauf und Überlebenswahrscheinlichkeit</h2>
           <p>
             In {successPercent} % der simulierten Verläufe reichte das Vermögen bis Alter {planningAge}. Alle
-            Kapitalwerte sind in heutiger Kaufkraft dargestellt.
+            Kapitalwerte sind in heutiger Kaufkraft dargestellt.{' '}
+            <OutcomeAdjustLink
+              section="zeitplan"
+              fieldId="planningAge"
+              label="Zeitplan anpassen: Planungshorizont bearbeiten"
+              onRequestSection={onRequestSection}
+            />
           </p>
         </div>
         <div className="simulation-badge">{stochasticSummary.simulations.toLocaleString('de-DE')} Verläufe</div>
       </div>
+      <p className="chart-note">
+        Kapitalverlauf anpassen:{' '}
+        <OutcomeAdjustLink
+          section="vermoegen"
+          fieldId="portfolio-add"
+          label="Kapitalverlauf anpassen: Vermögen bearbeiten"
+          onRequestSection={onRequestSection}
+        />
+      </p>
 
       <div className="chart-controls outcome-controls" aria-label="Einstellungen zur Überlebenswahrscheinlichkeit">
         <label className="toggle">

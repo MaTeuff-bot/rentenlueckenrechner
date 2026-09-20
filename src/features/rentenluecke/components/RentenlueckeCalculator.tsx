@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import type { FlowSection } from '../model/scenarioIssues'
+import type { SectionRequest } from './sectionsRegistry'
 import { RESET_NOTICE_KEY } from '../hooks/scenarioState/persistence'
 import { InsuranceBreakdown } from './InsuranceBreakdown'
 import { InputPanel } from './InputPanel'
@@ -40,6 +42,10 @@ export function RentenlueckeCalculator() {
   } = useScenarioState()
 
   const [resetNotice, setResetNotice] = useState(() => localStorage.getItem(RESET_NOTICE_KEY) === '1')
+  const [sectionRequest, setSectionRequest] = useState<SectionRequest | null>(null)
+  const handleRequestSection = useCallback((section: FlowSection, fieldId?: string) => {
+    setSectionRequest((previous) => ({ section, fieldId, nonce: (previous?.nonce ?? 0) + 1 }))
+  }, [])
   return (
     <main>
       <header className="hero">
@@ -79,6 +85,7 @@ export function RentenlueckeCalculator() {
           onRetirementIncomeStreamRemove={removeRetirementIncomeStream}
           onInflationSourceChange={updateInflationSource}
           onReset={reset}
+          sectionRequest={sectionRequest}
         />
 
         <section id="ergebnis" tabIndex={-1} className="results-section" aria-labelledby="results-title">
@@ -91,13 +98,14 @@ export function RentenlueckeCalculator() {
           </section>
         ) : (
           <>
-            <SummaryCards result={result} stochasticSummary={stochasticSummary} />
+            <SummaryCards result={result} stochasticSummary={stochasticSummary} onRequestSection={handleRequestSection} />
             <p className="source-warning">Investmentsteuern werden nicht automatisch berechnet oder finanziert. Die Ergebnisse sind keine vollständig nach Steuern verfügbare Kaufkraft.</p>
             <details className="panel"><summary>KV/PV-Abrechnung im Detail</summary><InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} /></details>
             <ScenarioOutcomePanel
               result={result}
               stochasticSummary={stochasticSummary}
               historicalValidYears={historicalValidYears}
+              onRequestSection={handleRequestSection}
             />
             <details className="panel"><summary>Jährliche Abrechnung anzeigen</summary><YearlyTable rows={result.rows} /></details>
           </>

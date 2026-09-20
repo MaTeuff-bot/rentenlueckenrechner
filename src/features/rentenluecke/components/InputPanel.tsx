@@ -1,5 +1,18 @@
 import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
 import { useEffect, useState, type MouseEvent } from 'react'
+import {
+  INPUT_TABS,
+  resolveSectionRequest,
+  sectionAnchorField,
+  sectionLabel,
+  sectionSummary,
+  tabForSection,
+  tabStatus as getTabStatus,
+  tabSummary as getTabSummary,
+  type InputTabId,
+  type SectionRequest,
+  type SectionSummaryContext,
+} from './sectionsRegistry'
 import { TimelineSection } from './InputPanel/TimelineSection'
 import { InsuranceRateAssumptions } from './InputPanel/InsuranceRateAssumptions'
 import { AssumptionsPanel } from './AssumptionsPanel'
@@ -54,24 +67,10 @@ type InputPanelProps = {
   onRetirementIncomeStreamRemove: (id: string) => void
   onInflationSourceChange: (sourceId: string) => void
   onReset: () => void
+  sectionRequest?: SectionRequest | null
 }
 
-type InputTabId = 'plan' | 'vermoegen' | 'versicherung' | 'annahmen'
 
-const inputTabs: Array<{ id: InputTabId; label: string; sections: FlowSection[] }> = [
-  { id: 'plan', label: 'Persönlicher Plan', sections: ['zeitplan', 'ausgaben', 'einkommen'] },
-  { id: 'vermoegen', label: 'Vermögen', sections: ['vermoegen'] },
-  { id: 'versicherung', label: 'Versicherung', sections: ['versicherung'] },
-  { id: 'annahmen', label: 'Rechenannahmen', sections: ['annahmen'] },
-]
-
-function tabForSection(section: FlowSection): InputTabId | null {
-  if (section === 'zeitplan' || section === 'ausgaben' || section === 'einkommen') return 'plan'
-  if (section === 'vermoegen') return 'vermoegen'
-  if (section === 'versicherung') return 'versicherung'
-  if (section === 'annahmen') return 'annahmen'
-  return null
-}
 
 export function InputPanel({
   insuranceCoverageAnswers, onInsuranceCoverageChange,
@@ -95,6 +94,7 @@ export function InputPanel({
   onRetirementIncomeStreamRemove,
   onInflationSourceChange,
   onReset,
+  sectionRequest = null,
 }: InputPanelProps) {
   const [activeTab, setActiveTab] = useState<InputTabId>('plan')
   useEffect(() => {
@@ -114,18 +114,14 @@ export function InputPanel({
       }
     })
   }, [issues])
-  const sections: [FlowSection, string, string][] = [
-    ['zeitplan', 'Zeitplan', `Heute ${input.currentAge}, Arbeitsende ${input.retirementAge}, Planung bis ${input.planningAge}`],
-    ['ausgaben', 'Ausgaben', `${input.monthlyDesiredSpendingToday} € monatlich heute`],
-    ['einkommen', 'Einkommen', `${retirementIncomeStreams.length} Einkommensquellen`],
-    ['vermoegen', 'Vermögen & Sparen', `${portfolioBuckets.length} Anlagen; Sparrate ${input.monthlyContributionToday} € bis Arbeitsende`],
-    ['versicherung', 'Versicherung', retirementIncomeStreams.some(s => s.kind === 'gesetzliche-rente') ? 'KV/PV für anwendbare Phasen bis zum Planungshorizont' : 'KV/PV vor und ab Versicherungsübergang'],
-    ['ergebnis', 'Ergebnis', issues.length ? 'Eingaben bitte ergänzen oder prüfen' : 'Deine Ruhestandsplanung'],
-  ]
-  const heading = (section: FlowSection) => {
-    const [, label, summary] = sections.find(([id]) => id === section)!
-    return <header><h3>{label} <span className="section-status">{sectionStatus(issues, section)}</span></h3><p>{summary.replaceAll('NaN', 'offen')}</p></header>
-  }
+  useEffect(() => {
+    if (!sectionRequest) return
+    const { tab, fieldId } = resolveSectionRequest(sectionRequest)
+    if (tab) setActiveTab(tab)
+    const fallback = sectionAnchorField(sectionRequest.section)
+    focusField(fieldId, fallback)
+    if (tab) window.setTimeout(() => focusField(fieldId, fallback), 0)
+  }, [sectionRequest])
   const portfolioComponents = createPortfolioComponentsFromBuckets(portfolioBuckets)
   const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
   const inflationOptions = getInflationSourceOptions(input.annualInflationRate)
@@ -148,27 +144,27 @@ export function InputPanel({
       ? 'Keine nutzbaren historischen Jahre'
       : `${historicalValidYears[0]}-${historicalValidYears.at(-1)}, ${historicalValidYears.length} Beobachtungen`
 
-  const summaryFor = (section: FlowSection): string => {
-    if (section === 'annahmen') return validYearLabel
-    const found = sections.find(([id]) => id === section)
-    return (found?.[2] ?? '').replaceAll('NaN', 'offen')
+  const summaryContext: SectionSummaryContext = {
+    input,
+    portfolioBuckets,
+    retirementIncomeStreams,
+    issues,
+    validYearLabel,
   }
-  const tabStatus = (tabId: InputTabId): string => {
-    const tabSections = inputTabs.find(tab => tab.id === tabId)?.sections ?? []
-    const relevant = issues.filter(issue => tabSections.includes(issue.section))
-    if (relevant.some(issue => issue.kind === 'invalid')) return 'Prüfen'
-    if (relevant.length > 0) return 'Offen'
-    return 'Vollständig'
+  const sections: [FlowSection, string, string][] = (
+    ['zeitplan', 'ausgaben', 'einkommen', 'vermoegen', 'versicherung', 'ergebnis'] as FlowSection[]
+  ).map((id) => [id, sectionLabel(id), sectionSummary(id, summaryContext)])
+  const heading = (section: FlowSection) => {
+    const [, label, summary] = sections.find(([id]) => id === section)!
+    return <header><h3>{label} <span className="section-status">{sectionStatus(issues, section)}</span></h3><p>{summary.replaceAll('NaN', 'offen')}</p></header>
   }
-  const tabSummary = (tabId: InputTabId): string => {
-    const tabSections = inputTabs.find(tab => tab.id === tabId)?.sections ?? []
-    return tabSections.map(summaryFor).join(' · ')
-  }
+  const tabStatus = (tabId: InputTabId): string => getTabStatus(tabId, issues)
+  const tabSummary = (tabId: InputTabId): string => getTabSummary(tabId, summaryContext)
   const handleIssueClick = (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
     event.preventDefault()
     const tab = tabForSection(issue.section)
     if (tab) setActiveTab(tab)
-    const fallback = issue.section === 'vermoegen' ? 'portfolio-add' : issue.section
+    const fallback = sectionAnchorField(issue.section)
     focusField(issue.fieldId, fallback)
     if (tab) window.setTimeout(() => focusField(issue.fieldId, fallback), 0)
   }
@@ -186,7 +182,7 @@ export function InputPanel({
       </div>
 
       <div className="input-tabs" role="tablist" aria-label="Eingabebereiche">
-        {inputTabs.map(tab => (
+        {INPUT_TABS.map(tab => (
           <button
             key={tab.id}
             type="button"
