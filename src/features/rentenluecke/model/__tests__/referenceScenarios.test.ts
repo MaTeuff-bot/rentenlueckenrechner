@@ -349,14 +349,17 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     expect(first.capitalIncomeTax).toBeMoneyClose(889.9722163747276)
     expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
     expect(first.gapWithdrawal).toBeMoneyClose(13012.449176021437)
-    // Every retirement year is taxed with a fresh annual allowance; accumulation rows stay untaxed.
+    // Every retirement year is taxed with a fresh annual allowance (scaled by inflation;
+    // factor 1 here, so 1,000); accumulation Umschichtung rows carry the same fields.
     for (const row of result.retirementRows) {
       expect(row.capitalIncomeTax ?? 0).toBeGreaterThan(0)
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000)
       expect(row.netGapWithdrawal ?? 0).toBeMoneyClose(6_000)
     }
     for (const row of result.accumulationRows) {
-      expect(row.capitalIncomeTax).toBeUndefined()
+      expect(row.capitalIncomeTax).toBeDefined()
+      expect(row.taxableWithdrawal).toBeDefined()
+      expect(row.sparerpauschbetragApplied).toBeDefined()
     }
     expectLedgerConservation(result.rows)
     // Required capital funds gap + tax (tier-3 regression pin for the taxed search).

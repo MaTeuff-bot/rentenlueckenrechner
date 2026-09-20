@@ -4,6 +4,9 @@ import { completedCoverage } from './insuranceFixtures'
 import { timelineBoundary } from '../scenarioTimeline'
 import { clearHiddenInvalidInsuranceValues } from '../retirementInsurance'
 import { simulateScenario } from '../simulateScenario'
+import { simulateScenarioWithReturnPath } from '../stochasticReturns'
+import { assessCore } from '../tax/pureCore'
+import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { simulateHistoricalBootstrapScenario, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID } from '../historicalReturns'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 import { runStochasticSimulation } from '../stochasticReturns'
@@ -342,12 +345,104 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
         row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal)
       expect(row.unfundedWithdrawal).toBeMoneyClose(Math.max(0, row.gapWithdrawal - row.capitalAssessment!.paidWithdrawal))
     }
-    // Accumulation rebalancing gains stay outside the gap-withdrawal flow: no tax fields.
+    // Slice 1b: accumulation Umschichtung gains are taxed through the same path and
+    // funded from the portfolio; the single paid sale covers tax (gap is zero).
     for (const row of result.accumulationRows) {
-      expect(row.capitalIncomeTax).toBeUndefined()
-      expect(row.taxableWithdrawal).toBeUndefined()
-      expect(row.sparerpauschbetragApplied).toBeUndefined()
-      expect(row.netGapWithdrawal).toBeUndefined()
+      expect(row.capitalIncomeTax).toBeDefined()
+      expect(row.taxableWithdrawal).toBeDefined()
+      expect(row.sparerpauschbetragApplied).toBeDefined()
+      expect(row.netGapWithdrawal).toBeDefined()
+      const tax = row.capitalIncomeTax ?? 0
+      expect(row.gapWithdrawal).toBeMoneyClose(0)
+      expect(row.netGapWithdrawal ?? 0).toBeMoneyClose(0)
+      expect(row.capitalAssessment!.paidWithdrawal).toBeMoneyClose(tax + row.unfundedWithdrawal)
+      expect(row.closingCapital).toBeMoneyClose(
+        row.openingCapital + row.investmentReturn + row.contribution - tax + row.unfundedWithdrawal)
+    }
+  })
+})
+
+describe('accumulation Umschichtung tax: conservation with inflation-scaled allowance (slice 1b)', () => {
+  it('taxes large rebalancing gains in accumulation and funds them from the portfolio', () => {
+    // Estimator ledger, 1 accumulation + 3 retirement years; 5% inflation path;
+    // fund +50% / bank +2% every year to force Umschichtung sales above the allowance.
+    // Accumulation year 0 (factor 1.0 → allowance 1,000):
+    // funding-sale gain 571.652 + rebalancing gain 7,606.829 = 8,178.481;
+    // ×0.7 = 5,724.937 − 1,000 = 4,724.937 base; tax 4,724.937 × 0.25 × 1.055 = 1,246.202.
+    const input = prepare(estimatorScenario())
+    const bucketPath = Array.from({ length: 4 }, () => [
+      { id: 'fund', totalReturnRate: 0.5 },
+      { id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02 },
+    ])
+    const result = simulateScenarioWithReturnPath(input, [], [0.05, 0.05, 0.05, 0.05], bucketPath)
+    const acc = result.accumulationRows[0]
+    expect(acc.inflationFactor).toBeMoneyClose(1)
+    expect(acc.capitalIncomeTax).toBeMoneyClose(1246.202019111374)
+    expect(acc.taxableWithdrawal).toBeMoneyClose(5724.936565351181)
+    expect(acc.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+    expect(acc.gapWithdrawal).toBeMoneyClose(0)
+    // Funding: the single paid sale covers the tax (gap and insurance are zero).
+    expect(acc.capitalAssessment!.paidWithdrawal).toBeMoneyClose(acc.capitalIncomeTax!)
+    expect(acc.netGapWithdrawal).toBeMoneyClose(0)
+    // Money conservation WITH accumulation tax funding.
+    expect(acc.closingCapital).toBeMoneyClose(
+      acc.openingCapital + acc.investmentReturn + acc.contribution - acc.capitalIncomeTax! + acc.unfundedWithdrawal)
+    expect(acc.closingCapital).toBeMoneyClose(
+      acc.openingCapital + acc.investmentReturn + acc.contribution - acc.capitalAssessment!.paidWithdrawal)
+    // Retirement allowances scale with the factor (1.05, 1.05², 1.05³).
+    const factors = [1.05, 1.05 ** 2, 1.05 ** 3]
+    result.retirementRows.forEach((row, n) => {
+      expect(row.inflationFactor).toBeMoneyClose(factors[n])
+      expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000 * factors[n])
+    })
+    expect(result.retirementRows[0].capitalIncomeTax).toBeMoneyClose(3624.5290940306722)
+    // Single-source loss: each retirement tax recomputes from the chained estimator
+    // loss (accumulation closing → retirement opening) through the same core path.
+    let openingLoss = result.accumulationRows[0].capitalAssessment!.closingState!.simulatedLossCarryforward
+    for (const row of result.retirementRows) {
+      const recomputed = assessCore(
+        row.capitalAssessment!.sale.adjustedFundSaleGain + row.capitalAssessment!.movement.adjustedFundSaleGain,
+        row.capitalAssessment!.receivedVorabpauschale,
+        openingLoss, scaledSparerpauschbetrag(row.inflationFactor), true)
+      expect(row.capitalIncomeTax).toBeMoneyClose(recomputed.capitalIncomeTax)
+      expect(row.taxableWithdrawal).toBeMoneyClose(recomputed.taxableWithdrawal)
+      openingLoss = row.capitalAssessment!.closingState!.simulatedLossCarryforward
+    }
+  })
+
+  it('scales the scalar allowance with inflation (hand-computed 10% case)', () => {
+    // 100,000 capital, 5% retirement return, 10% inflation, 24,000 gap (today), no income.
+    // Year 0 (factor 1.0 → allowance 1,000): gain = 5,000 × 24,000/105,000 = 1,142.857;
+    // base 142.857; tax 142.857 × 0.25 × 1.055 = 37.678571; closing 80,962.321.
+    // Year 1 (factor 1.1 → allowance 1,100): spending 26,400; gain = 26,400 × 0.05/1.05
+    // = 1,257.143; base 157.143; tax 157.143 × 0.25 × 1.055 = 41.446429.
+    const input = prepare({ ...zeroStartAccumulationScenario(),
+      currentAge: 67, retirementAge: 67, planningAge: 69, currentCapital: 100_000,
+      monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0.1, annualReturnInRetirement: 0.05,
+      retirementIncomeStreams: [],
+      retirementInsurance: {
+        referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+        pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      },
+    }, true)
+    const result = simulateScenario(input)
+    expect(result.retirementRows).toHaveLength(2)
+    const [first, second] = result.retirementRows
+    expect(first.inflationFactor).toBeMoneyClose(1)
+    expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+    expect(first.taxableWithdrawal).toBeMoneyClose(1142.857142857143)
+    expect(first.capitalIncomeTax).toBeMoneyClose(37.67857142857144)
+    expect(first.closingCapital).toBeMoneyClose(80962.32142857143)
+    expect(second.inflationFactor).toBeMoneyClose(1.1)
+    expect(second.sparerpauschbetragApplied).toBeMoneyClose(1_100)
+    expect(second.taxableWithdrawal).toBeMoneyClose(1257.1428571428576)
+    expect(second.capitalIncomeTax).toBeMoneyClose(41.44642857142868)
+    for (const row of result.retirementRows) {
+      expect(row.closingCapital).toBeMoneyClose(
+        row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
     }
   })
 })

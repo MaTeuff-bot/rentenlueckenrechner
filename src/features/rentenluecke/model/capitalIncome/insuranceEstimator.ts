@@ -36,7 +36,7 @@ export const estimatorDisclosures = [
   'Opening accumulated Vorabpauschalen are zero. Omitted existing history can distort estimates, including overstating sale income.',
   'Fund acquisition costs and assessed adjustments are pooled; sales are proportional, not FIFO or selective bucket sales.',
   'Annual receipt and insurance funding are planning approximations, not insurer assessment or billing timing.',
-  'Kapitalertragsteuer auf Entnahmen im Ruhestand (Abgeltungsteuer + Solidaritätszuschlag) wird berechnet und aus dem Portfolio finanziert; Kirchensteuer, Günstigerprüfung und Steuer außerhalb der Entnahmefinanzierung sind nicht enthalten.',
+  'Kapitalertragsteuer auf Entnahmen im Ruhestand und auf Umschichtungsgewinne der Ansparphase (Abgeltungsteuer + Solidaritätszuschlag) wird berechnet und aus dem Portfolio finanziert; Sparerpauschbetrag mit Szenario-Inflation skaliert (Planungsannahme, gesetzlich nominal); Kirchensteuer und Günstigerprüfung sind nicht enthalten.',
 ] as const
 
 /** Coverage declarations must be explicit; unknown/unsupported assets cannot disappear even at zero value. */
@@ -125,9 +125,12 @@ const yearSchema = z.object({
   provenDeductibleAnnualExpenses: money.optional(),
   tolerance: z.number().finite().positive().max(1).default(0.000001),
   maxIterations: z.number().int().min(1).max(256).default(100),
-  // Kapitalertragsteuer on the withdrawal-funded capital income. Retirement rows only:
-  // accumulation rebalancing gains stay outside the gap-withdrawal flow (disclosed).
+  // Kapitalertragsteuer on withdrawal-funded capital income (retirement Entnahmen)
+  // and on accumulation rebalancing (Umschichtung) gains. Both feed the same
+  // assessCore path: Teilfreistellung → loss offset → scaled allowance → 25% + Soli.
   // Single source for the loss input: the estimator opening state's simulated loss carryforward.
+  // Callers pass the inflation-scaled allowance (base 1,000 EUR × factor); the default
+  // covers factor 1 only.
   withdrawalTax: z.object({
     openingLossCarryforward: money,
     allowanceAvailable: money.default(SPARERPAUSCHBETRAG_SINGLE),

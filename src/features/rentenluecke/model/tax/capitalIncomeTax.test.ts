@@ -4,6 +4,7 @@ import {
   assessCapitalIncomeTax,
   assessYearTax,
   createTaxState,
+  scaledSparerpauschbetrag,
   SOLIDARITAETSZUSCHLAG_RATE,
   SPARERPAUSCHBETRAG_SINGLE,
   TAX_ALLOWANCE_MODE,
@@ -162,11 +163,94 @@ describe('year rollforward', () => {
   })
 })
 
+describe('scaledSparerpauschbetrag (slice 1b: inflation-scaled allowance)', () => {
+  it('scales the 1,000 EUR base by the cumulative inflation factor', () => {
+    expect(scaledSparerpauschbetrag(1)).toBeCloseTo(1_000, 9)
+    expect(scaledSparerpauschbetrag(1.1)).toBeCloseTo(1_100, 9)
+    expect(scaledSparerpauschbetrag(1.02 ** 3)).toBeCloseTo(1_000 * 1.02 ** 3, 9)
+    expect(scaledSparerpauschbetrag(0)).toBe(0)
+  })
+
+  it('assesses a hand-computed gain with the scaled allowance (factor 1.1)', () => {
+    // 2,000 × 0.7 = 1,400 − 1,100 (scaled) = 300 base.
+    // Abgeltung 75; Soli 4.125; total 79.125.
+    const result = assessEquity({ fundSaleGain: 2_000, allowanceAvailable: scaledSparerpauschbetrag(1.1) })
+    expect(result.taxableWithdrawal).toBeCloseTo(1_400, 9)
+    expect(result.sparerpauschbetragApplied).toBeCloseTo(1_100, 9)
+    expect(result.taxableBase).toBeCloseTo(300, 9)
+    expect(result.abgeltungsteuer).toBeCloseTo(75, 9)
+    expect(result.soliditaetszuschlag).toBeCloseTo(4.125, 9)
+    expect(result.capitalIncomeTax).toBeCloseTo(79.125, 9)
+    expect(result.closingAllowance).toBeCloseTo(0, 9)
+  })
+
+  it('taxes a rebalancing-style gain plus VP with Teilfreistellung and scaled allowance', () => {
+    // Rebalancing gain 8,000, no VP, loss 0, allowance 1,050 (factor 1.05):
+    // 8,000 × 0.7 = 5,600 − 1,050 = 4,550 base; tax 4,550 × 0.25 × 1.055 = 1,200.0625.
+    const result = assessEquity({ fundSaleGain: 8_000, allowanceAvailable: scaledSparerpauschbetrag(1.05) })
+    expect(result.taxableWithdrawal).toBeCloseTo(5_600, 9)
+    expect(result.capitalIncomeTax).toBeCloseTo(1_200.0625, 9)
+  })
+
+  it('offsets a carryforward before the scaled allowance (rebalancing interplay)', () => {
+    // 8,000 × 0.7 = 5,600 − 4,000 loss = 1,600 − 1,050 = 550 base.
+    // Tax 550 × 0.25 × 1.055 = 145.0625.
+    const result = assessEquity({ fundSaleGain: 8_000, openingLossCarryforward: 4_000, allowanceAvailable: scaledSparerpauschbetrag(1.05) })
+    expect(result.taxableBase).toBeCloseTo(550, 9)
+    expect(result.capitalIncomeTax).toBeCloseTo(145.0625, 9)
+    expect(result.closingLossCarryforward).toBe(0)
+  })
+
+  it('carries a loss larger than income forward with the scaled allowance untouched', () => {
+    // 2,000 × 0.7 = 1,400 − 5,000 loss = −3,600 → closing loss 3,600, no tax.
+    const result = assessEquity({ fundSaleGain: 2_000, openingLossCarryforward: 5_000, allowanceAvailable: scaledSparerpauschbetrag(1.1) })
+    expect(result.capitalIncomeTax).toBe(0)
+    expect(result.sparerpauschbetragApplied).toBe(0)
+    expect(result.closingLossCarryforward).toBeCloseTo(3_600, 9)
+    expect(result.closingAllowance).toBeCloseTo(1_100, 9)
+  })
+
+  it('creates scaled allowance states via inflationFactor', () => {
+    expect(createTaxState({ ...SCOPE }).allowanceAnnual).toBe(1_000)
+    expect(createTaxState({ ...SCOPE, inflationFactor: 1.1 }).allowanceAnnual).toBeCloseTo(1_100, 9)
+    expect(createTaxState({ ...SCOPE, allowanceAnnual: 1_050 }).allowanceAnnual).toBe(1_050)
+  })
+})
+
+describe('allowance shared across accumulation and retirement years (scaled per year)', () => {
+  it('threads the loss while each year gets its fresh scaled allowance', () => {
+    // Year A (accumulation, factor 1.02 → 1,020): loss-making sale feeds the carryforward.
+    // (−5,000) × 0.7 = −3,500 → closing loss 3,500, allowance untouched.
+    const stateA = createTaxState({ ...SCOPE, inflationFactor: 1.02 })
+    const yearA = assessYearTax(stateA, { fundSaleGain: -5_000, vorabpauschaleIncome: 0, incomeClass: 'equity-fund' })
+    expect(yearA.result.capitalIncomeTax).toBe(0)
+    expect(yearA.result.closingLossCarryforward).toBeCloseTo(3_500, 9)
+    expect(yearA.result.closingAllowance).toBeCloseTo(1_020, 9)
+    // Year B (retirement, factor 1.05 → 1,050) inherits the loss, gets a fresh scaled allowance.
+    // 8,000 × 0.7 = 5,600 − 3,500 = 2,100 − 1,050 = 1,050 base; tax 1,050 × 0.25 × 1.055 = 276.9375.
+    const stateB = { ...yearA.nextState, allowanceAnnual: scaledSparerpauschbetrag(1.05) }
+    const yearB = assessYearTax(stateB, { fundSaleGain: 8_000, vorabpauschaleIncome: 0, incomeClass: 'equity-fund' })
+    expect(yearB.result.taxableBase).toBeCloseTo(1_050, 9)
+    expect(yearB.result.sparerpauschbetragApplied).toBeCloseTo(1_050, 9)
+    expect(yearB.result.capitalIncomeTax).toBeCloseTo(276.9375, 9)
+    expect(yearB.nextState.lossCarryforward).toBe(0)
+  })
+})
+
 describe('disclosures', () => {
   it('lists Kirchensteuer, Günstigerprüfung and the planning approximations', () => {
     const joined = taxDisclosures.join(' ')
     expect(joined).toMatch(/Kirchensteuer/)
     expect(joined).toMatch(/Günstigerprüfung/)
     expect(joined).toMatch(/Planungsnäherung/)
+  })
+
+  it('states the inflation-scaled base as a planning assumption and covers Umschichtung', () => {
+    const joined = taxDisclosures.join(' ')
+    expect(joined).toMatch(/1\.000 EUR.*skaliert|Basis 1\.000 EUR/)
+    expect(joined).toMatch(/gesetzlich nominal/)
+    expect(joined).toMatch(/Umschichtung/)
+    expect(joined).not.toMatch(/ohne Inflationsanpassung/)
+    expect(joined).not.toMatch(/außerhalb der Entnahmefinanzierung/)
   })
 })
