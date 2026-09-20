@@ -34,6 +34,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
               <th>Kapital vor Cashflow</th>
               <th>Einzahlung</th>
               <th>Entnahme für Nettolücke</th>
+              <th>Kapitalertragsteuer</th>
               <th>Endkapital</th>
               <th>Endkapital heutige Kaufkraft</th>
               {showDetails ? (
@@ -50,6 +51,10 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Portfolio-Beitragsbasis (kein Einkommen)</th>
                   <th>Verfügbarer Netto-Cashflow</th>
                   <th>Entnahmelücke</th>
+                  <th>Kapitalertragsteuer</th>
+                  <th>Steuerpflichtige Entnahme</th>
+                  <th>Sparerpauschbetrag angerechnet</th>
+                  <th>Nettoentnahme nach Steuer</th>
                   <th>Konsumierter Überschuss</th>
                   <th>Nicht gedeckte Entnahme</th>
                 </>
@@ -66,6 +71,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                 <td>{formatCurrency(row.capitalBeforeCashflow, 100)}</td>
                 <td>{formatCurrency(row.contribution, 100)}</td>
                 <td>{formatCurrency(row.gapWithdrawal, 100)}</td>
+                <td>{formatCurrency(row.capitalIncomeTax ?? 0, 100)}</td>
                 <td>{formatCurrency(row.closingCapital, 100)}</td>
                 <td>{formatCurrency(row.closingCapitalToday, 100)}</td>
                 {showDetails ? (
@@ -82,6 +88,10 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{formatCurrency(row.portfolioContributionBase)}</td>
                     <td>{formatCurrency(row.retirementIncomeNet)}</td>
                     <td>{formatCurrency(row.gapWithdrawal)}</td>
+                    <td>{formatCurrency(row.capitalIncomeTax ?? 0)}</td>
+                    <td>{formatCurrency(row.taxableWithdrawal ?? 0)}</td>
+                    <td>{formatCurrency(row.sparerpauschbetragApplied ?? 0)}</td>
+                    <td>{formatCurrency(row.netGapWithdrawal ?? row.gapWithdrawal)}</td>
                     <td>{formatCurrency(row.surplusIncome)}</td>
                     <td>{formatCurrency(row.unfundedWithdrawal)}</td>
                   </>

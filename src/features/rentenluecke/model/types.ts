@@ -83,6 +83,10 @@ export type YearlyPeriodRow = {
   surplusIncome: number
   gapWithdrawal: number
   gapWithdrawalToday: number
+  capitalIncomeTax?: number
+  taxableWithdrawal?: number
+  sparerpauschbetragApplied?: number
+  netGapWithdrawal?: number
   closingCapital: number
   closingCapitalToday: number
   depleted: boolean

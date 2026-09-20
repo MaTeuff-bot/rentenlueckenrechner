@@ -116,8 +116,16 @@ describe('integrated capital assessment ledger', () => {
     for (const row of r.rows) {
       expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal, 5)
       if (row.phase === 'retirement') {
-        expect(row.gapWithdrawal).toBeCloseTo(Math.max(0, row.desiredSpending - row.retirementIncomeNet), 5)
+        // Slice-1 funding rule: the required withdrawal funds the net spending gap
+        // plus Kapitalertragsteuer, so it exceeds desired-minus-net by exactly the tax.
+        expect(row.gapWithdrawal).toBeCloseTo(Math.max(0, row.desiredSpending - row.retirementIncomeNet + (row.capitalIncomeTax ?? 0)), 5)
         expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance)
+        // The single paid withdrawal covers gap, insurance and tax; the gap receives the remainder.
+        const insurance = row.capitalAssessment!.insurance.kv + row.capitalAssessment!.insurance.pv
+        expect((row.netGapWithdrawal ?? 0) + insurance + (row.capitalIncomeTax ?? 0)).toBeCloseTo(row.capitalAssessment!.paidWithdrawal, 5)
+        expect(row.capitalIncomeTax ?? 0).toBeGreaterThan(0)
+      } else {
+        expect(row.capitalIncomeTax).toBeUndefined()
       }
       if (row.ageStart >= 67) expect(row.portfolioContributionBase).toBe(0)
     }

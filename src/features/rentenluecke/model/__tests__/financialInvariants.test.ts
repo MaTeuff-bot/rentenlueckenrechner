@@ -209,8 +209,9 @@ describe('bootstrap accounting consistency', () => {
           expect(row.closingCapital, `${makeScenario.name} age ${row.ageStart}`).toBeMoneyClose(
             row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal)
         } else {
+          // Slice-1 funding rule: the portfolio funds gap + Kapitalertragsteuer.
           expect(row.closingCapital, `${makeScenario.name} age ${row.ageStart}`).toBeMoneyClose(
-            row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal + row.unfundedWithdrawal)
+            row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - (row.capitalIncomeTax ?? 0) + row.unfundedWithdrawal)
         }
         expect(Number.isFinite(row.closingCapital)).toBe(true)
       }
@@ -260,6 +261,94 @@ describe('phase cashflow boundaries', () => {
     expect(bridgeRows.every(row => row.healthInsurance === 2_160)).toBe(true)
     expect(pensionRows.every(row => row.healthInsurance === 2_100)).toBe(true)
     expect(bridgeRows.length + pensionRows.length).toBe(result.retirementRows.length)
+  })
+})
+
+describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () => {
+  it('taxes gain-proportional scalar withdrawals at positive returns (hand-computed 5% case)', () => {
+    // 100,000 capital, 5% retirement return, 24,000 gap, no income, 2 retirement years.
+    // Gain-proportional base (no holdings breakdown, no Teilfreistellung):
+    // year gain = 5,000 x 24,000/105,000 = 1,142.857; allowance 1,000 -> base 142.857;
+    // tax = 142.857 x 0.25 x 1.055 = 37.678571...; closing = 105,000 - 24,000 - 37.678571...
+    // Year 2 repeats exactly (gain = G x r/(1+r) is capital-independent while fully funded).
+    const input = prepare({ ...zeroStartAccumulationScenario(),
+      currentAge: 67, retirementAge: 67, planningAge: 69, currentCapital: 100_000,
+      monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0, annualReturnInRetirement: 0.05,
+      retirementIncomeStreams: [],
+      retirementInsurance: {
+        referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+        pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      },
+    }, true)
+    const result = simulateScenario(input)
+    expect(result.retirementRows).toHaveLength(2)
+    for (const row of result.retirementRows) {
+      expect(row.capitalIncomeTax).toBeMoneyClose(37.67857142857144)
+      expect(row.taxableWithdrawal).toBeMoneyClose(1142.857142857143)
+      expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+      expect(row.netGapWithdrawal).toBeMoneyClose(row.gapWithdrawal)
+      expect(row.unfundedWithdrawal).toBe(0)
+      // Money conservation WITH tax funding.
+      expect(row.closingCapital).toBeMoneyClose(
+        row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
+    }
+    expect(result.retirementRows[0].closingCapital).toBeMoneyClose(80962.32142857143)
+    // Required capital funds gap + tax, not just the gap (2 x 24,000 = 48,000 pre-tax basis).
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(44696.044921875)
+    expect(result.summary.survivesUntilPlanningAge).toBe(true)
+  })
+
+  it('funds tax first and keeps the shortfall visible when proceeds are insufficient', () => {
+    // 20,000 capital, 10% return -> 22,000 before cashflow vs 24,000 gap: gain 2,000,
+    // tax (2,000 - 1,000) x 0.25 x 1.055 = 263.75; need 24,263.75 -> unfunded 2,263.75.
+    const input = prepare({ ...zeroStartAccumulationScenario(),
+      currentAge: 67, retirementAge: 67, planningAge: 68, currentCapital: 20_000,
+      monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0, annualReturnInRetirement: 0.1,
+      retirementIncomeStreams: [],
+      retirementInsurance: {
+        referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+        pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      },
+    }, true)
+    const result = simulateScenario(input)
+    const row = result.retirementRows[0]
+    expect(row.capitalIncomeTax).toBeMoneyClose(263.75)
+    expect(row.depleted).toBe(true)
+    expect(row.closingCapital).toBe(0)
+    expect(row.unfundedWithdrawal).toBeMoneyClose(2_263.75)
+    // Abgeltungsteuer withholding order: tax funded first, the gap gets the remainder.
+    expect(row.netGapWithdrawal).toBeMoneyClose(22_000 - 263.75)
+    expect(row.closingCapital).toBeMoneyClose(
+      row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
+  })
+
+  it('funds gap, insurance and tax from the single estimator sale', () => {
+    const result = simulateScenario(prepare(estimatorScenario()))
+    for (const row of result.retirementRows) {
+      const tax = row.capitalIncomeTax ?? 0
+      // Required withdrawal = net spending gap + insurance + tax (single funding fixed point).
+      expect(row.gapWithdrawal).toBeMoneyClose(Math.max(0, row.desiredSpending - row.retirementIncomeNet + tax))
+      // The paid sale covers all three; the gap receives the remainder.
+      const insurance = row.healthInsurance + row.careInsurance
+      expect((row.netGapWithdrawal ?? 0) + insurance + tax).toBeMoneyClose(row.capitalAssessment!.paidWithdrawal)
+      // Conservation through the single outflow; shortfall stays visible.
+      expect(row.closingCapital).toBeMoneyClose(
+        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal)
+      expect(row.unfundedWithdrawal).toBeMoneyClose(Math.max(0, row.gapWithdrawal - row.capitalAssessment!.paidWithdrawal))
+    }
+    // Accumulation rebalancing gains stay outside the gap-withdrawal flow: no tax fields.
+    for (const row of result.accumulationRows) {
+      expect(row.capitalIncomeTax).toBeUndefined()
+      expect(row.taxableWithdrawal).toBeUndefined()
+      expect(row.sparerpauschbetragApplied).toBeUndefined()
+      expect(row.netGapWithdrawal).toBeUndefined()
+    }
   })
 })
 

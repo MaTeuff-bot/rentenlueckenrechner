@@ -55,9 +55,10 @@ function expectLedgerConservation(rows: YearlyPeriodRow[]) {
       expect(row.closingCapital).toBeMoneyClose(
         row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal)
     } else {
-      // Scalar path: gap withdrawal is the authoritative outflow; contributions add.
+      // Scalar path: gap withdrawal plus funded Kapitalertragsteuer is the authoritative
+      // outflow; contributions add. (Zero when no taxable gains exist.)
       expect(row.closingCapital).toBeMoneyClose(
-        row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal + row.unfundedWithdrawal)
+        row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - (row.capitalIncomeTax ?? 0) + row.unfundedWithdrawal)
     }
     if (row.phase === 'retirement' && !row.capitalAssessment) {
       expect(row.gapWithdrawal).toBeMoneyClose(Math.max(0, row.desiredSpending - row.retirementIncomeNet))
@@ -226,6 +227,14 @@ describe('reference scenario S1: standard KVdR retirement', () => {
     }
     expect(result.summary.survivesUntilPlanningAge).toBe(true)
     expectLedgerConservation(result.rows)
+    // Slice 1: zero return means no taxable gains, so no tax is assessed or funded;
+    // the gap is met in full and required capital is unchanged by the tax.
+    for (const row of result.retirementRows) {
+      expect(row.capitalIncomeTax).toBeMoneyClose(0)
+      expect(row.taxableWithdrawal).toBeMoneyClose(0)
+      expect(row.sparerpauschbetragApplied).toBeMoneyClose(0)
+      expect(row.netGapWithdrawal).toBeMoneyClose(row.gapWithdrawal)
+    }
   })
 
   it('pins required capital: 3,108 for one year, funded forever at 0% with income above zero gap', () => {
@@ -284,6 +293,12 @@ describe('reference scenario S3: voluntary GKV with manual capital basis', () =>
       expect(row.careInsurance).toBeMoneyClose(806.4)
       expect(row.portfolioContributionBase).toBeMoneyClose(1_200)
       expect(row.healthInsurance).toBeMoneyClose(3_352.8)
+      // Slice 1: manual capital basis at 0% return has no taxable gains (gain-proportional
+      // base is zero), so no tax is assessed; the calculation is never blocked.
+      expect(row.capitalIncomeTax).toBeMoneyClose(0)
+      expect(row.taxableWithdrawal).toBeMoneyClose(0)
+      expect(row.sparerpauschbetragApplied).toBeMoneyClose(0)
+      expect(row.netGapWithdrawal).toBeMoneyClose(row.gapWithdrawal)
     }
     expectLedgerConservation(result.rows)
   })
@@ -320,6 +335,33 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     // insuranceEstimator.maintainAllocation).
     expect(vp).toBeMoneyClose(1_323.7132075471698)
     expect(result.rows[1].capitalAssessment!.receivedVorabpauschale).toBeMoneyClose(1_323.7132075471698)
+  })
+
+  it('assesses and funds Kapitalertragsteuer on withdrawal gains plus Vorabpauschale', () => {
+    // First retirement year (age 67): funding-sale gain 4,325.901 + rebalancing gain
+    // 604.224 + received VP 1,318.879 = 6,249.003; x0.7 (30% Teilfreistellung) =
+    // 4,374.302; allowance 1,000 -> base 3,374.302; tax 3,374.302 x 0.25 x 1.055 = 889.972.
+    // Required withdrawal = 6,000 gap + 6,122.477 insurance + 889.972 tax (tier-3 pins).
+    const result = simulateScenario(input)
+    const first = result.retirementRows[0]
+    expect(first.taxableWithdrawal).toBeMoneyClose(4374.302242179062)
+    expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+    expect(first.capitalIncomeTax).toBeMoneyClose(889.9722163747276)
+    expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
+    expect(first.gapWithdrawal).toBeMoneyClose(13012.449176021437)
+    // Every retirement year is taxed with a fresh annual allowance; accumulation rows stay untaxed.
+    for (const row of result.retirementRows) {
+      expect(row.capitalIncomeTax ?? 0).toBeGreaterThan(0)
+      expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+      expect(row.netGapWithdrawal ?? 0).toBeMoneyClose(6_000)
+    }
+    for (const row of result.accumulationRows) {
+      expect(row.capitalIncomeTax).toBeUndefined()
+    }
+    expectLedgerConservation(result.rows)
+    // Required capital funds gap + tax (tier-3 regression pin for the taxed search).
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(33534.278869628906)
+    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(105_000)
   })
 
   it('matches deterministic and reference bootstrap paths and reproduces seeded runs', () => {
