@@ -83,6 +83,7 @@ npm run build       # tsc -b && vite build
 ## Codeübersicht
 
 Modulgrenzen und Zonenzuständigkeiten: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Jährliches Ledger als Berechnungsfläche und Feature-Effektkarte: [docs/ledger-effect-map.md](docs/ledger-effect-map.md).
 
 - `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Kapitalbedarfssuche, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
 - `src/features/rentenluecke/charting/`: Aus Simulationsergebnissen abgeleitete Diagrammdaten und Risikokarten.
