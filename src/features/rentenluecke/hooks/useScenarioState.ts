@@ -144,13 +144,14 @@ export function useScenarioState() {
       ...current,
       retirementIncomeStreams: [...current.retirementIncomeStreams, {
         id: `retirement-income-${Date.now()}-${nextRetirementIncomeStreamId++}`,
-        name: 'Weiteres Einkommen',
-        kind: 'other',
+        name: 'Gesetzliche Rente',
+        kind: 'gesetzliche-rente',
+        support: 'standard',
         amountMonthlyToday: 0,
         startAge: current.input.retirementAge,
         endAge: null,
-        amountBasis: 'net',
-        deductionMode: 'none',
+        amountBasis: 'gross',
+        deductionMode: 'effectiveHaircut',
         effectiveDeductionRate: 0,
       }],
     }))

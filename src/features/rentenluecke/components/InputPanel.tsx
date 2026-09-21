@@ -203,7 +203,7 @@ export function InputPanel({
       <div className="input-grid">
         <div role="tabpanel" id="input-tabpanel-plan" aria-labelledby="input-tab-plan" className="input-tabpanel" hidden={activeTab !== 'plan'}>
           <section id="zeitplan" className="flow-section" tabIndex={-1}>{heading('zeitplan')}
-            <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onStreamChange={onRetirementIncomeStreamChange} onTransitionChange={onTransitionChange} />
+            <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onTransitionChange={onTransitionChange} />
           </section>
           <section id="ausgaben" className="flow-section" tabIndex={-1}>{heading('ausgaben')}
             <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />

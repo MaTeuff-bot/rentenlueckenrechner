@@ -46,6 +46,7 @@ describe('retirement income streams', () => {
       expect.objectContaining({
         id: 'statutory-pension',
         kind: 'gesetzliche-rente',
+        support: 'standard',
         amountMonthlyToday: 2_000,
         startAge: 67,
         amountBasis: 'gross',

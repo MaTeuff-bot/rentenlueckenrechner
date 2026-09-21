@@ -6,48 +6,136 @@ import { NumberInput } from '../../../../shared/components/NumberInput'
 import { PercentInput } from '../../../../shared/components/PercentInput'
 import type { RentenlueckeInput, RetirementIncomeStream, RetirementIncomeStreamKind } from '../../model/types'
 
-const CATEGORY_DETAILS: Record<RetirementIncomeStreamKind, { label: string; defaultName: string; helper: string }> = {
-  'gesetzliche-rente': {
-    label: 'Gesetzliche Rente',
+type CategoryGroupId = 'automatic' | 'rental' | 'cashflow'
+
+type CategoryOption = {
+  value: string
+  kind: RetirementIncomeStreamKind
+  support: RetirementIncomeStream['support']
+  label: string
+  defaultName: string
+  helper: string
+  group: CategoryGroupId
+}
+
+const CATEGORY_OPTIONS: readonly CategoryOption[] = [
+  {
+    value: 'gesetzliche-rente:standard',
+    kind: 'gesetzliche-rente',
+    support: 'standard',
+    label: 'Gesetzliche Rente (Standard)',
     defaultName: 'Gesetzliche Rente',
     helper: 'Trage den Monatsbetrag aus deinem Rentenbescheid als Bruttobetrag in heutiger Kaufkraft ein.',
+    group: 'automatic',
   },
-  betriebsrente: {
-    label: 'Betriebsrente',
+  {
+    value: 'gesetzliche-rente:unsupported',
+    kind: 'gesetzliche-rente',
+    support: 'unsupported',
+    label: 'Gesetzliche Rente (Sonderfall)',
+    defaultName: 'Gesetzliche Rente',
+    helper: 'Sonderfall, zum Beispiel Auslandsrente, Einmalzahlung oder ungeklärter Bezug: Die betroffene Phase braucht manuelle KV/PV-Gesamtbeträge.',
+    group: 'automatic',
+  },
+  {
+    value: 'betriebsrente:standard',
+    kind: 'betriebsrente',
+    support: 'standard',
+    label: 'Betriebsrente (Standard)',
     defaultName: 'Betriebsrente',
-    helper: 'Gewöhnliche inländische Bezüge bestätigen; besondere Vertragsarten brauchen eine manuelle Gesamtannahme.',
+    helper: 'Gewöhnliche inländische laufende Betriebsrente: KV/PV wird automatisch berechnet.',
+    group: 'automatic',
   },
-  'private-rente': {
-    label: 'Private Rente',
-    defaultName: 'Private Rente',
-    helper: 'Die Vertragsart wird hier nicht automatisch eingeordnet. Bitte eigene KV/PV-Gesamtbeträge für die betroffene Phase angeben. Das bedeutet nicht, dass jede private Rente beitragspflichtig ist.',
+  {
+    value: 'betriebsrente:unsupported',
+    kind: 'betriebsrente',
+    support: 'unsupported',
+    label: 'Betriebsrente (Sonderfall)',
+    defaultName: 'Betriebsrente',
+    helper: 'Sonderfall, zum Beispiel Einmalzahlung, ausländischer Vertrag oder ungeklärte Art: Die betroffene Phase braucht manuelle KV/PV-Gesamtbeträge.',
+    group: 'automatic',
   },
-  'rental-income': {
+  {
+    value: 'rental-income',
+    kind: 'rental-income',
+    support: undefined,
     label: 'Mieteinnahmen',
     defaultName: 'Mieteinnahmen',
     helper: 'Nutze einen nachhaltig erwarteten Betrag; Steuern, Leerstand und Instandhaltung werden nicht automatisch berechnet.',
+    group: 'rental',
   },
-  'side-income': {
+  {
+    value: 'private-rente',
+    kind: 'private-rente',
+    support: undefined,
+    label: 'Private Rente',
+    defaultName: 'Private Rente',
+    helper: 'Die Vertragsart wird hier nicht automatisch eingeordnet. Bitte eigene KV/PV-Gesamtbeträge für die betroffene Phase angeben. Das bedeutet nicht, dass jede private Rente beitragspflichtig ist.',
+    group: 'cashflow',
+  },
+  {
+    value: 'side-income',
+    kind: 'side-income',
+    support: undefined,
     label: 'Nebenjob',
     defaultName: 'Nebenjob',
     helper: 'Steuern und Sozialabgaben werden nicht automatisch berechnet. KV/PV benötigt eine manuelle Gesamtannahme für die Phase.',
+    group: 'cashflow',
   },
-  'bridge-income': {
+  {
+    value: 'bridge-income',
+    kind: 'bridge-income',
+    support: undefined,
     label: 'Brückeneinkommen',
     defaultName: 'Brückeneinkommen',
     helper: 'Lege Start- und Endalter fest. Steuern und Sozialabgaben werden nicht automatisch berechnet.',
+    group: 'cashflow',
   },
-  other: {
+  {
+    value: 'other',
+    kind: 'other',
+    support: undefined,
     label: 'Sonstiges Einkommen',
     defaultName: 'Weiteres Einkommen',
     helper: 'Wähle netto oder brutto; Steuern werden nicht automatisch berechnet; KV/PV benötigt eine manuelle Gesamtannahme für die Phase.',
+    group: 'cashflow',
   },
-}
+]
+
+const CATEGORY_GROUPS: readonly { id: CategoryGroupId; label: string; explanation: string }[] = [
+  {
+    id: 'automatic',
+    label: 'KV/PV automatisch berechnet',
+    explanation: 'Gesetzliche Rente und Betriebsrente: KV/PV wird automatisch berechnet (Sonderfälle über manuelle Phasen-Gesamtbeträge).',
+  },
+  {
+    id: 'rental',
+    label: 'Mieteinnahmen',
+    explanation: 'KVdR: gewöhnliche Miete beitragsfrei; freiwillig versichert: beitragspflichtiger Überschuss (eigenes Assessment-Feld).',
+  },
+  {
+    id: 'cashflow',
+    label: 'Cashflow-only',
+    explanation: 'Private Rente, Nebenjob, Brückeneinkommen, Sonstiges: kein automatischer KV/PV-Beitrag; nur über manuelle Phasen-Gesamtbeträge; Steuern via Abzugsfeld oder netto.',
+  },
+]
 
 const GENERIC_DEFAULT_NAMES = new Set([
   'Weiteres Einkommen',
-  ...Object.values(CATEGORY_DETAILS).map(({ defaultName }) => defaultName),
+  ...CATEGORY_OPTIONS.map(({ defaultName }) => defaultName),
 ])
+
+function categoryValueFor(stream: RetirementIncomeStream): string {
+  const kind = stream.kind ?? 'other'
+  if (kind === 'gesetzliche-rente' || kind === 'betriebsrente') {
+    return stream.support === 'unsupported' ? `${kind}:unsupported` : `${kind}:standard`
+  }
+  return kind
+}
+
+function categoryHelperFor(stream: RetirementIncomeStream): string {
+  return CATEGORY_OPTIONS.find(option => option.value === categoryValueFor(stream))?.helper ?? ''
+}
 
 type Props = {
   input?: RentenlueckeInput
@@ -66,11 +154,17 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
         Für die gesetzliche Rente kannst du den Monatsbetrag aus deinem Rentenbescheid eintragen. Die Modellrechnung
         behandelt ihn als Bruttobetrag in heutiger Kaufkraft.
       </p>
+      <ul className="retirement-income-note retirement-income-groups" aria-label="Kategoriegruppen im Überblick">
+        {CATEGORY_GROUPS.map(group => (
+          <li key={group.id}><strong>{group.label}:</strong> {group.explanation}</li>
+        ))}
+      </ul>
       <div className="retirement-income-list">
         {streams.map((stream, index) => {
           const label = stream.name.trim() || `Einkommen ${index + 1}`
           const kind = stream.kind ?? 'other'
-          const category = CATEGORY_DETAILS[kind]
+          const helper = categoryHelperFor(stream)
+          const isPensionKind = kind === 'gesetzliche-rente' || kind === 'betriebsrente'
           const automaticPhases = insurance ? (['bridge', 'pension'] as const).filter(phase => {
             const relevant = phaseStreams(streams, insurance, phase, input?.retirementAge ?? 0, input?.planningAge ?? 120)
             return relevant.some(s => s.id === stream.id) && !phaseManualReasons(insurance, phase, relevant).length
@@ -87,19 +181,24 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                   id={`retirement-income-kind-${stream.id}`}
                   aria-label={`Kategorie von ${label}`}
                   aria-describedby={`retirement-income-help-${stream.id}`}
-                  value={kind}
+                  value={categoryValueFor(stream)}
                   onChange={(event) => {
-                    const nextKind = event.target.value as RetirementIncomeStreamKind
-                    const nextName = CATEGORY_DETAILS[nextKind].defaultName
+                    const option = CATEGORY_OPTIONS.find(candidate => candidate.value === event.target.value)
+                    if (!option) return
                     const mayReplaceName = stream.name.trim() === '' || GENERIC_DEFAULT_NAMES.has(stream.name.trim())
-                    onUpdate(stream.id, { kind: nextKind, support: undefined, ...(mayReplaceName ? { name: nextName } : {}) })
+                    onUpdate(stream.id, { kind: option.kind, support: option.support, ...(mayReplaceName ? { name: option.defaultName } : {}) })
                   }}
                 >
-                  {Object.entries(CATEGORY_DETAILS).map(([value, details]) => (
-                    <option key={value} value={value}>{details.label}</option>
+                  {CATEGORY_GROUPS.map(group => (
+                    <optgroup key={group.id} label={group.label}>
+                      {CATEGORY_OPTIONS.filter(option => option.group === group.id).map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>
+              {isPensionKind && <p className="retirement-income-row-note">Standard: gewöhnlicher inländischer Bezug mit automatischer KV/PV-Berechnung. Sonderfall: zum Beispiel Ausland, Einmalzahlung oder ungeklärt — die Phase braucht manuelle KV/PV-Gesamtbeträge.</p>}
               <label className="field">
                 <span className="field-label">Name</span>
                 <input
@@ -117,15 +216,14 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                 value={stream.amountMonthlyToday}
                 onChange={(amountMonthlyToday) => onUpdate(stream.id, { amountMonthlyToday })}
               />
-              {kind === 'gesetzliche-rente' ? <p>Beginn: Alter {Number.isFinite(stream.startAge) ? stream.startAge : 'offen'}. <a href="#zeitplan">Im Zeitplan ändern</a></p> : <NumberInput
+              <NumberInput
                 id={`retirement-income-start-${stream.id}`}
-                label="Startalter"
+                label={kind === 'gesetzliche-rente' ? 'Rentenbeginn (Alter)' : 'Startalter'}
                 value={stream.startAge}
                 min={0}
                 max={120}
                 onChange={(startAge) => onUpdate(stream.id, { startAge })}
               />
-              }
               <OptionalEndAgeInput stream={stream} error={endAgeError} onUpdate={onUpdate} />
               <label className="field">
                 <span className="field-label">Betragsart</span>
@@ -158,7 +256,6 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                   })}
                 />
               ) : null}
-              {['gesetzliche-rente', 'betriebsrente'].includes(kind) && (automaticPhases.length > 0 || stream.support === 'unsupported') && <label className="field"><span className="field-label">Art bestätigen – {label}</span><select id={`retirement-income-support-${stream.id}`} value={stream.support ?? ''} onChange={e => onUpdate(stream.id, { support: (e.target.value || undefined) as RetirementIncomeStream['support'] })}><option value="">Bitte auswählen</option><option value="standard">Gewöhnliche inländische {kind === 'betriebsrente' ? 'laufende Betriebsrente' : 'gesetzliche Altersrente'}</option><option value="unsupported">Sonderfall / ungeklärt (z. B. Ausland, Einmalzahlung)</option></select></label>}
               {kind === 'rental-income' && automaticPhases.some(phase => insurance?.[phase].status && insurance[phase].status !== 'kvdr') && <OptionalNumber id={`retirement-income-rentalAssessmentMonthlyToday-${stream.id}`} label={`Beitragsrelevanter Mietüberschuss vor Steuern – ${label} (€/Monat heute)`} value={stream.rentalAssessmentMonthlyToday} onChange={rentalAssessmentMonthlyToday => onUpdate(stream.id, { rentalAssessmentMonthlyToday })} />}
               {kind === 'rental-income' && <p className="retirement-income-row-note">Monatsbetrag = verfügbarer Mietzufluss vor KV/PV; sonstige Abzüge separat. Die Beitragsbasis ist der Überschuss vor Steuern nach beitragsrechtlichen Kosten, unabhängig vom verfügbaren Geld. Bei KVdR ist gewöhnliche Miete beitragsfrei und darf netto bleiben.</p>}
               <p className="retirement-income-row-note">Netto nur für beitragsfreie Einnahmen oder bei manueller Phase, jeweils vor der separat erfassten KV/PV. Beitragsrelevante automatische Einkommen benötigen Brutto; keine Rückrechnung.</p>
@@ -171,7 +268,7 @@ export function RetirementIncomeStreamsSection({ streams, insurance, input, onUp
                 Entfernen
               </button>
               <p className="field-help retirement-income-row-note" id={`retirement-income-help-${stream.id}`} aria-live="polite">
-                {category.helper}
+                {helper}
               </p>
             </div>
           )
