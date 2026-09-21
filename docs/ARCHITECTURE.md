@@ -19,6 +19,7 @@ demselben Simulationsergebnis ab und berechnen keine eigene Geschäftslogik.
 - `model/historicalReturns/` — Historische Rendite-/Inflationsregister, Quellenoptionen, Bootstrap-Stichproben/-Simulation, erwartete Renditen.
 - `model/returnData/` — Gebündelte statische Datensätze (JST-/Bundesbank-Produktionsreihen, ETF-Historien) für `historicalReturns/`.
 - `model/contributions/` — Beitrags-/Bemessungsengine nach 2026er-Regeln (KV/PV-Obergrenzen, DRV-Zuschusslogik) für Versicherungsphasen.
+- `model/tax/` — Steuerengine nach 2026er-Regeln (Kapitalertragsteuer auf Entnahmen/Umschichtungen, Rentenbesteuerung der GRV mit §32a-Tarif); reine Funktionen mit Scope-Deklaration.
 
 ## Grenzregeln
 

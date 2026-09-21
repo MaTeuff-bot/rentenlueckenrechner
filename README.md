@@ -88,6 +88,7 @@ Dependabot stellt wöchentlich (Mo 07:00, Europe/Berlin) Gruppen-PRs für npm un
 
 Modulgrenzen und Zonenzuständigkeiten: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Jährliches Ledger als Berechnungsfläche und Feature-Effektkarte: [docs/ledger-effect-map.md](docs/ledger-effect-map.md).
+Regelsnapshots: [Kapitalertragsteuer 2026](docs/kapitalertragsteuer-rules-2026.md), [Rentenbesteuerung (GRV) 2026](docs/rentenbesteuerung-rules-2026.md), [GKV/PV-Beiträge 2026](docs/gkv-pv-rules-2026.md).
 
 - `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Kapitalbedarfssuche, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
 - `src/features/rentenluecke/charting/`: Aus Simulationsergebnissen abgeleitete Diagrammdaten und Risikokarten.

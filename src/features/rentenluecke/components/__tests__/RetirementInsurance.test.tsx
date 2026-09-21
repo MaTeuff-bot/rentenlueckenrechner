@@ -200,7 +200,7 @@ describe('guided insurance fields and ledger breakdown', () => {
     render(<InsuranceBreakdown rows={rows} streams={input.retirementIncomeStreams!} />)
     const section = screen.getByRole('region', { name: 'Monatliche KV/PV-Aufschlüsselung' })
     expect(within(section).getByText('2.000 € / 2.000 €')).toBeVisible()
-    expect(within(section).getByText('1.753 €')).toBeVisible()
+    expect(within(section).getByText('1.681 €')).toBeVisible()
     fireEvent.click(screen.getByText('Bemessung und Grenzen erklären'))
     expect(screen.getByText(/ein gemeinsamer Betriebsrenten-KV-Freibetrag/)).toBeVisible()
   })

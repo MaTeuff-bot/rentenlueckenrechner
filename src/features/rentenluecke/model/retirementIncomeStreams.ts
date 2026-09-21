@@ -18,6 +18,32 @@ export function calculateRetirementIncomeForYear(input: RentenlueckeInput, age: 
   return { gross, otherDeductions, kv, pv, portfolioBase, deductions: otherDeductions + kv + pv, net: insurance.availableIncomeMonthly * 12, insurance }
 }
 
+/** GRV-only annual gross pension for a model year: face value of the active
+ * statutory-pension streams (monthly amount x 12 x inflation factor), including
+ * net-basis entries at face value (disclosed planning approximation in the rule
+ * snapshot). Non-GRV kinds never enter the Rentenbesteuerung tax base. */
+export function grvPensionGrossForYear(
+  input: { retirementIncomeStreams?: readonly RetirementIncomeStream[] },
+  age: number,
+  inflationFactor: number,
+): number {
+  let gross = 0
+  for (const stream of activeIncomeStreams(input.retirementIncomeStreams ?? [], age)) {
+    if (stream.kind !== 'gesetzliche-rente') continue
+    gross += stream.amountMonthlyToday * 12 * inflationFactor
+  }
+  return gross
+}
+
+/** Earliest statutory-pension start age across GRV streams; null when no GRV
+ * stream exists (no Rentenbesteuerung). Ties keep the first stream, mirroring
+ * controllingPensionStream in retirementInsurance.ts. */
+export function earliestGrvPensionAge(streams: readonly RetirementIncomeStream[] | undefined): number | null {
+  if (!streams) return null
+  const ages = streams.filter(s => s.kind === 'gesetzliche-rente').map(s => s.startAge)
+  return ages.length ? Math.min(...ages) : null
+}
+
 export function createDefaultRetirementIncomeStreams(
   input: AggregateRetirementIncomeInput,
 ): RetirementIncomeStream[] {

@@ -139,8 +139,11 @@ describe('useScenarioState', () => {
     const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
 
     act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
-    expect(result.current.result!.retirementRows[0].retirementIncomeNet)
-      .toBeCloseTo(result.current.result!.retirementRows[0].retirementIncomeGross * 0.8)
+    // The 20 % haircut applies to the gross; the GRV-Rentensteuer (slice 2, assessed
+    // on the GRV face gross) additionally reduces the spendable net.
+    const updatedRow = result.current.result!.retirementRows[0]
+    expect(updatedRow.retirementIncomeNet)
+      .toBeCloseTo(updatedRow.retirementIncomeGross * 0.8 - (updatedRow.pensionIncomeTax ?? 0))
     expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
 
     act(() => result.current.addRetirementIncomeStream())

@@ -24,7 +24,8 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
       <dt>DRV-Beteiligung / Zuschuss (bereits im Eigenbeitrag berücksichtigt)</dt><dd>{c.status === 'automatic' ? formatCurrency(c.drvParticipationMonthly + c.drvSubsidyMonthly) : 'Bereits in manuellen Beträgen enthalten'}</dd>
       <dt>Eigene KV</dt><dd>{monthly(row.healthInsurance)}</dd>
       <dt>Eigene PV</dt><dd>{monthly(row.careInsurance)}</dd>
-      <dt>Verfügbares Einkommen nach KV/PV</dt><dd><strong>{monthly(row.retirementIncomeNet)}</strong></dd>
+      <dt>GRV-Rentensteuer (Einkommensteuer auf die gesetzliche Rente)</dt><dd>{monthly(row.pensionIncomeTax ?? 0)}</dd>
+      <dt>Verfügbares Einkommen nach KV/PV und GRV-Rentensteuer</dt><dd><strong>{monthly(row.retirementIncomeNet)}</strong></dd>
     </dl>
     {row.unfundedWithdrawal > 0 && <p role="alert">Vermögenslücke: {formatCurrency(row.unfundedWithdrawal)} im Jahr nicht finanzierbar, einschließlich KV/PV.</p>}
     {row.capitalAssessment && <details><summary>Automatische Kapitalbasis – Jahreswerte</summary>

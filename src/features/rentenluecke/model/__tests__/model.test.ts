@@ -13,7 +13,12 @@ function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
 }
 
 describe('Rentenluecke model', () => {
-  it('returns zero required capital, monthly gap, and withdrawals when there is no gap', () => {
+  it('funds the GRV-Rentensteuer from a pre-tax surplus before reporting a gap', () => {
+    // 2,000/mo GRV pension covers 1,800/mo desired spending pre-tax, but the
+    // Rentenbesteuerung (slice 2) applies: the inflated pension (2 % default
+    // inflation over 27 years, 97.5 % Besteuerungsanteil for Rentenbeginn 2053)
+    // owes 4,105.06 pension tax against a 4,096.53 pre-tax surplus, leaving a
+    // small first-year gap of 8.53. Required capital funds that net gap.
     const result = simulateScenario(
       input({
         currentCapital: 10_000,
@@ -22,9 +27,12 @@ describe('Rentenluecke model', () => {
       }),
     )
 
-    expect(result.summary.requiredCapitalAtRetirement).toBe(0)
-    expect(result.summary.monthlyGapToday).toBe(0)
-    expect(result.retirementRows.every((row) => row.gapWithdrawal === 0)).toBe(true)
+    const first = result.retirementRows[0]
+    expect(first.pensionIncomeTax).toBeCloseTo(4105.061976321859, 8)
+    expect(first.gapWithdrawal).toBeCloseTo(8.534432383203239, 8)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(1132.1350429656745, 8)
+    expect(result.summary.monthlyGapToday).toBeCloseTo(5 / 12, 8)
+    expect(result.retirementRows.every((row) => row.gapWithdrawal === 0)).toBe(false)
   })
 
   it('uses annual gap times retirement years as required capital with no return and no inflation', () => {
@@ -39,7 +47,10 @@ describe('Rentenluecke model', () => {
       }),
     )
 
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(36_000, 0)
+    // Slice 2: the 24,000 GRV pension (Rentenbeginn 2053 → 97.5 %) owes 2,405/yr
+    // GRV-Rentensteuer, so each year's gap is 12,000 + 2,405 = 14,405 and the
+    // required capital is 3 × 14,405 = 43,215 (the gap is net of ALL deductions).
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(43_215, 0)
   })
 
   it('applies accumulation return before adding the end-of-year contribution', () => {
@@ -96,7 +107,9 @@ describe('Rentenluecke model', () => {
     const [row] = simulateRetirementRows(scenario, 1_000_000)
 
     expect(row.yearIndex).toBe(7)
-    expect(row.gapWithdrawal).toBeCloseTo(14_400 * 1.02 ** 7)
+    // Slice 2: the pre-tax gap 14,400 × 1.02⁷ grows by the GRV-Rentensteuer on the
+    // inflated pension (Rentenbeginn 2033 → 87.5 %; tier-3 pin for the taxed gap).
+    expect(row.gapWithdrawal).toBeCloseTo(18006.796526070113, 8)
   })
 
   it('inflates contributions with yearIndex 0 for the first row and 1 for the second row', () => {

@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react'
 import { manualApproximationDisclosure, taxDisclosures } from '../model/tax/capitalIncomeTax'
+import { pensionTaxDisclosures } from '../model/tax/incomeTax'
 import { formatApproxCurrency, formatCurrency } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
 import type { SimulationResult } from '../model/types'
@@ -55,6 +56,9 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
     result.retirementRows.length > 0
       ? stochasticSummary.rows.find((row) => row.ageStart >= result.retirementRows[0].ageStart && row.p50CapitalToday <= 0)
       : null
+  const totalPensionIncomeTax = result.retirementRows.reduce((sum, row) => sum + (row.pensionIncomeTax ?? 0), 0)
+  const taxedPensionYears = result.retirementRows.filter((row) => (row.pensionIncomeTax ?? 0) > 0).length
+  const averagePensionIncomeTax = result.retirementRows.length > 0 ? totalPensionIncomeTax / result.rows.length : 0
   const totalCapitalIncomeTax = result.rows.reduce((sum, row) => sum + (row.capitalIncomeTax ?? 0), 0)
   const taxedRetirementYears = result.retirementRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
   const taxedAccumulationYears = result.accumulationRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
@@ -101,6 +105,11 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           <small>{taxedRetirementYears} von {result.retirementRows.length} Ruhestandsjahren mit Entnahmesteuer{taxedAccumulationYears > 0 ? `; ${taxedAccumulationYears} von ${result.accumulationRows.length} Ansparjahren mit Umschichtungssteuer` : ''}</small>
         </article>
         <article className="result-card">
+          <span>GRV-Rentensteuer (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averagePensionIncomeTax, 100)}/Jahr` : ''})</span>
+          <strong>{formatApproxCurrency(totalPensionIncomeTax, 50)}</strong>
+          <small>{taxedPensionYears} von {result.retirementRows.length} Ruhestandsjahren mit Rentensteuer (Netto-Cashflow bereits gemindert)</small>
+        </article>
+        <article className="result-card">
           <span>Monatliche Netto-Rentenlücke in heutiger Kaufkraft</span>
           <strong>{formatApproxCurrency(summary.monthlyGapToday, 50)}</strong>
           <AdjustLink
@@ -124,7 +133,18 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
         <p className="survival-note">Der Median-Verlauf deckt die Entnahmen bis zum Planungshorizont.</p>
       )}
       <details className="method-details">
-        <summary>Hinweise zur Kapitalertragsteuer</summary>
+        <summary>Hinweise zur Renten- und Kapitalertragsteuer</summary>
+        <p>
+          Die gesetzliche Rente wird nach der Rentenbesteuerung (Besteuerungsanteil
+          nach Rentenbeginnjahr, eingefrorener Rentenfreibetrag, §32a-Tarif 2026)
+          besteuert; der ausgewiesene Netto-Cashflow und die Entnahmelücke sind
+          bereits um die GRV-Rentensteuer gemindert.
+        </p>
+        <ul>
+          {pensionTaxDisclosures.map((disclosure) => (
+            <li key={disclosure}>{disclosure}</li>
+          ))}
+        </ul>
         <p>
           Entnahmen im Ruhestand (Entnahme) und Umschichtungsgewinne der Ansparphase bei automatischer Kapitalbasis
           (Umschichtung) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 % Solidaritätszuschlag) besteuert;

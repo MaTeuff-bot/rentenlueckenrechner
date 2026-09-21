@@ -62,8 +62,10 @@ function expectLedgerConservation(rows: YearlyPeriodRow[]) {
     }
     if (row.phase === 'retirement' && !row.capitalAssessment) {
       expect(row.gapWithdrawal).toBeMoneyClose(Math.max(0, row.desiredSpending - row.retirementIncomeNet))
+      // Slice-2 net identity: the GRV-Rentensteuer reduces the spendable net like
+      // any other deduction (net = gross - other - KV/PV - pensionIncomeTax).
       expect(row.retirementIncomeNet).toBeMoneyClose(
-        row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance)
+        row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0))
     }
     // Insurance is deducted exactly once, never from the portfolio twice.
     if (row.phase === 'retirement') {
@@ -214,16 +216,22 @@ describe('reference scenario S1: standard KVdR retirement', () => {
   it('computes the hand-calculated ledger exactly', () => {
     // Age 67: pension 24,000 gross. KVdR: KV basis 24,000 ≤ ceiling 69,750 (5812.5*12);
     // general rate (14.6+2.9)%=17.5% → 4,200/yr; half paid by insurer → own KV 2,100.
-    // PV: childless ≥23 → (3.6+0.6)% of 24,000 = 1,008. Net 24,000-2,100-1,008 = 20,892.
-    // Desired 24,000 → gap 3,108/yr. Capital 100,000 at 0% funds 3 years; never depleted.
+    // PV: childless ≥23 → (3.6+0.6)% of 24,000 = 1,008. Pre-tax net 20,892.
+    // Slice 2 (Rentenbesteuerung): Rentenbeginn 2027 → 84.5 %; first-year gross
+    // 24,000 → Rentenfreibetrag 15.5 % × 24,000 = 3,720 (frozen). Taxable share
+    // 24,000-3,720 = 20,280; zvE 20,280-102-(2,100+1,008) = 17,070; §32a zone 2
+    // (y=0.4722 → 864.99…) → pensionIncomeTax 864. Net 20,892-864 = 20,028.
+    // Desired 24,000 → gap 3,972/yr. Capital 100,000 at 0% funds 3 years; never depleted.
     const result = simulateScenario(input)
     expect(result.retirementRows).toHaveLength(2)
     for (const row of result.retirementRows) {
       expect(row.retirementIncomeGross).toBeMoneyClose(24_000)
       expect(row.healthInsurance).toBeMoneyClose(2_100)
       expect(row.careInsurance).toBeMoneyClose(1_008)
-      expect(row.retirementIncomeNet).toBeMoneyClose(20_892)
-      expect(row.gapWithdrawal).toBeMoneyClose(3_108)
+      expect(row.pensionTaxBase).toBeMoneyClose(20_280)
+      expect(row.pensionIncomeTax).toBeMoneyClose(864)
+      expect(row.retirementIncomeNet).toBeMoneyClose(20_028)
+      expect(row.gapWithdrawal).toBeMoneyClose(3_972)
     }
     expect(result.summary.survivesUntilPlanningAge).toBe(true)
     expectLedgerConservation(result.rows)
@@ -237,10 +245,11 @@ describe('reference scenario S1: standard KVdR retirement', () => {
     }
   })
 
-  it('pins required capital: 3,108 for one year, funded forever at 0% with income above zero gap', () => {
-    // At 0% return the gap repeats 3,108 every year; required capital = 2 × 3,108 = 6,216.
+  it('pins required capital: 3,972 for one year, funded forever at 0% with income above zero gap', () => {
+    // At 0% return the gap repeats 3,972 every year (3,108 pre-tax gap + 864
+    // GRV-Rentensteuer, slice 2); required capital = 2 × 3,972 = 7,944.
     const result = simulateScenario(input)
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(6_216)
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(7_944)
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(100_000)
   })
 })
@@ -260,14 +269,21 @@ describe('reference scenario S2: early retirement with voluntary bridge', () => 
     for (const row of bridge) {
       expect(row.healthInsurance).toBeMoneyClose(2_160)
       expect(row.careInsurance).toBeMoneyClose(480)
+      expect(row.pensionIncomeTax).toBeMoneyClose(0)
       expect(row.gapWithdrawal).toBeMoneyClose(32_640)
     }
     // Pension phase: gross 24,000. KVdR own KV = 17.5%×24,000/2 = 2,100 (verified probe);
-    // PV childless 4.2%×24,000 = 1,008; net 20,892; gap = 30,000 − 20,892 = 9,108.
+    // PV childless 4.2%×24,000 = 1,008; pre-tax net 20,892.
+    // Slice 2: Rentenbeginn 2033 → 87.5 %; freibetrag 12.5 % × 24,000 = 3,000;
+    // taxable 21,000; zvE 21,000-102-3,108 = 17,790; zone 2 (y=0.5442 → 1,032.71…)
+    // → pensionIncomeTax 1,032; net 19,860; gap = 30,000 − 19,860 = 10,140.
     for (const row of pensionPhase) {
       expect(row.healthInsurance).toBeMoneyClose(2_100)
       expect(row.careInsurance).toBeMoneyClose(1_008)
-      expect(row.gapWithdrawal).toBeMoneyClose(9_108)
+      expect(row.pensionTaxBase).toBeMoneyClose(21_000)
+      expect(row.pensionIncomeTax).toBeMoneyClose(1_032)
+      expect(row.retirementIncomeNet).toBeMoneyClose(19_860)
+      expect(row.gapWithdrawal).toBeMoneyClose(10_140)
     }
     expectLedgerConservation(result.rows)
     expect(result.summary.survivesUntilPlanningAge).toBe(true)
@@ -342,13 +358,21 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     // 604.224 + received VP 1,318.879 = 6,249.003; x0.7 (30% Teilfreistellung) =
     // 4,374.302; allowance 1,000 -> base 3,374.302; tax 3,374.302 x 0.25 x 1.055 = 889.972.
     // Required withdrawal = 6,000 gap + 6,122.477 insurance + 889.972 tax (tier-3 pins).
+    // Slice 2 (Rentenbesteuerung): Rentenbeginn 2027 → 84.5 %; freibetrag
+    // 15.5 % × 24,000 = 3,720; taxable 20,280; zvE 20,280-102-(5,072.598+1,049.879)
+    // = 14,055.523 → §32a zone 2 → pensionIncomeTax 265 (tier-3 pin). The required
+    // withdrawal grows by the pension tax (13,012.449 + 265 = 13,277.449); the
+    // Kapitalertragsteuer pins are unchanged because the funding sales are unchanged.
     const result = simulateScenario(input)
     const first = result.retirementRows[0]
     expect(first.taxableWithdrawal).toBeMoneyClose(4374.302242179062)
     expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
     expect(first.capitalIncomeTax).toBeMoneyClose(889.9722163747276)
+    expect(first.pensionTaxBase).toBeMoneyClose(20_280)
+    expect(first.pensionIncomeTax).toBeMoneyClose(265)
+    expect(first.retirementIncomeNet).toBeMoneyClose(17612.52304035329)
     expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
-    expect(first.gapWithdrawal).toBeMoneyClose(13012.449176021437)
+    expect(first.gapWithdrawal).toBeMoneyClose(13277.449176021437)
     // Every retirement year is taxed with a fresh annual allowance (scaled by inflation;
     // factor 1 here, so 1,000); accumulation Umschichtung rows carry the same fields.
     for (const row of result.retirementRows) {
@@ -362,8 +386,10 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
       expect(row.sparerpauschbetragApplied).toBeDefined()
     }
     expectLedgerConservation(result.rows)
-    // Required capital funds gap + tax (tier-3 regression pin for the taxed search).
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(33534.278869628906)
+    // Required capital funds gap + both taxes (tier-3 regression pin for the taxed search;
+    // slice 2 raises it by the funded GRV-Rentensteuer; the holdings-only funding
+    // take keeps future capital-tax estimates slightly lower than full state scaling).
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34398.651123046875)
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(105_000)
   })
 
@@ -480,8 +506,9 @@ describe('cross-scenario invariants and return paths', () => {
   it('keeps assessment-only capital out of spendable income in estimator scenarios', () => {
     const result = simulateScenario(prepare(estimatorScenario()))
     for (const row of result.retirementRows) {
+      // Slice-2 net identity holds on estimator rows too (pension tax reduces the net).
       expect(row.retirementIncomeNet).toBeMoneyClose(
-        row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance)
+        row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0))
     }
   })
 })
