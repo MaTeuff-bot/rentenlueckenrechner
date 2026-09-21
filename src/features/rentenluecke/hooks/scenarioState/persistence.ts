@@ -67,9 +67,13 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     if (!persisted.success) return createDefaultState()
     const state = persisted.data
     const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
+    const storedInsurance = state.input.retirementInsurance
+    const persistedInsurance = storedInsurance && storedInsurance.insurerAdditionalRate === undefined
+      ? { ...storedInsurance, insurerAdditionalRate: 0.029 }
+      : storedInsurance
     return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input,
       retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets),
-      retirementInsurance: state.input.retirementInsurance ? { ...applyCoverage(state.input.retirementInsurance, state.insuranceCoverageAnswers),
+      retirementInsurance: persistedInsurance ? { ...applyCoverage(persistedInsurance, state.insuranceCoverageAnswers),
         pensionAge: timelineBoundary(state.retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer),
       } : undefined,
     }, calculatePortfolioExpectedReturn(allocation)) }

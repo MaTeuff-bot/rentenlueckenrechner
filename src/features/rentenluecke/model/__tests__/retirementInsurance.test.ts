@@ -11,7 +11,7 @@ import { automaticInsurance, insuredInput, pension } from './insuranceFixtures'
 describe('guided insurance completeness and scope', () => {
   it('requires genuine answers; confirmed zero is complete', () => {
     expect(() => simulateScenario(DEFAULT_INPUT)).toThrow('KV/PV')
-    const missing = insuredInput({ retirementInsurance: createDefaultRetirementInsurance(67) })
+    const missing = insuredInput({ retirementInsurance: { ...createDefaultRetirementInsurance(67), insurerAdditionalRate: undefined } })
     expect(insuranceSetupIssues(missing)).toEqual(expect.arrayContaining([
       'Rentenphase: Versicherungsstatus auswählen.', 'Kassenindividuellen Zusatzbeitrag angeben.',
       'Dauerhafte PV-Elterneigenschaft angeben.',

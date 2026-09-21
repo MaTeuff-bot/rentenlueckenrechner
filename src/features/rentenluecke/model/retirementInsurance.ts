@@ -35,7 +35,7 @@ export const retirementInsuranceSchema = z.object({
 export type InsurancePhase = z.infer<typeof insurancePhaseSchema>
 export type RetirementInsurance = z.infer<typeof retirementInsuranceSchema>
 export function createDefaultRetirementInsurance(pensionAge?: number): RetirementInsurance {
-  return { pensionAge, referenceYear: new Date().getFullYear(), childBirthYears: [], bridge: {}, pension: {} }
+  return { pensionAge, referenceYear: new Date().getFullYear(), insurerAdditionalRate: 0.029, childBirthYears: [], bridge: {}, pension: {} }
 }
 export function earliestPensionAge(streams: readonly RetirementIncomeStream[]): number | undefined {
   const ages = streams.filter(s => s.kind === 'gesetzliche-rente').map(s => s.startAge)
