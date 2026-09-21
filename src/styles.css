@@ -794,6 +794,10 @@ summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-v
 
 .insurance-flow, .insurance-phase, .coverage-checklist { min-width: 0; }
 .insurance-flow > fieldset { width: 100%; box-sizing: border-box; margin-block: 1rem; }
+.insurance-block { display: grid; gap: 12px; margin-block: 1rem; }
+.insurance-block > h3 { margin: 0; }
+.insurance-block > p { margin: 0; }
+.insurance-flow .insurance-block fieldset { width: 100%; box-sizing: border-box; }
 .coverage-checklist { gap: .5rem; }
 .coverage-checklist label { display: flex; align-items: baseline; gap: .6rem; margin: 0; }
 .coverage-checklist input { flex: 0 0 auto; }
