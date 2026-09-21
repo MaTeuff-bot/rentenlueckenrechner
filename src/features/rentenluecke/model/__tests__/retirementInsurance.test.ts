@@ -125,8 +125,15 @@ describe('authoritative contribution ledger', () => {
     expect(row.retirementIncomeOtherDeductions).toBe(2400)
     expect(row.healthInsurance / 12).toBeCloseTo(227.89375, 8)
     expect(row.careInsurance / 12).toBeCloseTo(90, 8)
-    expect(row.retirementIncomeNet / 12).toBeCloseTo(1982.10625, 8)
-    expect(row.retirementIncomeDeductions).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeNet)
+    // Slice 2: GRV face gross 24,000, Rentenbeginn 2026 → 84 %; freibetrag 3,840;
+    // taxable 20,160; zvE 20,160-102-(2,734.725+1,080) = 16,243.275; zone 2
+    // (y=0.3895275 → 684.09…) → pensionIncomeTax 684 (57/mo). Net drops by exactly that.
+    expect(row.pensionTaxBase).toBeCloseTo(20_160, 8)
+    expect(row.pensionIncomeTax).toBeCloseTo(684, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(1925.10625, 8)
+    // The pension tax is a separate ledger deduction (like capitalIncomeTax), not part
+    // of retirementIncomeDeductions: gross - net - pensionIncomeTax == deductions.
+    expect(row.retirementIncomeDeductions).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeNet - (row.pensionIncomeTax ?? 0))
     expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(row.gapWithdrawal * 3, 0)
   })
   it('turns an apparent income surplus into a funded gap after insurance', () => {
@@ -136,11 +143,15 @@ describe('authoritative contribution ledger', () => {
     expect(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.desiredSpending).toBe(1200)
     expect(row.healthInsurance).toBeCloseTo(175 * 12)
     expect(row.careInsurance).toBeCloseTo(72 * 12)
-    expect(row.retirementIncomeNet).toBeCloseTo(1753 * 12)
+    // Slice 2: Rentenbeginn 2026 → 84 %; freibetrag 3,840; taxable 20,160;
+    // zvE 20,160-102-(2,100+864) = 17,094; zone 2 (y=0.4746 → 870.43…) → 870/yr.
+    // Net 21,036-870 = 20,166; gap 22,800-20,166 = 2,634 = 219.5×12.
+    expect(row.pensionIncomeTax).toBeCloseTo(870, 8)
+    expect(row.retirementIncomeNet).toBeCloseTo(1680.5 * 12)
     expect(row.surplusIncome).toBe(0)
-    expect(row.gapWithdrawal).toBeCloseTo(147 * 12)
+    expect(row.gapWithdrawal).toBeCloseTo(219.5 * 12)
     expect(row.closingCapital).toBeCloseTo(row.openingCapital - row.gapWithdrawal)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(147 * 12 * 3, 0)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(219.5 * 12 * 3, 0)
   })
   it('keeps rental cash separate from its pre-tax assessment and never adds capital basis as cash', () => {
     const input = insuredInput({ retirementIncomeStreams: [pension({ amountMonthlyToday: 4000 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 1000 }), pension({ id: 'rent', kind: 'rental-income', amountMonthlyToday: 600, effectiveDeductionRate: 0.25, rentalAssessmentMonthlyToday: 600 })], retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'confirmed' } }) })
@@ -149,7 +160,12 @@ describe('authoritative contribution ledger', () => {
     expect(row.portfolioContributionBase / 12).toBe(600)
     expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5812.5, pvAssessmentMonthly: 5812.5, drvSubsidyMonthly: 350 })
     expect(row.healthInsurance / 12).toBeCloseTo(662.3125, 8)
-    expect(row.retirementIncomeNet / 12).toBeCloseTo(4578.4375, 8)
+    // Slice 2: only the GRV face gross (48,000; Betriebsrente and rental income are
+    // out of scope) enters the base. Rentenbeginn 2026 → 84 %; freibetrag 7,680;
+    // taxable 40,320 (tier-3 pin); pensionIncomeTax 4,149 (345.75/mo).
+    expect(row.pensionTaxBase).toBeCloseTo(40_320, 8)
+    expect(row.pensionIncomeTax).toBeCloseTo(4_149, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(4232.6875, 8)
   })
   it('preserves negative available cash and funds insurance once even with zero income', () => {
     const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 67, retirementIncomeStreams: [] })

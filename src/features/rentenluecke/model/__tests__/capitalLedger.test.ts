@@ -118,11 +118,12 @@ describe('integrated capital assessment ledger', () => {
       if (row.phase === 'retirement') {
         // Slice-1 funding rule: the required withdrawal funds the net spending gap
         // plus Kapitalertragsteuer, so it exceeds desired-minus-net by exactly the tax.
+        // (Slice 2 holds automatically: the net is already reduced by the pension tax.)
         expect(row.gapWithdrawal).toBeCloseTo(Math.max(0, row.desiredSpending - row.retirementIncomeNet + (row.capitalIncomeTax ?? 0)), 5)
-        expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance)
-        // The single paid withdrawal covers gap, insurance and tax; the gap receives the remainder.
+        expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0))
+        // The single paid withdrawal covers gap, insurance and both taxes; the gap receives the remainder.
         const insurance = row.capitalAssessment!.insurance.kv + row.capitalAssessment!.insurance.pv
-        expect((row.netGapWithdrawal ?? 0) + insurance + (row.capitalIncomeTax ?? 0)).toBeCloseTo(row.capitalAssessment!.paidWithdrawal, 5)
+        expect((row.netGapWithdrawal ?? 0) + insurance + (row.capitalIncomeTax ?? 0) + (row.pensionIncomeTax ?? 0)).toBeCloseTo(row.capitalAssessment!.paidWithdrawal, 5)
         expect(row.capitalIncomeTax ?? 0).toBeGreaterThan(0)
       } else {
         // Slice 1b: accumulation rows carry the same tax fields (Umschichtung);

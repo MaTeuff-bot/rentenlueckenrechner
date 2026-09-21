@@ -105,9 +105,10 @@ describe('estimator rollforward: acquisition cost, assessed VP, pending VP and l
   it('keeps assessments out of spendable cash across the whole ledger', () => {
     for (const row of rows) {
       // portfolioContributionBase is assessment-only; it must never appear in net income.
+      // Slice-2 net identity: the GRV-Rentensteuer reduces the spendable net.
       if (row.phase === 'retirement') {
         expect(row.retirementIncomeNet).toBeMoneyClose(
-          row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance)
+          row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0))
       }
     }
   })
@@ -335,11 +336,12 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
     const result = simulateScenario(prepare(estimatorScenario()))
     for (const row of result.retirementRows) {
       const tax = row.capitalIncomeTax ?? 0
-      // Required withdrawal = net spending gap + insurance + tax (single funding fixed point).
+      // Required withdrawal = net spending gap + insurance + both taxes (single funding
+      // fixed point; the pension tax joins inside the estimator's max(0, need) logic).
       expect(row.gapWithdrawal).toBeMoneyClose(Math.max(0, row.desiredSpending - row.retirementIncomeNet + tax))
-      // The paid sale covers all three; the gap receives the remainder.
+      // The paid sale covers all four; the gap receives the remainder.
       const insurance = row.healthInsurance + row.careInsurance
-      expect((row.netGapWithdrawal ?? 0) + insurance + tax).toBeMoneyClose(row.capitalAssessment!.paidWithdrawal)
+      expect((row.netGapWithdrawal ?? 0) + insurance + tax + (row.pensionIncomeTax ?? 0)).toBeMoneyClose(row.capitalAssessment!.paidWithdrawal)
       // Conservation through the single outflow; shortfall stays visible.
       expect(row.closingCapital).toBeMoneyClose(
         row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal)

@@ -29,7 +29,7 @@ Embedded sub-ledgers (each with its own doc):
 | GKV/PV contributions | income rows, phase, age | `insurance`, `retirementIncomeDeductions`, `healthInsurance`, `careInsurance` |
 | Capital-income estimator | buckets, returns, income, phase | `capitalAssessment`, retirement income adjustments |
 | **Kapitalertragsteuer (slice 1, planned)** | `gapWithdrawal`, estimator state (holdings, acquisition cost, VP, loss carryforward), `inflationFactor` | `capitalIncomeTax`, `taxableWithdrawal`, `sparerpauschbetragApplied`, `netGapWithdrawal` |
-| Rentenbesteuerung (slice 2, planned) | statutory pension income | taxable share on `retirementIncomeGross`, net recalc |
+| Rentenbesteuerung (slice 2) | GRV gross, frozen Rentenfreibetrag, KV/PV Sonderausgaben, `inflationFactor` | `pensionIncomeTax`, `pensionTaxBase`, net recalc (`retirementIncome(Net)`, `gapWithdrawal`, `surplusIncome`) — [snapshot](rentenbesteuerung-rules-2026.md) |
 
 ## Conventions for adding a feature
 

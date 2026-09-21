@@ -35,6 +35,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
               <th>Einzahlung</th>
               <th>Entnahme für Nettolücke</th>
               <th title="Ruhestand: Entnahmesteuer; Ansparen: Umschichtungssteuer (automatische Kapitalbasis)">Kapitalertragsteuer</th>
+              <th title="Einkommensteuer auf die gesetzliche Rente (Rentenbesteuerung, nur Ruhestand)">GRV-Rentensteuer</th>
               <th>Endkapital</th>
               <th>Endkapital heutige Kaufkraft</th>
               {showDetails ? (
@@ -48,6 +49,8 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Sonstige Abzüge ohne KV/PV</th>
                   <th>KV-Eigenbeitrag</th>
                   <th>PV-Eigenbeitrag</th>
+                  <th title="Einkommensteuer auf die gesetzliche Rente (mindert den Netto-Cashflow)">GRV-Rentensteuer</th>
+                  <th title="Steuerpflichtiger Rentenanteil nach dem eingefrorenen Rentenfreibetrag, vor Sonderausgaben">Steuerpflichtige Rente (nach Freibetrag)</th>
                   <th>Portfolio-Beitragsbasis (kein Einkommen)</th>
                   <th>Verfügbarer Netto-Cashflow</th>
                   <th>Entnahmelücke</th>
@@ -73,6 +76,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                 <td>{formatCurrency(row.contribution, 100)}</td>
                 <td>{formatCurrency(row.gapWithdrawal, 100)}</td>
                 <td>{formatCurrency(row.capitalIncomeTax ?? 0, 100)}</td>
+                <td>{formatCurrency(row.pensionIncomeTax ?? 0, 100)}</td>
                 <td>{formatCurrency(row.closingCapital, 100)}</td>
                 <td>{formatCurrency(row.closingCapitalToday, 100)}</td>
                 {showDetails ? (
@@ -86,6 +90,8 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{formatCurrency(row.retirementIncomeOtherDeductions)}</td>
                     <td>{formatCurrency(row.healthInsurance)}</td>
                     <td>{formatCurrency(row.careInsurance)}</td>
+                    <td>{formatCurrency(row.pensionIncomeTax ?? 0)}</td>
+                    <td>{formatCurrency(row.pensionTaxBase ?? 0)}</td>
                     <td>{formatCurrency(row.portfolioContributionBase)}</td>
                     <td>{formatCurrency(row.retirementIncomeNet)}</td>
                     <td>{formatCurrency(row.gapWithdrawal)}</td>

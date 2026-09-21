@@ -45,7 +45,8 @@ function expectNumericalParity(actual: SimulationResult, legacy: SimulationResul
   expect(actual.summary).toEqual(legacy.summary)
   for (const row of actual.retirementRows) {
     // Assessment-only capital must never enter spendable receipts. Insurance is deducted once.
-    expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance, 8)
+    // Slice 2: the GRV-Rentensteuer reduces the spendable net like any other deduction.
+    expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0), 8)
   }
 }
 

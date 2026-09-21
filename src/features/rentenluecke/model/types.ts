@@ -87,6 +87,8 @@ export type YearlyPeriodRow = {
   taxableWithdrawal?: number
   sparerpauschbetragApplied?: number
   netGapWithdrawal?: number
+  pensionIncomeTax?: number
+  pensionTaxBase?: number
   closingCapital: number
   closingCapitalToday: number
   depleted: boolean

@@ -1,6 +1,7 @@
 import { createInflationFactorResolver } from './simulateAccumulation'
-import { calculateRetirementIncomeForYear } from './retirementIncomeStreams'
+import { calculateRetirementIncomeForYear, grvPensionGrossForYear } from './retirementIncomeStreams'
 import { createTaxState, scaledSparerpauschbetrag, type CapitalIncomeTaxState } from './tax/capitalIncomeTax'
+import { assessPensionYearTaxValues, resolvePensionTaxSetup } from './tax/incomeTax'
 import { assessCore } from './tax/pureCore'
 import type { AnnualInflationResolver, AnnualReturnResolver, NormalizedScenario, YearlyPeriodRow } from './types'
 
@@ -84,6 +85,18 @@ export function simulateRetirementRows(
   let taxState = createRetirementTaxState()
   const rows: YearlyPeriodRow[] = []
   const getInflationFactor = createInflationFactorResolver(scenario.annualInflationRate, getAnnualInflation)
+  // Rentenbesteuerung setup is capital-independent: the frozen Rentenfreibetrag
+  // derives from the first simulation retirement year with GRV receipt (rule
+  // snapshot docs/rentenbesteuerung-rules-2026.md). Null when no GRV stream pays.
+  const pensionTaxSetup = resolvePensionTaxSetup({
+    streams: scenario.sourceInput.retirementIncomeStreams,
+    currentAge: scenario.currentAge,
+    retirementAge: scenario.retirementAge,
+    planningAge: scenario.planningAge,
+    referenceYear: scenario.retirementInsurance.referenceYear,
+    yearsToRetirement: scenario.yearsToRetirement,
+    inflationFactorAt: (yearIndex: number) => getInflationFactor(yearIndex),
+  })
 
   for (let retirementYear = 0; retirementYear < scenario.retirementYears; retirementYear += 1) {
     const yearIndex = scenario.yearsToRetirement + retirementYear
@@ -92,9 +105,20 @@ export function simulateRetirementRows(
     const inflationFactor = getInflationFactor(yearIndex)
     const desiredSpending = scenario.annualDesiredSpendingToday * inflationFactor
     const income = calculateRetirementIncomeForYear(scenario.sourceInput, ageStart, inflationFactor)
-    const gapWithdrawal = Math.max(0, desiredSpending - income.net)
+    // Rentenbesteuerung first (capital-independent): GRV-Rentensteuer reduces the
+    // spendable net, so the gap is net of ALL deductions (KV/PV + pension tax).
+    // The Abgeltungsteuer assessment below then runs on the resulting gap.
+    const grvGross = grvPensionGrossForYear(scenario.sourceInput, ageStart, inflationFactor)
+    // Arithmetic core (no per-year validation): setup validated once at creation,
+    // yearly values are engine-computed money — see assessPensionYearTaxValues.
+    const pensionAssessment = pensionTaxSetup
+      ? assessPensionYearTaxValues(pensionTaxSetup, grvGross, income.kv, income.pv, inflationFactor)
+      : null
+    const pensionIncomeTax = pensionAssessment?.pensionIncomeTax ?? 0
+    const retirementIncomeNet = income.net - pensionIncomeTax
+    const gapWithdrawal = Math.max(0, desiredSpending - retirementIncomeNet)
     const gapWithdrawalToday = gapWithdrawal / inflationFactor
-    const surplusIncome = Math.max(0, income.net - desiredSpending)
+    const surplusIncome = Math.max(0, retirementIncomeNet - desiredSpending)
     const nominalReturnRate = getAnnualReturn?.(yearIndex, 'retirement') ?? scenario.annualReturnInRetirement
     const capitalBeforeCashflow = capital + capital * nominalReturnRate
     // Effective allowance scales with scenario inflation (planning assumption, legally nominal).
@@ -120,7 +144,7 @@ export function simulateRetirementRows(
       capitalBeforeCashflow,
       contribution: 0,
       desiredSpending,
-      retirementIncome: income.net,
+      retirementIncome: retirementIncomeNet,
       retirementIncomeGross: income.gross,
       retirementIncomeDeductions: income.deductions,
       insurance: income.insurance,
@@ -128,7 +152,9 @@ export function simulateRetirementRows(
       healthInsurance: income.kv,
       careInsurance: income.pv,
       portfolioContributionBase: income.portfolioBase,
-      retirementIncomeNet: income.net,
+      retirementIncomeNet,
+      pensionIncomeTax,
+      pensionTaxBase: pensionAssessment?.pensionTaxBase ?? 0,
       surplusIncome,
       gapWithdrawal,
       gapWithdrawalToday,
