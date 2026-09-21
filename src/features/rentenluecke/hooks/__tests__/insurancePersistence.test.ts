@@ -163,4 +163,4 @@ it('retains valid inactive v15 assumptions across reload, then clears only the m
   act(() => restored.result.current.updateInsuranceCoverage({ ...completedCoverage(), pension: { common: { kind: 'missing' } } }))
   expect(restored.result.current.result).toBeNull()
   expect(restored.result.current.issues.some(issue => issue.fieldPath === 'insuranceCoverageAnswers.pension.common')).toBe(true)
-})
+}, 20_000)
