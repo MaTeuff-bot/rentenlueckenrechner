@@ -72,14 +72,12 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
             <option value="">Bitte auswählen</option>{phase === 'pension' && <option value="kvdr">KVdR</option>}<option value="voluntary">Freiwillige GKV</option><option value="unknown">Unbekannt – freiwillige GKV annehmen</option><option value="unsupported">Anderer Status / PKV / Familienversicherung</option>
           </select></label>{phase === 'pension' && <p className="field-help">KVdR: Deine Angabe – wird angenommen, nicht geprüft.</p>}
           {p.status === 'unknown' && <p>Für diese Planung nehmen wir freiwillige GKV an. Das ist kein garantierter Höchstbeitrag. Die App prüft keine Versicherungsberechtigung.</p>}
-          <label><input id={`insurance-${phase}-manual`} type="checkbox" checked={p.manual ?? false} onChange={e => update({ manual: e.target.checked })} />Eigene Beiträge verwenden – {label}</label>
-          {p.manual && <button type="button" className="secondary-button" onClick={() => update({ manual: false })}>Zur automatischen Berechnung zurückkehren – {label}</button>}
           {forcedReasons.length > 0 && <div className="source-warning"><p>{forcedReasons.join('; ')}. Die ganze Phase benötigt eigene Beiträge.</p>
             {offending.map(stream => <p key={stream.id}>{stream.name} ab Alter {stream.startAge}: <button type="button" className="secondary-button" onClick={() => focusField(`retirement-income-kind-${stream.id}`)}>Einkommen bearbeiten</button></p>)}
             <button type="button" className="secondary-button" onClick={() => focusField(`insurance-${phase}-kvMonthlyToday`)}>Eigene Beiträge eingeben</button>
           </div>}
+          <InsuranceCoverageChecklist id={`insurance-${phase}-circumstances`} title={`Besondere Umstände – ${label}`} answer={answers[phase].common} options={commonExceptions} onChange={common => changeCoverage({ ...answers, [phase]: { ...answers[phase], common } })} manualOption={{ id: `insurance-${phase}-manual`, phaseLabel: label, active: p.manual ?? false, forced: forcedReasons.length > 0, forcedReasons, onManualChange: manual => update({ manual }) }} />
           {!p.manual && !forcedReasons.length && <>
-            <InsuranceCoverageChecklist id={`insurance-${phase}-circumstances`} title={`Besondere Umstände – ${label}`} answer={answers[phase].common} options={commonExceptions} onChange={common => changeCoverage({ ...answers, [phase]: { ...answers[phase], common } })} />
             {phase === 'bridge' && <InsuranceCoverageChecklist id="insurance-bridge-bridgeOnly" title="Zusätzlich in der Brücke" answer={answers.bridge.bridgeOnly} options={bridgeExceptions} onChange={bridgeOnly => changeCoverage({ ...answers, bridge: { ...answers.bridge, bridgeOnly } })} />}
             {ranges.length === 2 && <button type="button" className="secondary-button" disabled={answers[other].common.kind === 'missing'} onClick={() => { const result = copyCompatibleCoverage(answers, other); changeCoverage(result.answers); setCopyMessage(result.message) }}>Angaben aus der anderen Phase übernehmen – {label}</button>}
           </>}
@@ -93,7 +91,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
       <h3 id="insurance-block-2-heading">2. Gemeinsame Angaben <span className="section-status">{block2Status}</span></h3>
       <p>{block2Summary}</p>
       <OptionalNumber id="insurance-insurerAdditionalRate" label="Kassenindividueller Zusatzbeitrag (%)" value={i.insurerAdditionalRate === undefined ? undefined : i.insurerAdditionalRate * 100} max={20} onChange={v => onChange({ ...i, insurerAdditionalRate: v === undefined ? undefined : v / 100 })} />
-      <p className="field-help">Vorschlag: 2,9 % – der durchschnittliche Zusatzbeitrag 2026 laut BMG/Schätzerkreis. Deine Kasse kann abweichen.</p>
+      <p className="field-help">2,9 % ist vorausgefüllt – der durchschnittliche Zusatzbeitrag 2026 laut BMG/Schätzerkreis. Deine Kasse kann abweichen; anpassbar.</p>
       <details><summary>Wo finde ich das?</summary><p>Den kassenindividuellen Zusatzbeitrag findest du auf der Website oder in einer Beitragsmitteilung deiner Krankenkasse.</p></details>
       <ChildrenSection manualPhase={ranges.find(({ phase }) => !reasonsFor(phase).length)?.phase} answer={childrenAnswer} referenceYear={i.referenceYear} currentAge={input.currentAge} onChange={onChildrenChange} />
       {i.rates && Object.values(i.rates).some(value => value !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter „Erweitert“ prüfen oder auf Standards zurücksetzen.</p>}

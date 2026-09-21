@@ -43,9 +43,15 @@ describe('guided insurance persistence and app-owned reset', () => {
     const state = createDefaultState()
     const loaded = parsePersistedScenarioState(serializeScenarioState(state))
     expect(loaded.input.retirementInsurance?.pension).toEqual({})
-    expect(loaded.input.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
+    expect(loaded.input.retirementInsurance?.insurerAdditionalRate).toBe(0.029)
     expect(loaded.retirementIncomeStreams[0].support).toBeUndefined()
     expect(parsePersistedScenarioState('{broken')).toEqual(state)
+  })
+  it('fills a missing insurer additional rate from legacy states with the 2026 average', () => {
+    const state = createDefaultState()
+    const raw = JSON.parse(serializeScenarioState(state))
+    delete raw.input.retirementInsurance.insurerAdditionalRate
+    expect(parsePersistedScenarioState(JSON.stringify(raw)).input.retirementInsurance?.insurerAdditionalRate).toBe(0.029)
   })
   it('persists valid incomplete transitions and hides results, then restores the completed forecast', () => {
     const state = createDefaultState()
@@ -59,9 +65,9 @@ describe('guided insurance persistence and app-owned reset', () => {
     act(() => result.current.updateRetirementInsurance(automaticInsurance()))
     expect(result.current.isValid).toBe(true)
     const complete = result.current.result
-    act(() => result.current.updateRetirementInsurance(automaticInsurance({ insurerAdditionalRate: undefined })))
+    act(() => result.current.updateRetirementInsurance(automaticInsurance({ pension: { circumstances: 'standard' } })))
     expect(result.current.result).toBeNull()
-    expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.insurerAdditionalRate).toBeUndefined()
+    expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance?.pension.status).toBeUndefined()
     unmount()
     const reloaded = renderHook(useScenarioState)
     expect(reloaded.result.current.result).toBeNull()
