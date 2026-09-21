@@ -42,6 +42,7 @@ export const pensionTaxDisclosures = [
   'Nur gesetzliche Rente (GRV), Einzelveranlagung im Inland, ohne weitere Einkünfte im Steuerzugriff: Kapitalerträge bleiben in der Abgeltung (fertig) und erhöhen den zvE nicht.',
   'Grundfreibetrag, Werbungskosten-Pauschbetrag (Basis 102 EUR/Jahr) und §32a-Zonengrenzen werden mit der Szenario-Inflationsrate skaliert (Planungsannahme; gesetzlich sind die 2026er-Beträge nominal und ändern sich nur per Gesetz). Der Rentenfreibetrag-EUR-Betrag bleibt nominal eingefroren (das ist das geltende Recht — Rentenerhöhungen sind nicht indexiert).',
   'Der Rentenfreibetrag ist der steuerfreie Euro-Betrag aus dem ersten vollen Rentenjahr der Simulation und bleibt nominal für immer bestehen; spätere Rentenerhöhungen erhöhen den steuerpflichtigen Anteil.',
+  'Der eingefrorene Rentenfreibetrag wirkt wie kalte Progression: Er bleibt nominal konstant, während Rentenerhöhungen die Rente erhöhen — die Rente wächst dadurch schneller als der steuerfreie Anteil, und der steuerpflichtige Teil steigt über die Jahre.',
   'KV-/PV-Eigenbeiträge auf die Rente mindern den zvE als Sonderausgaben (Jahresbeträge der Beitragsengine).',
   'Nicht modelliert: Riester, private Renten (Ertragsanteil), Betriebsrenten, Altversicherte (vor 1948), weitere Einkünfte neben der GRV-Rente im zvE, Kirchensteuer, Zusammenveranlagung.',
   'Kein Solidaritätszuschlag auf die GRV-Rentensteuer ausgewiesen (fällt erst oberhalb der Freizone an); gleichjährige Steuerzahlung ist eine Planungsnäherung ohne Vorauszahlungs-/Bescheid-Timing.',
