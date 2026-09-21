@@ -801,6 +801,9 @@ summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-v
 .coverage-checklist { gap: .5rem; }
 .coverage-checklist label { display: flex; align-items: baseline; gap: .6rem; margin: 0; }
 .coverage-checklist input { flex: 0 0 auto; }
+.coverage-mode { display: grid; gap: .35rem; }
+.coverage-exceptions { display: grid; gap: .35rem; padding: .5rem 0 .25rem .9rem; border-left: 2px solid #cdd6df; }
+.coverage-exceptions > p { margin: 0; font-size: .85rem; color: #5a6877; }
 .insurance-flow { overflow-wrap: anywhere; }
 .insurance-flow .secondary-button { white-space: normal; min-width: 0; max-width: 100%; }
 
@@ -815,3 +818,6 @@ summary:focus-visible, button:focus-visible, select:focus-visible, input:focus-v
 .portfolio-block > h4 { margin: 0; }
 .portfolio-total { display: flex; flex-wrap: wrap; gap: 10px 18px; color: #344355; }
 .portfolio-strategy { grid-template-columns: minmax(210px, 1.5fr); }
+.portfolio-block-headings { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+.portfolio-block-headings h4 { margin: 0; font-size: .95rem; }
+.section-status-note { font-weight: 400; font-size: .8rem; color: #5a6877; margin-left: .4rem; }

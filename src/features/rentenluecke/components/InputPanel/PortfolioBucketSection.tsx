@@ -28,84 +28,69 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
   return (
     <fieldset className="wide-fieldset portfolio-section">
       <legend>Anlagen</legend>
-      <section aria-labelledby="portfolio-ownings-title" className="portfolio-block">
-        <h4 id="portfolio-ownings-title">Was ich besitze</h4>
-        <div className="portfolio-bucket-list">
-          {buckets.map((bucket, index) => {
-            const fallbackName = `Anlage ${index + 1}`
-            const label = bucket.name.trim() || fallbackName
-            return (
-              <div className="portfolio-bucket portfolio-ownings" key={bucket.id}>
-                <button className="portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
-                </button>
-                <label className="field">
-                  <span className="field-label">Name</span>
-                  <input id={`portfolio-name-${bucket.id}`} type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
-                </label>
-                <label className="field"><span className="field-label">Tatsächliche Anlageart (unabhängig vom Proxy)</span>
-                  <select id={`portfolio-holding-${bucket.id}`} aria-label={`Tatsächliche Anlageart von ${label}`} value={bucket.holding ?? ''} onChange={e => onUpdate(bucket.id, { holding: (e.target.value || undefined) as PortfolioBucket['holding'] })}>
-                    <option value="">Bitte klassifizieren</option><option value="accumulating-equity-fund">Thesaurierender Aktienfonds / Aktien-ETF</option><option value="ordinary-bank-deposit">Gewöhnliche Bankeinlage</option><option value="unsupported">Andere / nicht unterstützte Anlage</option>
-                  </select>
-                </label>
-                <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
-                <div className="portfolio-cost-field">
-                  <PercentInput
-                    id={`portfolio-cost-${bucket.id}`}
-                    label={`TER/Kosten p.a. von ${label}`}
-                    value={bucket.annualCostRate ?? 0}
-                    min={0}
-                    max={100}
-                    error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
-                    onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
-                  />
-                </div>
+      <div className="portfolio-block-headings">
+        <h4>Was ich besitze <span className="section-status-note">Name · Anlageart · Wert · Kosten</span></h4>
+        <h4>Wie ich anlegen will <span className="section-status-note">Renditequelle/Proxy je Anlage</span></h4>
+      </div>
+      <div className="portfolio-bucket-list">
+        {buckets.map((bucket, index) => {
+          const fallbackName = `Anlage ${index + 1}`
+          const label = bucket.name.trim() || fallbackName
+          const category = getReturnSeriesCategory(bucket.returnSeriesId)
+          const selectedSource = findReturnSeriesOption(bucket.returnSeriesId)
+          return (
+            <div className="portfolio-bucket" key={bucket.id}>
+              <button className="portfolio-remove" type="button" aria-label={`${label} entfernen`} onClick={() => onRemove(bucket.id)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></svg>
+              </button>
+              <label className="field">
+                <span className="field-label">Name</span>
+                <input id={`portfolio-name-${bucket.id}`} type="text" aria-label={`Name von ${label}`} value={bucket.name} placeholder={fallbackName} onChange={(event) => onUpdate(bucket.id, { name: event.target.value })} />
+              </label>
+              <label className="field"><span className="field-label">Tatsächliche Anlageart</span>
+                <select id={`portfolio-holding-${bucket.id}`} aria-label={`Tatsächliche Anlageart von ${label}`} value={bucket.holding ?? ''} onChange={e => onUpdate(bucket.id, { holding: (e.target.value || undefined) as PortfolioBucket['holding'] })}>
+                  <option value="">Bitte klassifizieren</option><option value="accumulating-equity-fund">Thesaurierender Aktienfonds / Aktien-ETF</option><option value="ordinary-bank-deposit">Gewöhnliche Bankeinlage</option><option value="unsupported">Andere / nicht unterstützte Anlage</option>
+                </select>
+              </label>
+              <CurrencyInput id={`portfolio-value-${bucket.id}`} label={`Aktueller Wert von ${label}`} value={bucket.value} error={!Number.isFinite(bucket.value) || bucket.value < 0 ? 'Bitte einen nicht negativen Wert eingeben.' : undefined} onChange={(value) => onUpdate(bucket.id, { value })} />
+              <div className="portfolio-cost-field">
+                <PercentInput
+                  id={`portfolio-cost-${bucket.id}`}
+                  label={`TER/Kosten p.a. von ${label}`}
+                  value={bucket.annualCostRate ?? 0}
+                  min={0}
+                  max={100}
+                  error={!Number.isFinite(bucket.annualCostRate ?? 0) || (bucket.annualCostRate ?? 0) < 0 || (bucket.annualCostRate ?? 0) > 1 ? 'Bitte Kosten zwischen 0 % und 100 % eingeben.' : undefined}
+                  onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
+                />
               </div>
-            )
-          })}
-        </div>
-        <button id="portfolio-add" className="secondary-button portfolio-add" type="button" onClick={onAdd}>+ Anlage hinzufügen</button>
-        <div className="portfolio-total">
-          <strong>Gesamtwert: {totalLabel}</strong>
-        </div>
-      </section>
-      <section aria-labelledby="portfolio-strategy-title" className="portfolio-block">
-        <h4 id="portfolio-strategy-title">Wie ich anlegen will</h4>
-        <div className="portfolio-bucket-list">
-          {buckets.map((bucket, index) => {
-            const fallbackName = `Anlage ${index + 1}`
-            const label = bucket.name.trim() || fallbackName
-            const category = getReturnSeriesCategory(bucket.returnSeriesId)
-            const selectedSource = findReturnSeriesOption(bucket.returnSeriesId)
-            return (
-              <div className="portfolio-bucket portfolio-strategy" key={`${bucket.id}-strategy`}>
-                <label className="field">
-                  <span className="field-label">Renditequelle/Proxy</span>
-                  <select id={`portfolio-source-${bucket.id}`} aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
-                    {sourceOptionGroups.map((group) => (
-                      <optgroup key={group.label} label={group.label}>
-                        {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
-                      </optgroup>
-                    ))}
-                  </select>
-                </label>
-                <div className="portfolio-row-notes" id={`portfolio-notes-${bucket.id}`} aria-live="polite">
-                  <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
-                  {selectedSource?.costTreatment === 'netOfFundCosts' ? <p className="portfolio-cost-note">ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.</p> : null}
-                </div>
+              <label className="field">
+                <span className="field-label">Renditequelle/Proxy</span>
+                <select id={`portfolio-source-${bucket.id}`} aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
+                  {sourceOptionGroups.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <div className="portfolio-row-notes" id={`portfolio-notes-${bucket.id}`} aria-live="polite">
+                <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
+                {selectedSource?.costTreatment === 'netOfFundCosts' ? <p className="portfolio-cost-note">ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.</p> : null}
               </div>
-            )
-          })}
-        </div>
-        <div className="portfolio-summary" aria-label="Portfolio-Zusammenfassung">
-          <strong>Gesamtwert: {totalLabel}</strong>
-          <span>Aktien {percent.format(allocation.equity)}</span>
-          <span>Anleihen {percent.format(allocation.bonds)}</span>
-          <span>Cash {percent.format(allocation.fixed)}</span>
-        </div>
-        {error ? <p className="field-error">{error}</p> : null}
-        <p className="portfolio-note">Die Renditequellen sind Proxys. Kosten p.a. werden bei Quellen mit separater Kostenbehandlung je Anlage abgezogen.</p>
-      </section>
+            </div>
+          )
+        })}
+      </div>
+      <button id="portfolio-add" className="secondary-button portfolio-add" type="button" onClick={onAdd}>+ Anlage hinzufügen</button>
+      <div className="portfolio-summary" aria-label="Portfolio-Zusammenfassung">
+        <strong>Gesamtwert: {totalLabel}</strong>
+        <span>Aktien {percent.format(allocation.equity)}</span>
+        <span>Anleihen {percent.format(allocation.bonds)}</span>
+        <span>Cash {percent.format(allocation.fixed)}</span>
+      </div>
+      {error ? <p className="field-error">{error}</p> : null}
+      <p className="portfolio-note">Die Renditequellen sind Proxys, kein Backtest eines konkreten Zeitraums. Kosten p.a. werden bei Quellen mit separater Kostenbehandlung je Anlage abgezogen.</p>
     </fieldset>
   )
 }
