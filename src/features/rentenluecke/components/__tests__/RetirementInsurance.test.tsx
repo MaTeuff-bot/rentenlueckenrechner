@@ -293,7 +293,7 @@ it.each(['voluntary', 'unknown'] as const)('places %s estimates after shared fac
   const card = screen.getByRole('group', { name: 'Rentenphase · Alter 67 bis unter 70' })
   expect(within(card).queryByLabelText('Rentenversicherungszuschuss einplanen?')).toBeNull()
   expect(within(card).queryByLabelText(/Kapitalbasis/)).toBeNull()
-  const shared = screen.getByRole('group', { name: '2. Gemeinsame Angaben für automatische Phasen' })
+  const shared = screen.getByRole('region', { name: /2\. Gemeinsame Angaben/ })
   const estimate = screen.getByRole('group', { name: 'Automatische Beiträge – Rentenphase' })
   expect(card.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(shared.compareDocumentPosition(estimate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
