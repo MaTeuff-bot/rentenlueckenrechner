@@ -254,7 +254,7 @@ export function InputPanel({
           />
 
           <fieldset className="wide-fieldset source-overview">
-            <legend>Renditequellen und Details</legend>
+            <legend>Quellen und Details</legend>
             <div className="source-chip-list" aria-label="Kurzstatus der Renditequellen">
               <span>{validYearLabel}</span>
               <span>Inflation: {inflationSource ? shortInflationLabel(inflationSource) : historical.inflationSourceId}</span>

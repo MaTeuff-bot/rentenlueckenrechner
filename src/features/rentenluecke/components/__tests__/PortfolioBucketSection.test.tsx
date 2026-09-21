@@ -69,6 +69,15 @@ describe('PortfolioBucketSection', () => {
     expect(onUpdate).toHaveBeenNthCalledWith(3, 'new-bucket', { returnSeriesId: 'synthetic-cash-assumption-v1' })
     expect(onUpdate).toHaveBeenNthCalledWith(4, 'new-bucket', { annualCostRate: 0.0022 })
     expect(screen.getByText(/Renditequellen sind Proxys/)).toHaveTextContent('Quellen mit separater Kostenbehandlung')
+    expect(screen.getByText(/kein Backtest eines konkreten Zeitraums/)).toBeInTheDocument()
+    expect(document.querySelectorAll('.portfolio-bucket-list')).toHaveLength(1)
+    expect(screen.getByText('Was ich besitze')).toBeVisible()
+    expect(screen.getByText('Wie ich anlegen will')).toBeVisible()
+    expect(screen.getAllByText(/Gesamtwert:/)).toHaveLength(1)
+    const mergedBucket = screen.getByLabelText('Name von Neue Anlage').closest('.portfolio-bucket') as HTMLElement
+    expect(within(mergedBucket).getByLabelText('Renditequelle/Proxy von Neue Anlage')).toBeInTheDocument()
+    expect(within(mergedBucket).getByLabelText(/Tatsächliche Anlageart von Neue Anlage/)).toBeInTheDocument()
+    expect(within(mergedBucket).getByLabelText(/TER\/Kosten p\.a\. von Neue Anlage/)).toBeInTheDocument()
 
     rerender(
       <PortfolioBucketSection
