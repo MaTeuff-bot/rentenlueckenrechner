@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { RetirementInsuranceSection } from '../InputPanel/RetirementInsuranceSection'
+import { CapitalEstimatorSetup } from '../InputPanel/CapitalEstimatorSetup'
 import { PortfolioBucketSection } from '../InputPanel/PortfolioBucketSection'
+import { needsEstimator } from '../../model/capitalIncome/setup'
 import { automaticInsurance, insuredInput, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { insuranceSetupIssues } from '../../model/retirementInsurance'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns/constants'
@@ -20,6 +22,7 @@ function Harness() {
   const issues = insuranceSetupIssues(input)
   return <>
     <PortfolioBucketSection buckets={buckets} total={100000} allocation={{ equity: 1, bonds: 0, fixed: 0 }} error={null} onAdd={() => {}} onRemove={id => setBuckets(buckets.filter(b => b.id !== id))} onUpdate={(id, patch) => setBuckets(buckets.map(b => b.id === id ? { ...b, ...patch } : b))} />
+    {needsEstimator({ ...input, retirementInsurance: insurance }) && <CapitalEstimatorSetup insurance={insurance} onChange={setInsurance} />}
     <RetirementInsuranceSection coverage={completedCoverage()} insurance={insurance} input={input} onChange={setInsurance} />
     <p role="status">{issues.length ? issues.join(' ') : 'Vollständig'}</p>
   </>

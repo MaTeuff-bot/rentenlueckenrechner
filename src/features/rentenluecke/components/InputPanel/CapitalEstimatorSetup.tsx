@@ -1,13 +1,20 @@
 import type { RetirementInsurance } from '../../model/retirementInsurance'
 import { BASIS_RATE_SOURCE, DEFAULT_PROJECTED_BASIS_RATE } from '../../model/capitalIncome/schema'
-import { OptionalNumber } from './RetirementInsuranceSection'
+import { focusField } from '../inputNavigation'
+import { OptionalNumber } from './OptionalNumber'
 
-export function CapitalEstimatorSetup({ insurance, onChange }: {
+export function CapitalEstimatorSetup({ insurance, onChange, onJumpToInsurance }: {
   insurance: RetirementInsurance; onChange: (value: RetirementInsurance) => void
+  onJumpToInsurance?: () => void
 }) {
   const setup = insurance.capitalEstimator ?? { projectedBasisRate: DEFAULT_PROJECTED_BASIS_RATE }
   const update = (patch: Partial<typeof setup>) => onChange({ ...insurance, capitalEstimator: { ...setup, ...patch } })
+  const jumpToInsurance = () => {
+    if (onJumpToInsurance) onJumpToInsurance()
+    else focusField('insurance-block-3-heading')
+  }
   return <fieldset><legend>Automatische Kapitalertragsschätzung</legend>
+    <p>Die Schätzung läuft je Versicherungsphase – ob automatisch oder manuell gerechnet wird, steht in der Versicherung. <button type="button" className="secondary-button" id="estimator-jump-to-insurance" onClick={jumpToInsurance}>Kapitalbasis je Phase in der Versicherung prüfen</button></p>
     <p>Alle tatsächlichen Anlagen oben klassifizieren. Unterstützt sind thesaurierende Aktienfonds und gewöhnliche Bankeinlagen. Andere oder ungeklärte Anlagen entfernen/ersetzen oder je Phase ausdrücklich die manuelle Kapitalertragsschätzung wählen; dabei bleibt das Portfolio erhalten.</p>
     <OptionalNumber id="estimator-fundAcquisitionCost" label="Anschaffungskosten des gesamten Fondspools (€)" value={setup.fundAcquisitionCost} onChange={fundAcquisitionCost => update({ fundAcquisitionCost })} />
     <p>Erforderlich bei Fonds, auch 0 ausdrücklich. Summe der Anschaffungskosten nur der Fonds, ohne Bankguthaben; darf den heutigen Fondsmarktwert übersteigen. Keine Einzelkosten oder FIFO.</p>
