@@ -7,6 +7,7 @@ import { RetirementInsuranceSection } from '../InputPanel/RetirementInsuranceSec
 import { CapitalEstimatorSetup } from '../InputPanel/CapitalEstimatorSetup'
 import { PortfolioBucketSection } from '../InputPanel/PortfolioBucketSection'
 import { needsEstimator } from '../../model/capitalIncome/setup'
+import { engineCapitalEstimatorFromPortfolio, portfolioEstimatorReadiness, type PortfolioEstimatorSettings } from '../../model/capitalIncome/portfolioEstimator'
 import { automaticInsurance, insuredInput, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { insuranceSetupIssues } from '../../model/retirementInsurance'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns/constants'
@@ -17,14 +18,19 @@ function Harness() {
     bridge: { status: 'voluntary', circumstances: 'standard' },
     pension: { status: 'unknown', circumstances: 'standard', drvSubsidy: 'not-received' },
   }))
+  const [settings, setSettings] = useState<PortfolioEstimatorSettings | undefined>(undefined)
   const [buckets, setBuckets] = useState<PortfolioBucket[]>([{ id: 'fund', name: 'Depot', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }])
-  const input = insuredInput({ currentAge: 65, retirementAge: 65, estimatorPortfolio: buckets, retirementInsurance: insurance })
-  const issues = insuranceSetupIssues(input)
+  const baseInput = insuredInput({ currentAge: 65, retirementAge: 65, estimatorPortfolio: buckets, retirementInsurance: insurance })
+  const needsAutomatic = needsEstimator({ ...baseInput, retirementInsurance: insurance })
+  const readiness = portfolioEstimatorReadiness(settings, buckets, 100000)
+  const engineInput = insuredInput({ currentAge: 65, retirementAge: 65, estimatorPortfolio: buckets, retirementInsurance: { ...insurance, capitalEstimator: engineCapitalEstimatorFromPortfolio(settings, needsAutomatic) } })
+  const issues = insuranceSetupIssues(engineInput)
   return <>
     <PortfolioBucketSection buckets={buckets} total={100000} allocation={{ equity: 1, bonds: 0, fixed: 0 }} error={null} onAdd={() => {}} onRemove={id => setBuckets(buckets.filter(b => b.id !== id))} onUpdate={(id, patch) => setBuckets(buckets.map(b => b.id === id ? { ...b, ...patch } : b))} />
-    {needsEstimator({ ...input, retirementInsurance: insurance }) && <CapitalEstimatorSetup insurance={insurance} onChange={setInsurance} />}
-    <RetirementInsuranceSection coverage={completedCoverage()} insurance={insurance} input={input} onChange={setInsurance} />
+    <CapitalEstimatorSetup settings={settings} readiness={readiness} needsAutomatic={needsAutomatic} onSettingsChange={setSettings} />
+    <RetirementInsuranceSection coverage={completedCoverage()} insurance={insurance} input={engineInput} onChange={setInsurance} estimatorReadiness={readiness} />
     <p role="status">{issues.length ? issues.join(' ') : 'Vollständig'}</p>
+    <p data-testid="portfolio-readiness">{readiness.ready ? 'Portfolio bereit' : 'Portfolio offen'}</p>
   </>
 }
 const change = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })

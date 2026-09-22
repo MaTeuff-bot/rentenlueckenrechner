@@ -16,7 +16,7 @@ import type { RetirementInsurance } from '../../model/retirementInsurance'
 import type { InsuranceCoverageAnswers } from '../../model/insuranceCoverage'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
 
-function renderEstimatorSplit(input: RentenlueckeInput, onRetirementInsuranceChange: (insurance: RetirementInsurance) => void = () => {}) {
+function renderEstimatorSplit(input: RentenlueckeInput, onRetirementInsuranceChange: (insurance: RetirementInsurance) => void = () => {}, onPortfolioEstimatorSettingsChange: (settings: import('../../model/capitalIncome/portfolioEstimator').PortfolioEstimatorSettings | undefined) => void = () => {}) {
   const state = createDefaultState()
   const parsed = rentenlueckeInputSchema.safeParse(input)
   const coverage = completedCoverage()
@@ -46,6 +46,8 @@ function renderEstimatorSplit(input: RentenlueckeInput, onRetirementInsuranceCha
       allocationError={null}
       portfolioBucketError={null}
       onRetirementInsuranceChange={onRetirementInsuranceChange}
+      portfolioEstimatorSettings={input.retirementInsurance?.capitalEstimator}
+      onPortfolioEstimatorSettingsChange={onPortfolioEstimatorSettingsChange}
       onChange={noop}
       onPortfolioBucketChange={noop}
       onPortfolioBucketAdd={noop}
@@ -100,6 +102,8 @@ function renderVersicherungTab(input: RentenlueckeInput, coverage: InsuranceCove
       allocationError={null}
       portfolioBucketError={null}
       onRetirementInsuranceChange={noop}
+      portfolioEstimatorSettings={input.retirementInsurance?.capitalEstimator}
+      onPortfolioEstimatorSettingsChange={noop}
       onChange={noop}
       onPortfolioBucketChange={noop}
       onPortfolioBucketAdd={noop}
@@ -207,18 +211,22 @@ describe('Kapitalertragsschätzung split Vermögen / Versicherung', () => {
     expect(document.activeElement).toBe(document.getElementById(targetId))
   })
 
-  it('writes estimator edits to retirementInsurance.capitalEstimator and survives persistence round-trip', async () => {
-    const onChange = vi.fn()
+  it('writes estimator edits to portfolio-owned settings and survives v15 persistence round-trip', async () => {
+    const onPortfolioChange = vi.fn()
     const input = estimatorInput()
-    renderEstimatorSplit(input, onChange)
+    renderEstimatorSplit(input, () => {}, onPortfolioChange)
     fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
     fireEvent.change(screen.getByLabelText('Anschaffungskosten des gesamten Fondspools (€)'), { target: { value: '123' } })
-    expect(onChange).toHaveBeenCalled()
-    const emitted = onChange.mock.calls[0][0] as RentenlueckeInput['retirementInsurance']
-    expect(emitted?.capitalEstimator?.fundAcquisitionCost).toBe(123)
+    expect(onPortfolioChange).toHaveBeenCalled()
+    const emitted = onPortfolioChange.mock.calls[0][0] as import('../../model/capitalIncome/portfolioEstimator').PortfolioEstimatorSettings
+    expect(emitted?.fundAcquisitionCost).toBe(123)
     const { serializeScenarioState, parsePersistedScenarioState } = await import('../../hooks/scenarioState/persistence')
-    const state = { ...createDefaultState(), input: { ...input, retirementInsurance: emitted! } }
-    const roundTripped = parsePersistedScenarioState(serializeScenarioState(state))
-    expect(roundTripped.input.retirementInsurance?.capitalEstimator?.fundAcquisitionCost).toBe(123)
+    const base = createDefaultState()
+    const state = { ...base, portfolioEstimatorSettings: emitted, input: { ...input, retirementInsurance: { ...input.retirementInsurance! } } }
+    const serialized = serializeScenarioState(state)
+    expect(JSON.parse(serialized).input.retirementInsurance.capitalEstimator.fundAcquisitionCost).toBe(123)
+    expect(JSON.parse(serialized)).not.toHaveProperty('portfolioEstimatorSettings')
+    const roundTripped = parsePersistedScenarioState(serialized)
+    expect(roundTripped.portfolioEstimatorSettings?.fundAcquisitionCost).toBe(123)
   })
 })

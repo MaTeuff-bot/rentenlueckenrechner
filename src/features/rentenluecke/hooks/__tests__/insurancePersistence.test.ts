@@ -117,16 +117,23 @@ describe('additive insurance estimator persistence', () => {
     state.portfolioBuckets[0].holding = 'accumulating-equity-fund'
     state.childrenAnswer = { kind: 'children', rows: [{ id: 'one', year: 2002 }, { id: 'two', year: 2002 }] }
     state.insuranceCoverageAnswers = completedCoverage()
+    state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true }
     state.input.retirementInsurance = automaticInsurance({ childBirthYears: [2002, 2002],
-      capitalEstimator: { fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
       bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', capitalMonthlyToday: 123 },
       pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 456, drvSubsidy: 'not-received' },
     })
-    const loaded = parsePersistedScenarioState(serializeScenarioState(state))
-    expect(loaded.input.retirementInsurance).toEqual(applyCoverage(state.input.retirementInsurance!, state.insuranceCoverageAnswers))
+    const serialized = serializeScenarioState(state)
+    expect(JSON.parse(serialized).input.retirementInsurance.capitalEstimator).toEqual({ fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true })
+    expect(JSON.parse(serialized)).not.toHaveProperty('portfolioEstimatorSettings')
+    const loaded = parsePersistedScenarioState(serialized)
+    const { capitalEstimator: _dropped, ...expectedInsurance } = state.input.retirementInsurance!
+    void _dropped
+    expect(loaded.input.retirementInsurance).toEqual(applyCoverage(expectedInsurance as import('../../model/retirementInsurance').RetirementInsurance, state.insuranceCoverageAnswers))
+    expect(loaded.portfolioEstimatorSettings).toEqual({ fundAcquisitionCost: 0, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true })
     expect(loaded.portfolioBuckets).toEqual(state.portfolioBuckets)
-    delete state.input.retirementInsurance.capitalEstimator!.fundAcquisitionCost
-    expect(parsePersistedScenarioState(serializeScenarioState(state)).input.retirementInsurance!.capitalEstimator!.fundAcquisitionCost).toBeUndefined()
+    delete state.portfolioEstimatorSettings!.fundAcquisitionCost
+    expect(parsePersistedScenarioState(serializeScenarioState(state)).portfolioEstimatorSettings?.fundAcquisitionCost).toBeUndefined()
+    expect(JSON.parse(serializeScenarioState(state)).input.retirementInsurance.capitalEstimator).not.toHaveProperty('fundAcquisitionCost')
   })
 })
 
@@ -152,8 +159,8 @@ it('resets a fully populated previous-version scenario, not just its insurance f
 
 it('retains valid inactive v15 assumptions across reload, then clears only the manual preference', () => {
   const state = createDefaultState()
+  state.portfolioEstimatorSettings = { fundAcquisitionCost: 45678, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true }
   state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance({
-    capitalEstimator: { fundAcquisitionCost: 45678, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true },
     pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 },
   }) }
   state.childrenAnswer = { kind: 'none' }
@@ -169,7 +176,8 @@ it('retains valid inactive v15 assumptions across reload, then clears only the m
   const restored = renderHook(useScenarioState)
   const retained = restored.result.current.input.retirementInsurance!
   expect(retained.pension).toMatchObject({ manual: true, capitalMonthlyToday: 123, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 })
-  expect(retained.capitalEstimator?.fundAcquisitionCost).toBe(45678)
+  expect(restored.result.current.portfolioEstimatorSettings?.fundAcquisitionCost).toBe(45678)
+  expect(restored.result.current.portfolioEstimatorReadiness.ready).toBe(false)
   expect(retained.insurerAdditionalRate).toBe(.029)
   act(() => restored.result.current.updateRetirementInsurance({ ...retained, pension: { ...retained.pension, manual: false } }))
   expect(restored.result.current.result).toEqual(original)

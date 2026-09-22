@@ -52,8 +52,24 @@ export function loadInitialState(): ScenarioState {
   }
   return parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY))
 }
+export function extractPortfolioSettingsForPersistence(state: ScenarioState): ScenarioState['portfolioEstimatorSettings'] {
+  return state.portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
+}
+
 export function serializeScenarioState(state: ScenarioState): string {
-  return JSON.stringify({ ...state, version: 15, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
+  const { portfolioEstimatorSettings, ...rest } = state
+  const legacySettings = portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
+  const storedInput = { ...rest.input }
+  if (storedInput.retirementInsurance) {
+    const insuranceWithoutEstimator = { ...storedInput.retirementInsurance } as Record<string, unknown>
+    delete insuranceWithoutEstimator.capitalEstimator
+    storedInput.retirementInsurance = legacySettings === undefined
+      ? insuranceWithoutEstimator as unknown as typeof storedInput.retirementInsurance
+      : { ...insuranceWithoutEstimator, capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
+  } else if (legacySettings !== undefined) {
+    storedInput.retirementInsurance = { capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
+  }
+  return JSON.stringify({ ...rest, input: storedInput, version: 15, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
     typeof value === 'number' && !Number.isFinite(value) ? { draftNumber: String(value) } : value)
 }
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -72,9 +88,14 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
       ? { ...storedInsurance, insurerAdditionalRate: 0.029 }
       : storedInsurance
     const persistedLifeTableSex = state.input.lifeTableSex ?? 'conservative'
-    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input, lifeTableSex: persistedLifeTableSex,
+    const legacySettings = (persistedInsurance as { capitalEstimator?: ScenarioState['portfolioEstimatorSettings'] } | undefined)?.capitalEstimator
+      ?? (parsed as { portfolioEstimatorSettings?: ScenarioState['portfolioEstimatorSettings'] }).portfolioEstimatorSettings
+    const insuranceWithoutEstimator = { ...(persistedInsurance ?? {}) } as Record<string, unknown>
+    delete insuranceWithoutEstimator.capitalEstimator
+    const strippedInsurance = persistedInsurance ? { ...insuranceWithoutEstimator } as unknown as typeof persistedInsurance : undefined
+    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, portfolioEstimatorSettings: legacySettings, input: withDeterministicPortfolioReturn({ ...state.input, lifeTableSex: persistedLifeTableSex,
       retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets),
-      retirementInsurance: persistedInsurance ? { ...applyCoverage(persistedInsurance, state.insuranceCoverageAnswers),
+      retirementInsurance: strippedInsurance ? { ...applyCoverage(strippedInsurance, state.insuranceCoverageAnswers),
         pensionAge: timelineBoundary(state.retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer),
       } : undefined,
     }, calculatePortfolioExpectedReturn(allocation)) }
