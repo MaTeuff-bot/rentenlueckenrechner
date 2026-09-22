@@ -17,6 +17,8 @@ export const insurancePhaseSchema = z.object({
   drvSubsidy: z.enum(['confirmed', 'not-received']).optional(),
 })
 export const retirementInsuranceSchema = z.object({
+  // capitalEstimator bleibt hier persistiert; die UI (CapitalEstimatorSetup) lebt im Vermögen-Tab (InputPanel),
+  // Block 4 in der Versicherung ist nur ein Status-Zeiger. Kein Cleanup/Migration des Felds.
   capitalEstimator: estimatorSetupSchema.optional(),
   pensionAge: z.number().int().min(0).max(120).optional(),
   referenceYear: z.number().int().min(2026).max(9999),

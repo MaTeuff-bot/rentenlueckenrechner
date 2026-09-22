@@ -1,4 +1,6 @@
-import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
+import { applyCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../model/insuranceCoverage'
+import { needsEstimator } from '../model/capitalIncome/setup'
+import { CapitalEstimatorSetup } from './InputPanel/CapitalEstimatorSetup'
 import { useEffect, useState, type MouseEvent } from 'react'
 import {
   INPUT_TABS,
@@ -163,6 +165,20 @@ export function InputPanel({
   }
   const tabStatus = (tabId: InputTabId): string => getTabStatus(tabId, issues)
   const tabSummary = (tabId: InputTabId): string => getTabSummary(tabId, summaryContext)
+  const estimatorInsurance = applyCoverage(input.retirementInsurance ?? createDefaultRetirementInsurance(), insuranceCoverageAnswers ?? defaultCoverageAnswers())
+  const showCapitalEstimator = needsEstimator({ ...input, retirementInsurance: estimatorInsurance })
+  const jumpToEstimatorField = (fieldId: string) => {
+    setActiveTab('vermoegen')
+    focusField(fieldId, 'estimator-fundAcquisitionCost')
+    window.setTimeout(() => focusField(fieldId, 'estimator-fundAcquisitionCost'), 0)
+  }
+  const jumpToInsuranceBlock = () => {
+    setActiveTab('versicherung')
+    const modeSelect = typeof document === 'undefined' ? null : document.querySelector<HTMLSelectElement>('select[id^="insurance-"][id$="-capitalMode"]')
+    const target = modeSelect?.id ?? 'insurance-block-3-heading'
+    focusField(target)
+    window.setTimeout(() => focusField(target), 0)
+  }
   const handleIssueClick = (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
     event.preventDefault()
     const tab = tabForSection(issue.section)
@@ -232,12 +248,13 @@ export function InputPanel({
             onAdd={onPortfolioBucketAdd}
             onRemove={onPortfolioBucketRemove}
           />
+          {showCapitalEstimator && <CapitalEstimatorSetup insurance={estimatorInsurance} onChange={onRetirementInsuranceChange} onJumpToInsurance={jumpToInsuranceBlock} />}
 
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-versicherung" aria-labelledby="input-tab-versicherung" className="input-tabpanel" hidden={activeTab !== 'versicherung'}>
           <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
-            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} />
+            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} onJumpToEstimator={jumpToEstimatorField} />
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-annahmen" aria-labelledby="input-tab-annahmen" className="input-tabpanel" hidden={activeTab !== 'annahmen'}>

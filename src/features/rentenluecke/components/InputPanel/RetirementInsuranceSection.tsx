@@ -4,25 +4,19 @@ import { applyCoverage, commonExceptions, copyCompatibleCoverage, defaultCoverag
 import { focusField } from '../inputNavigation'
 import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
-import { CapitalEstimatorSetup } from './CapitalEstimatorSetup'
+import { OptionalNumber } from './OptionalNumber'
 import { capitalMode, needsEstimator } from '../../model/capitalIncome/setup'
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import type { RentenlueckeInput } from '../../model/types'
 import { controllingPensionStream, insurancePhaseRanges, phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
 
-export function OptionalNumber({ label, value, onChange, max, min = 0, step = 'any', id: explicitId }: {
-  id?: string; label: string; value?: number; onChange: (value: number | undefined) => void; max?: number; min?: number; step?: string
-}) {
-  const generatedId = useId()
-  const id = explicitId ?? generatedId
-  const invalid = value !== undefined && (!Number.isFinite(value) || value < min || (max !== undefined && value > max) || (step === '1' && !Number.isInteger(value)))
-  return <label className="field" htmlFor={id}><span className="field-label" id={`${id}-label`}>{label}</span><input aria-labelledby={`${id}-label`} id={id} type="number" inputMode={step === '1' ? 'numeric' : 'decimal'} min={min} max={max} step={step} value={Number.isNaN(value) ? '' : value ?? ''} aria-invalid={invalid} aria-describedby={invalid ? `${id}-error` : undefined} onChange={e => onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />{invalid && <span className="field-error" id={`${id}-error`}>Bitte {step === '1' ? 'eine ganze Zahl' : 'einen Wert'} ab {min}{max !== undefined ? ` bis ${max}` : ''} eingeben.</span>}</label>
-}
-export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {} }: {
+export { OptionalNumber }
+export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {}, onJumpToEstimator }: {
   issues?: ScenarioIssue[]
   coverage?: InsuranceCoverageAnswers; onCoverageChange?: (answers: InsuranceCoverageAnswers) => void
   childrenAnswer?: ChildrenAnswer; onChildrenChange?: (answer: ChildrenAnswer) => void
   insurance: RetirementInsurance; input: RentenlueckeInput; onChange: (insurance: RetirementInsurance) => void
+  onJumpToEstimator?: (fieldId: string) => void
 }) {
   const [localCoverage, setLocalCoverage] = useState(defaultCoverageAnswers)
   const [copyMessage, setCopyMessage] = useState('')
@@ -117,7 +111,8 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
     {showEstimator && <section className="insurance-block" aria-labelledby="insurance-block-4-heading">
       <h3 id="insurance-block-4-heading">4. Kapitalertrags-Schätzung <span className="section-status">{block4Status}</span></h3>
       <p>{block4Summary}</p>
-      <CapitalEstimatorSetup insurance={i} onChange={onChange} />
+      <p>{ranges.some(({ phase }) => capitalMode(i[phase]) === 'manual') ? 'Automatische Schätzung aktiv – Phasen mit manueller Kapitalbasis nutzen den jeweiligen Monatswert aus Block 3.' : 'Automatische Schätzung aktiv.'} <button type="button" className="secondary-button" id="insurance-block-4-jump-to-vermoegen" onClick={() => { const target = block4Issues[0]?.fieldId ?? 'estimator-fundAcquisitionCost'; if (onJumpToEstimator) onJumpToEstimator(target); else focusField(target) }}>Anschaffungskosten, Umfang bestätigen und Basiszins im Vermögen ergänzen</button></p>
+      {block4Issues.length > 0 && <ul>{block4Issues.map(issue => <li key={issue.code}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); if (onJumpToEstimator) onJumpToEstimator(issue.fieldId); else focusField(issue.fieldId) }}>{issue.message}</a></li>)}</ul>}
     </section>}
     <details><summary>Jahresmodell und Rechenregeln</summary><p>Jahresmodell: Arbeitsende, Einkommensbeginn/-ende und Versicherungsübergang gelten ab dem jeweiligen Zeilen-Startalter, ohne Teiljahre. Basisjahr {i.referenceYear}; Alter = Kalenderjahr minus Geburtsjahr. PV: Kinder zählen ab 1. Januar ihres 25. Geburtstagsjahres nicht mehr; Kinderlosenzuschlag ab dem Jahr des 23. Geburtstags. Elterneigenschaft bleibt dauerhaft. Näherung ohne Monatsgenauigkeit.</p><p>Grenzen und Geldbeträge steigen mit der Inflation des jeweiligen Simulationspfads; Prozentsätze bleiben konstant. Regeln 2026, keine Bescheid- oder Centgenauigkeit.</p></details>
   </fieldset>

@@ -27,7 +27,7 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
     if (key === 'pensionAge') return [input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? `retirement-income-start-${controllingPensionStream(input.retirementIncomeStreams)!.id}` : 'insurance-transition', 'zeitplan']
     if (key === 'childBirthYears') return [children.kind === 'children' && children.rows[Number(field)] ? `child-${children.rows[Number(field)].id}` : 'children-add', 'versicherung']
     if (key === 'rates') return [`insurance-rates-${field}`, 'annahmen']
-    if (key === 'capitalEstimator') return [`estimator-${field}`, 'versicherung']
+    if (key === 'capitalEstimator') return [`estimator-${field}`, 'vermoegen']
     if (key === 'bridge' || key === 'pension') return [`insurance-${key}-${field}`, 'versicherung']
     return [`insurance-${key}`, 'versicherung']
   }
