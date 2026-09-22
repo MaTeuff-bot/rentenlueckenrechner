@@ -30,6 +30,7 @@ export function RentenlueckeCalculator() {
     result,
     stochasticSummary,
     updateField,
+    updateLifeTableSex,
     updateRetirementInsurance,
     updatePortfolioBucket,
     addPortfolioBucket,
@@ -76,6 +77,7 @@ export function RentenlueckeCalculator() {
           allocationError={allocationError}
           portfolioBucketError={portfolioBucketError}
           onChange={updateField}
+          onLifeTableSexChange={updateLifeTableSex}
           onRetirementInsuranceChange={updateRetirementInsurance}
           onPortfolioBucketChange={updatePortfolioBucket}
           onPortfolioBucketAdd={addPortfolioBucket}
@@ -105,6 +107,7 @@ export function RentenlueckeCalculator() {
               result={result}
               stochasticSummary={stochasticSummary}
               historicalValidYears={historicalValidYears}
+              lifeTableSex={input.lifeTableSex ?? 'conservative'}
               onRequestSection={handleRequestSection}
             />
             <details className="panel"><summary>Jährliche Abrechnung anzeigen</summary><YearlyTable rows={result.rows} /></details>

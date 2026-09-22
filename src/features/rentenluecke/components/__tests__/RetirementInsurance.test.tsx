@@ -227,10 +227,15 @@ it('copies in both directions without asserting bridge-only coverage and keeps m
   const group = (phase: string) => within(screen.getByRole('group', { name: `Besondere Umstände – ${phase}` }))
   fireEvent.click(group('Rentenphase').getByLabelText('Alle Standardregeln genügen (automatische Berechnung)'))
   fireEvent.click(screen.getByRole('button', { name: 'Angaben aus der anderen Phase übernehmen – Brücke' }))
-  expect(group('Brücke').getByLabelText('Alle Standardregeln genügen (automatische Berechnung)')).toBeChecked()
-  expect(within(screen.getByRole('group', { name: 'Zusätzlich in der Brücke' })).getByLabelText('Alle Standardregeln genügen (automatische Berechnung)')).not.toBeChecked()
+  expect(screen.queryByRole('group', { name: 'Zusätzlich in der Brücke' })).not.toBeInTheDocument()
+  expect(group('Brücke').getByLabelText('Alle Standardregeln genügen (automatische Berechnung)')).not.toBeChecked()
+  expect(group('Brücke').getByText('Noch offen: Bitte ausdrücklich antworten.')).toBeVisible()
   expect(screen.getByText(/Brücken-spezifische Angaben bleiben/)).toBeVisible()
   fireEvent.click(group('Brücke').getByLabelText('Es trifft etwas zu'))
+  expect(document.getElementById('insurance-bridge-bridgeOnly')).not.toBeNull()
+  fireEvent.click(group('Brücke').getByLabelText('Rentenantragstellerregelung (nur Brücke)'))
+  expect(group('Brücke').getByLabelText('Rentenantragstellerregelung (nur Brücke)')).toBeChecked()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Brücke/)).toBeVisible()
   fireEvent.click(group('Brücke').getByLabelText('Krankengeld'))
   fireEvent.click(group('Brücke').getByLabelText('Mehrere Personen'))
   expect(group('Brücke').getByLabelText('Krankengeld')).toBeChecked()
@@ -325,12 +330,13 @@ it('shows exactly the existing checklist exclusions, the own-contribution radio,
     'Alle Standardregeln genügen (automatische Berechnung)', 'Es trifft etwas zu', 'Ich bin unsicher',
     'Eigene KV/PV-Beiträge einsetzen – Brücke',
   ])
+  expect(screen.queryByRole('group', { name: 'Zusätzlich in der Brücke' })).not.toBeInTheDocument()
   fireEvent.click(common.getByLabelText('Es trifft etwas zu'))
   expect(common.getAllByRole('checkbox').map(control => control.parentElement?.textContent)).toEqual([
     'Mehrere Personen', 'Beschäftigung oder Selbstständigkeit', 'Krankengeld', 'Partner- oder Haushaltsbemessung', 'Besondere Mindestbeitragsregeln', 'Anerkennung von Kindern ungeklärt',
+    'Rentenantragstellerregelung (nur Brücke)', 'Familienversicherung (nur Brücke)', 'Sozialleistungsregelung (nur Brücke)',
   ])
-  fireEvent.click(within(screen.getByRole('group', { name: 'Zusätzlich in der Brücke' })).getByLabelText('Es trifft etwas zu'))
-  expect(within(screen.getByRole('group', { name: 'Zusätzlich in der Brücke' })).getAllByRole('checkbox').map(control => control.parentElement?.textContent)).toEqual(['Rentenantragstellerregelung', 'Familienversicherung', 'Sozialleistungsregelung'])
+  expect(common.getByText(/Zusätzlich in der Brücke/)).toBeInTheDocument()
   expect(Number((screen.getByLabelText('Kassenindividueller Zusatzbeitrag (%)') as HTMLInputElement).value)).toBeCloseTo(2.9, 5)
   fireEvent.click(screen.getByText('Wo finde ich das?'))
   expect(screen.getByText(/Website oder in einer Beitragsmitteilung/)).toBeVisible()
@@ -406,4 +412,30 @@ it('preselects own contributions with disabled automatic radios for a forced Son
   expect(group.getByText(/Einkommensart nicht automatisch geklärt/)).toBeVisible()
   expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/)).toBeVisible()
   expect(breakdown()).not.toBeInTheDocument()
+})
+
+it('merges the bridge checklists into one radiogroup while keeping common and bridgeOnly answers separate', () => {
+  render(<Harness initial={pension()} workStop={65} />)
+  const bridge = within(screen.getByRole('group', { name: 'Besondere Umstände – Brücke' }))
+  expect(screen.queryByRole('group', { name: 'Zusätzlich in der Brücke' })).not.toBeInTheDocument()
+  expect(bridge.getAllByRole('radio')).toHaveLength(4)
+
+  fireEvent.click(bridge.getByLabelText('Es trifft etwas zu'))
+  fireEvent.click(bridge.getByLabelText('Krankengeld'))
+  expect(bridge.getByLabelText('Krankengeld')).toBeChecked()
+  expect(document.getElementById('insurance-bridge-circumstances-krankengeld')).not.toBeNull()
+  expect(document.getElementById('insurance-bridge-bridgeOnly-pension-applicant')).not.toBeNull()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Brücke/)).toBeVisible()
+
+  fireEvent.click(bridge.getByLabelText('Krankengeld'))
+  expect(bridge.queryByLabelText('Krankengeld')).not.toBeInTheDocument()
+  fireEvent.click(bridge.getByLabelText('Es trifft etwas zu'))
+  fireEvent.click(bridge.getByLabelText('Familienversicherung (nur Brücke)'))
+  expect(bridge.getByLabelText('Familienversicherung (nur Brücke)')).toBeChecked()
+  expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Brücke/)).toBeVisible()
+
+  fireEvent.click(bridge.getByLabelText('Alle Standardregeln genügen (automatische Berechnung)'))
+  expect(bridge.getByLabelText('Alle Standardregeln genügen (automatische Berechnung)')).toBeChecked()
+  expect(bridge.getByText('Keine dieser Sonderumstände angegeben.')).toBeVisible()
+  expect(screen.queryByLabelText(/Eigene KV nach allen Zuschüssen – Brücke/)).not.toBeInTheDocument()
 })

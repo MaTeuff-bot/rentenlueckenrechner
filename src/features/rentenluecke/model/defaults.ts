@@ -4,6 +4,7 @@ export const DEFAULT_INPUT: RentenlueckeInput = {
   currentAge: 40,
   retirementAge: 67,
   planningAge: 90,
+  lifeTableSex: 'conservative',
   currentCapital: 50_000,
   monthlyContributionToday: 500,
   monthlyDesiredSpendingToday: 3_000,

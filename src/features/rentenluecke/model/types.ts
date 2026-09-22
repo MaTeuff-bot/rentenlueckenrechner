@@ -29,6 +29,7 @@ export type RentenlueckeInput = {
   currentAge: number
   retirementAge: number
   planningAge: number
+  lifeTableSex?: 'conservative' | 'female' | 'male'
   currentCapital: number
   monthlyContributionToday: number
   monthlyDesiredSpendingToday: number

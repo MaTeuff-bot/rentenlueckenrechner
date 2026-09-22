@@ -513,17 +513,155 @@ describe('PR C: retirement income restructure', () => {
     const selector = screen.getByLabelText('Kategorie von Weiteres Einkommen')
     const automatic = within(selector).getByRole('group', { name: 'KV/PV automatisch berechnet' })
     expect(within(automatic).getByRole('option', { name: 'Gesetzliche Rente (Standard)' })).toBeInTheDocument()
-    expect(within(automatic).getByRole('option', { name: 'Gesetzliche Rente (Sonderfall)' })).toBeInTheDocument()
     expect(within(automatic).getByRole('option', { name: 'Betriebsrente (Standard)' })).toBeInTheDocument()
-    expect(within(automatic).getByRole('option', { name: 'Betriebsrente (Sonderfall)' })).toBeInTheDocument()
+    expect(within(automatic).queryByRole('option', { name: 'Gesetzliche Rente (Sonderfall)' })).not.toBeInTheDocument()
+    expect(within(automatic).queryByRole('option', { name: 'Betriebsrente (Sonderfall)' })).not.toBeInTheDocument()
     const rental = within(selector).getByRole('group', { name: 'Mieteinnahmen' })
     expect(within(rental).getByRole('option', { name: 'Mieteinnahmen' })).toBeInTheDocument()
-    const cashflow = within(selector).getByRole('group', { name: 'Cashflow-only' })
-    for (const name of ['Private Rente', 'Nebenjob', 'Brückeneinkommen', 'Sonstiges Einkommen']) {
-      expect(within(cashflow).getByRole('option', { name })).toBeInTheDocument()
+    const manual = within(selector).getByRole('group', { name: 'Manuelle KV/PV-Gesamtbeträge nötig' })
+    for (const name of ['Gesetzliche Rente (Sonderfall)', 'Betriebsrente (Sonderfall)', 'Private Rente', 'Nebenjob', 'Brückeneinkommen', 'Sonstiges Einkommen']) {
+      expect(within(manual).getByRole('option', { name })).toBeInTheDocument()
     }
-    expect(screen.getByText(/Sonderfälle über manuelle Phasen-Gesamtbeträge/)).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Cashflow-only' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Gesetzliche Rente \(Standard\) und Betriebsrente \(Standard\)/)).toBeInTheDocument()
     expect(screen.getByText(/beitragspflichtiger Überschuss/)).toBeInTheDocument()
     expect(screen.getByText(/kein automatischer KV\/PV-Beitrag/)).toBeInTheDocument()
+  })
+})
+
+describe('PR D: Zeitplan cleanup', () => {
+  const firstStatutory: RetirementIncomeStream = {
+    id: 'first',
+    name: 'Erste Rente',
+    kind: 'gesetzliche-rente',
+    support: 'standard',
+    amountMonthlyToday: 2000,
+    startAge: 67,
+    endAge: null,
+    amountBasis: 'gross',
+    deductionMode: 'effectiveHaircut',
+    effectiveDeductionRate: 0,
+  }
+  const secondStatutory: RetirementIncomeStream = {
+    ...firstStatutory,
+    id: 'second',
+    name: 'Zweite Rente',
+    startAge: 69,
+  }
+  const timelineProps = { errors: {}, onChange: vi.fn(), onTransitionChange: vi.fn() }
+
+  it('dissolves the hollow statutory fieldset but keeps the derived line visible', () => {
+    render(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [firstStatutory, secondStatutory],
+          retirementInsurance: createDefaultRetirementInsurance(67),
+        }}
+        {...timelineProps}
+      />,
+    )
+
+    expect(screen.queryByRole('group', { name: 'Gesetzlicher Rentenbeginn' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Frühester gesetzlicher Rentenbeginn: 67/)).toBeInTheDocument()
+    expect(screen.getByText(/Erste Rente: Alter 67/)).toBeInTheDocument()
+    expect(screen.getByText(/Zweite Rente: Alter 69/)).toBeInTheDocument()
+    expect(screen.getByText(/Rentenbeginn \(Alter\)/)).toBeInTheDocument()
+  })
+
+  it('places the Arbeitsende paragraph directly under the Arbeitsende field', () => {
+    render(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [firstStatutory],
+          retirementInsurance: createDefaultRetirementInsurance(67),
+        }}
+        {...timelineProps}
+      />,
+    )
+
+    const personal = within(screen.getByRole('group', { name: 'Persönliche Daten' }))
+    const retirementAge = personal.getByLabelText('Arbeitsende (Alter)')
+    const paragraph = personal.getByText(/Arbeitsende und Rentenbeginn sind unabhängig/)
+    const planningAge = personal.getByLabelText('Planung bis Alter')
+    expect(retirementAge.compareDocumentPosition(paragraph) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(paragraph.compareDocumentPosition(planningAge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the Übergang branch as its own fieldset without statutory streams', () => {
+    render(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [],
+          retirementInsurance: createDefaultRetirementInsurance(undefined),
+        }}
+        {...timelineProps}
+      />,
+    )
+
+    const transition = screen.getByRole('group', { name: 'Versicherungsübergang' })
+    expect(within(transition).getByText('Keine gesetzliche Rente erfasst.')).toBeInTheDocument()
+    expect(within(transition).getByLabelText('Übergang der Versicherungsplanung ohne gesetzliche Rente (Alter)')).toHaveAttribute(
+      'id',
+      'insurance-transition',
+    )
+    expect(within(transition).getByText(/Explizite Grenze zwischen Brücke/)).toBeInTheDocument()
+    expect(within(transition).getByText(/Arbeitsende und Versicherungsübergang sind unabhängig/)).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('group', { name: 'Persönliche Daten' })).queryByText(/Arbeitsende und Rentenbeginn sind unabhängig/),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Frühester gesetzlicher Rentenbeginn/)).not.toBeInTheDocument()
+  })
+
+  it('moves Ausgaben into Persönliche Daten and drops the standalone section', () => {
+    renderInputPanel()
+
+    const spending = within(screen.getByRole('group', { name: 'Persönliche Daten' })).getByLabelText(
+      /Gewünschte monatliche Ausgaben/,
+    )
+    expect(spending).toHaveAttribute('id', 'monthlyDesiredSpendingToday')
+    expect(document.getElementById('ausgaben')).toBeNull()
+  })
+
+  it('offers Geschlecht with Keine Angabe default and forwards the selection', () => {
+    const onLifeTableSexChange = vi.fn()
+    const legacyInput = { ...DEFAULT_INPUT }
+    delete legacyInput.lifeTableSex
+    const { rerender } = render(
+      <TimelineSection
+        input={{ ...legacyInput, retirementIncomeStreams: [], retirementInsurance: createDefaultRetirementInsurance(undefined) }}
+        errors={{}}
+        onChange={vi.fn()}
+        onTransitionChange={vi.fn()}
+        onLifeTableSexChange={onLifeTableSexChange}
+      />,
+    )
+
+    const select = within(screen.getByRole('group', { name: 'Persönliche Daten' })).getByLabelText(
+      'Geschlecht für Sterbetafel',
+    )
+    expect(select).toHaveAttribute('id', 'lifeTableSex')
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Keine Angabe',
+      'Weiblich',
+      'Männlich',
+    ])
+    expect(select).toHaveValue('conservative')
+    expect(select).toHaveDisplayValue('Keine Angabe')
+    fireEvent.change(select, { target: { value: 'female' } })
+    expect(onLifeTableSexChange).toHaveBeenCalledWith('female')
+
+    rerender(
+      <TimelineSection
+        input={{ ...DEFAULT_INPUT, lifeTableSex: 'male', retirementIncomeStreams: [], retirementInsurance: createDefaultRetirementInsurance(undefined) }}
+        errors={{}}
+        onChange={vi.fn()}
+        onTransitionChange={vi.fn()}
+        onLifeTableSexChange={onLifeTableSexChange}
+      />,
+    )
+    expect(screen.getByLabelText('Geschlecht für Sterbetafel')).toHaveValue('male')
   })
 })

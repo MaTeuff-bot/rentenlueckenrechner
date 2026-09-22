@@ -21,6 +21,7 @@ type ScenarioOutcomePanelProps = {
   result: SimulationResult
   stochasticSummary: StochasticSimulationSummary
   historicalValidYears: number[]
+  lifeTableSex: LifeTableSex
   onRequestSection?: ResultAdjustHandler
 }
 
@@ -47,12 +48,6 @@ function OutcomeAdjustLink({
   )
 }
 
-const sexOptions: { value: LifeTableSex; label: string }[] = [
-  { value: 'conservative', label: 'Keine Angabe / konservativ' },
-  { value: 'female', label: 'Weiblich' },
-  { value: 'male', label: 'Männlich' },
-]
-
 function RiskChip({ chip }: { chip: DepletionRiskChip }) {
   return (
     <div className="outcome-risk-card">
@@ -69,11 +64,11 @@ export function ScenarioOutcomePanel({
   result,
   stochasticSummary,
   historicalValidYears,
+  lifeTableSex,
   onRequestSection,
 }: ScenarioOutcomePanelProps) {
   const [showSurvivalProbability, setShowSurvivalProbability] = useState(true)
   const [useLogCapitalScale, setUseLogCapitalScale] = useState(false)
-  const [lifeTableSex, setLifeTableSex] = useState<LifeTableSex>('conservative')
   const planningAge = result.rows.at(-1)?.ageEnd ?? 0
   const successPercent = Math.round(stochasticSummary.successProbability * 100)
   const chartRows = useMemo(
@@ -133,16 +128,6 @@ export function ScenarioOutcomePanel({
             onChange={(event) => setUseLogCapitalScale(event.target.checked)}
           />
           Kapital logarithmisch skalieren
-        </label>
-        <label className="field chart-sex-field">
-          <span className="field-label">Geschlecht für Sterbetafel</span>
-          <select value={lifeTableSex} onChange={(event) => setLifeTableSex(event.target.value as LifeTableSex)}>
-            {sexOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
         </label>
       </div>
 
