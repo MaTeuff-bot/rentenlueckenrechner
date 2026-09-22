@@ -35,7 +35,7 @@ const CATEGORY_OPTIONS: readonly CategoryOption[] = [
     label: 'Gesetzliche Rente (Sonderfall)',
     defaultName: 'Gesetzliche Rente',
     helper: 'Sonderfall, zum Beispiel Auslandsrente, Einmalzahlung oder ungeklärter Bezug: Die betroffene Phase braucht manuelle KV/PV-Gesamtbeträge.',
-    group: 'automatic',
+    group: 'cashflow',
   },
   {
     value: 'betriebsrente:standard',
@@ -53,7 +53,7 @@ const CATEGORY_OPTIONS: readonly CategoryOption[] = [
     label: 'Betriebsrente (Sonderfall)',
     defaultName: 'Betriebsrente',
     helper: 'Sonderfall, zum Beispiel Einmalzahlung, ausländischer Vertrag oder ungeklärte Art: Die betroffene Phase braucht manuelle KV/PV-Gesamtbeträge.',
-    group: 'automatic',
+    group: 'cashflow',
   },
   {
     value: 'rental-income',
@@ -106,7 +106,7 @@ const CATEGORY_GROUPS: readonly { id: CategoryGroupId; label: string; explanatio
   {
     id: 'automatic',
     label: 'KV/PV automatisch berechnet',
-    explanation: 'Gesetzliche Rente und Betriebsrente: KV/PV wird automatisch berechnet (Sonderfälle über manuelle Phasen-Gesamtbeträge).',
+    explanation: 'Gesetzliche Rente (Standard) und Betriebsrente (Standard): KV/PV wird automatisch berechnet.',
   },
   {
     id: 'rental',
@@ -115,8 +115,8 @@ const CATEGORY_GROUPS: readonly { id: CategoryGroupId; label: string; explanatio
   },
   {
     id: 'cashflow',
-    label: 'Cashflow-only',
-    explanation: 'Private Rente, Nebenjob, Brückeneinkommen, Sonstiges: kein automatischer KV/PV-Beitrag; nur über manuelle Phasen-Gesamtbeträge; Steuern via Abzugsfeld oder netto.',
+    label: 'Manuelle KV/PV-Gesamtbeträge nötig',
+    explanation: 'Gesetzliche Rente (Sonderfall), Betriebsrente (Sonderfall), Private Rente, Nebenjob, Brückeneinkommen, Sonstiges: kein automatischer KV/PV-Beitrag; nur über manuelle Phasen-Gesamtbeträge; Steuern via Abzugsfeld oder netto.',
   },
 ]
 

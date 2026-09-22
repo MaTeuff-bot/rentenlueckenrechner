@@ -53,6 +53,16 @@ describe('guided insurance persistence and app-owned reset', () => {
     delete raw.input.retirementInsurance.insurerAdditionalRate
     expect(parsePersistedScenarioState(JSON.stringify(raw)).input.retirementInsurance?.insurerAdditionalRate).toBe(0.029)
   })
+  it('fills a missing life table sex from legacy states with the conservative display', () => {
+    const state = createDefaultState()
+    expect(state.input.lifeTableSex).toBe('conservative')
+    const raw = JSON.parse(serializeScenarioState(state))
+    expect(raw.version).toBe(15)
+    delete raw.input.lifeTableSex
+    expect(parsePersistedScenarioState(JSON.stringify(raw)).input.lifeTableSex).toBe('conservative')
+    const male = { ...state, input: { ...state.input, lifeTableSex: 'male' as const } }
+    expect(parsePersistedScenarioState(serializeScenarioState(male)).input.lifeTableSex).toBe('male')
+  })
   it('persists valid incomplete transitions and hides results, then restores the completed forecast', () => {
     const state = createDefaultState()
     state.input = { ...state.input, currentAge: 65, planningAge: 70 }
@@ -170,3 +180,11 @@ it('retains valid inactive v15 assumptions across reload, then clears only the m
   expect(restored.result.current.result).toBeNull()
   expect(restored.result.current.issues.some(issue => issue.fieldPath === 'insuranceCoverageAnswers.pension.common')).toBe(true)
 }, 20_000)
+
+it('updates and persists the life table sex selection', () => {
+  const { result } = renderHook(useScenarioState)
+  expect(result.current.input.lifeTableSex).toBe('conservative')
+  act(() => result.current.updateLifeTableSex('male'))
+  expect(result.current.input.lifeTableSex).toBe('male')
+  expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.lifeTableSex).toBe('male')
+})

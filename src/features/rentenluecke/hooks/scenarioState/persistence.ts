@@ -71,7 +71,8 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     const persistedInsurance = storedInsurance && storedInsurance.insurerAdditionalRate === undefined
       ? { ...storedInsurance, insurerAdditionalRate: 0.029 }
       : storedInsurance
-    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input,
+    const persistedLifeTableSex = state.input.lifeTableSex ?? 'conservative'
+    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, input: withDeterministicPortfolioReturn({ ...state.input, lifeTableSex: persistedLifeTableSex,
       retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets),
       retirementInsurance: persistedInsurance ? { ...applyCoverage(persistedInsurance, state.insuranceCoverageAnswers),
         pensionAge: timelineBoundary(state.retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer),

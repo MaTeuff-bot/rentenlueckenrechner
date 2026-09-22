@@ -1,6 +1,6 @@
 import type { ScenarioIssue } from '../../model/scenarioIssues'
-import { InsuranceCoverageChecklist } from './InsuranceCoverageChecklist'
-import { applyCoverage, commonExceptions, bridgeExceptions, copyCompatibleCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../../model/insuranceCoverage'
+import { BridgeCoverageChecklist, InsuranceCoverageChecklist } from './InsuranceCoverageChecklist'
+import { applyCoverage, commonExceptions, copyCompatibleCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../../model/insuranceCoverage'
 import { focusField } from '../inputNavigation'
 import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
@@ -76,9 +76,10 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
             {offending.map(stream => <p key={stream.id}>{stream.name} ab Alter {stream.startAge}: <button type="button" className="secondary-button" onClick={() => focusField(`retirement-income-kind-${stream.id}`)}>Einkommen bearbeiten</button></p>)}
             <button type="button" className="secondary-button" onClick={() => focusField(`insurance-${phase}-kvMonthlyToday`)}>Eigene Beiträge eingeben</button>
           </div>}
-          <InsuranceCoverageChecklist id={`insurance-${phase}-circumstances`} title={`Besondere Umstände – ${label}`} answer={answers[phase].common} options={commonExceptions} onChange={common => changeCoverage({ ...answers, [phase]: { ...answers[phase], common } })} manualOption={{ id: `insurance-${phase}-manual`, phaseLabel: label, active: p.manual ?? false, forced: forcedReasons.length > 0, forcedReasons, onManualChange: manual => update({ manual }) }} />
+          {phase === 'bridge'
+            ? <BridgeCoverageChecklist common={answers.bridge.common} bridgeOnly={answers.bridge.bridgeOnly} onChange={({ common, bridgeOnly }) => changeCoverage({ ...answers, bridge: { ...answers.bridge, common, bridgeOnly } })} manualOption={{ id: `insurance-${phase}-manual`, phaseLabel: label, active: p.manual ?? false, forced: forcedReasons.length > 0, forcedReasons, onManualChange: manual => update({ manual }) }} />
+            : <InsuranceCoverageChecklist id={`insurance-${phase}-circumstances`} title={`Besondere Umstände – ${label}`} answer={answers[phase].common} options={commonExceptions} onChange={common => changeCoverage({ ...answers, [phase]: { ...answers[phase], common } })} manualOption={{ id: `insurance-${phase}-manual`, phaseLabel: label, active: p.manual ?? false, forced: forcedReasons.length > 0, forcedReasons, onManualChange: manual => update({ manual }) }} />}
           {!p.manual && !forcedReasons.length && <>
-            {phase === 'bridge' && <InsuranceCoverageChecklist id="insurance-bridge-bridgeOnly" title="Zusätzlich in der Brücke" answer={answers.bridge.bridgeOnly} options={bridgeExceptions} onChange={bridgeOnly => changeCoverage({ ...answers, bridge: { ...answers.bridge, bridgeOnly } })} />}
             {ranges.length === 2 && <button type="button" className="secondary-button" disabled={answers[other].common.kind === 'missing'} onClick={() => { const result = copyCompatibleCoverage(answers, other); changeCoverage(result.answers); setCopyMessage(result.message) }}>Angaben aus der anderen Phase übernehmen – {label}</button>}
           </>}
           <p data-testid={`insurance-${phase}-summary`}>{reasons.length ? `Eigene Beiträge · KV ${p.kvMonthlyToday ?? 'offen'} / PV ${p.pvMonthlyToday ?? 'offen'} €/Monat heute` : `${p.status === 'kvdr' ? 'KVdR' : p.status === 'unknown' ? 'Unbekannt · freiwillige GKV angenommen' : p.status === 'voluntary' ? 'Freiwillige GKV' : 'Status offen'} · automatisch`}</p>

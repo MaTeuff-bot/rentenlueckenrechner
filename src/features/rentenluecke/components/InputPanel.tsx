@@ -27,12 +27,13 @@ import {
   HISTORICAL_MINIMUM_OBSERVATIONS,
 } from '../model/historicalReturns'
 import { type InputFieldName } from '../model/inputSchema'
+import type { LifeTableSex } from '../mortality/mortality'
 import { calculatePortfolioBucketTotal, type PortfolioBucket } from '../model/portfolioBuckets'
 import { type AssetAllocation } from '../model/stochasticReturns'
 import { createPortfolioComponentsFromBuckets } from '../model/portfolioBuckets'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../model/types'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
-import { RetirementSpendingSection, SavingsSection } from './InputPanel/BasicInputSections'
+import { SavingsSection } from './InputPanel/BasicInputSections'
 import { RetirementIncomeStreamsSection } from './InputPanel/RetirementIncomeStreamsSection'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
 import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
@@ -59,6 +60,7 @@ type InputPanelProps = {
   portfolioBucketError: string | null
   onRetirementInsuranceChange: (insurance: RetirementInsurance) => void
   onChange: (field: InputFieldName, value: number) => void
+  onLifeTableSexChange?: (value: LifeTableSex) => void
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
   onPortfolioBucketAdd: () => void
   onPortfolioBucketRemove: (id: string) => void
@@ -85,6 +87,7 @@ export function InputPanel({
   allocationError,
   portfolioBucketError,
   onChange,
+  onLifeTableSexChange,
   onRetirementInsuranceChange,
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
@@ -203,10 +206,7 @@ export function InputPanel({
       <div className="input-grid">
         <div role="tabpanel" id="input-tabpanel-plan" aria-labelledby="input-tab-plan" className="input-tabpanel" hidden={activeTab !== 'plan'}>
           <section id="zeitplan" className="flow-section" tabIndex={-1}>{heading('zeitplan')}
-            <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onTransitionChange={onTransitionChange} />
-          </section>
-          <section id="ausgaben" className="flow-section" tabIndex={-1}>{heading('ausgaben')}
-            <RetirementSpendingSection input={input} errors={errors} onChange={onChange} />
+            <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onTransitionChange={onTransitionChange} onLifeTableSexChange={onLifeTableSexChange} />
           </section>
           <section id="einkommen" className="flow-section" tabIndex={-1}>{heading('einkommen')}
           <RetirementIncomeStreamsSection

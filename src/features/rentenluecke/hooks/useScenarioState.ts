@@ -11,6 +11,7 @@ import {
   simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
+import type { LifeTableSex } from '../mortality/mortality'
 import {
   calculateAllocationFromBuckets,
   calculatePortfolioBucketTotal,
@@ -88,6 +89,10 @@ export function useScenarioState() {
   const updateInsuranceCoverage = (insuranceCoverageAnswers: InsuranceCoverageAnswers) => setState(current => ({ ...current, insuranceCoverageAnswers }))
   const updateChildrenAnswer = (childrenAnswer: ChildrenAnswer) => setState(current => ({ ...current, childrenAnswer }))
   const updateInsuranceTransition = (explicitInsuranceTransition: number | undefined) => setState(current => ({ ...current, explicitInsuranceTransition }))
+
+  const updateLifeTableSex = (lifeTableSex: LifeTableSex) => {
+    setState((current) => ({ ...current, input: { ...current.input, lifeTableSex } }))
+  }
 
   const updateField = (field: InputFieldName, value: number) => {
     setState((current) => ({
@@ -200,6 +205,7 @@ export function useScenarioState() {
     result,
     stochasticSummary,
     updateField,
+    updateLifeTableSex,
     updateRetirementInsurance,
     updatePortfolioBucket,
     addPortfolioBucket,
