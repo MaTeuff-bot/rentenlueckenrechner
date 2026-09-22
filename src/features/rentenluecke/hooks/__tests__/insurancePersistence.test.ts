@@ -44,7 +44,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     const loaded = parsePersistedScenarioState(serializeScenarioState(state))
     expect(loaded.input.retirementInsurance?.pension).toEqual({})
     expect(loaded.input.retirementInsurance?.insurerAdditionalRate).toBe(0.029)
-    expect(loaded.retirementIncomeStreams[0].support).toBeUndefined()
+    expect(loaded.retirementIncomeStreams[0]).toMatchObject({ kind: 'gesetzliche-rente', support: 'standard' })
     expect(parsePersistedScenarioState('{broken')).toEqual(state)
   })
   it('fills a missing insurer additional rate from legacy states with the 2026 average', () => {

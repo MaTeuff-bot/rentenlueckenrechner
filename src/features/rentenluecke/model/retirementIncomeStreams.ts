@@ -52,6 +52,7 @@ export function createDefaultRetirementIncomeStreams(
       id: 'statutory-pension',
       name: 'Gesetzliche Rente',
       kind: 'gesetzliche-rente',
+      support: 'standard',
       amountMonthlyToday: input.monthlyRetirementIncomeToday,
       startAge: input.retirementAge,
       endAge: null,

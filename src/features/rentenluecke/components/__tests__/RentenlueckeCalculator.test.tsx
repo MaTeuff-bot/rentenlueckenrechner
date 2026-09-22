@@ -133,9 +133,10 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Einkommen hinzufügen' }))
-    expect(screen.getByLabelText('Name von Weiteres Einkommen')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Weiteres Einkommen entfernen' }))
-    expect(screen.queryByLabelText('Name von Weiteres Einkommen')).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText('Name von Gesetzliche Rente')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })[1])
+    expect(screen.getAllByLabelText('Name von Gesetzliche Rente')).toHaveLength(1)
   }, 20000)
 })
 

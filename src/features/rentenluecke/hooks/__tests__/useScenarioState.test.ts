@@ -149,7 +149,7 @@ describe('useScenarioState', () => {
     act(() => result.current.addRetirementIncomeStream())
     expect(result.current.retirementIncomeStreams).toHaveLength(2)
     const added = result.current.retirementIncomeStreams[1]
-    expect(added).toMatchObject({ kind: 'other', name: 'Weiteres Einkommen' })
+    expect(added).toMatchObject({ kind: 'gesetzliche-rente', support: 'standard', name: 'Gesetzliche Rente' })
     act(() => result.current.removeRetirementIncomeStream(added.id))
     expect(result.current.retirementIncomeStreams).toHaveLength(1)
   })

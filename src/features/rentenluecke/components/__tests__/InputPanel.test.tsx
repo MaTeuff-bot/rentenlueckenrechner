@@ -12,8 +12,10 @@ import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import type { InputFieldName } from '../../model/inputSchema'
 import { createDefaultPortfolioBuckets } from '../../model/portfolioBuckets'
 import { createDefaultRetirementIncomeStreams } from '../../model/retirementIncomeStreams'
+import { createDefaultRetirementInsurance } from '../../model/retirementInsurance'
 import { InputPanel } from '../InputPanel'
 import { RetirementIncomeStreamsSection } from '../InputPanel/RetirementIncomeStreamsSection'
+import { TimelineSection } from '../InputPanel/TimelineSection'
 import type { RetirementIncomeStream } from '../../model/types'
 
 function inputById(id: string): HTMLInputElement {
@@ -240,7 +242,8 @@ describe('retirement income category selector', () => {
 
     const selector = screen.getByLabelText('Kategorie von Mieteinnahmen')
     expect(selector).toHaveDisplayValue('Mieteinnahmen')
-    expect(within(selector).getByRole('option', { name: 'Gesetzliche Rente' })).toBeInTheDocument()
+    expect(within(selector).getByRole('option', { name: 'Gesetzliche Rente (Standard)' })).toBeInTheDocument()
+    expect(within(selector).getByRole('option', { name: 'Gesetzliche Rente (Sonderfall)' })).toBeInTheDocument()
     expect(within(selector).getByRole('option', { name: 'Brückeneinkommen' })).toBeInTheDocument()
     expect(screen.getByText(/Steuern, Leerstand und Instandhaltung werden nicht automatisch berechnet/)).toBeInTheDocument()
   })
@@ -261,8 +264,8 @@ describe('retirement income category selector', () => {
     expect(selector).toHaveAccessibleDescription(/Wähle netto oder brutto/)
     expect(screen.getByRole('spinbutton', { name: /Sonstige Abzüge \/ Steuern ohne KV\/PV/ })).toBeInTheDocument()
 
-    fireEvent.change(selector, { target: { value: 'gesetzliche-rente' } })
-    expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'gesetzliche-rente' })
+    fireEvent.change(selector, { target: { value: 'gesetzliche-rente:standard' } })
+    expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'gesetzliche-rente', support: 'standard' })
     rerender(<RetirementIncomeStreamsSection {...props} streams={[{ ...stream, kind: 'gesetzliche-rente' }]} />)
     expect(selector).toHaveAccessibleDescription(/Rentenbescheid als Bruttobetrag in heutiger Kaufkraft/)
     expect(helper).not.toHaveTextContent('Wähle netto oder brutto')
@@ -295,5 +298,232 @@ describe('retirement income category selector', () => {
     fireEvent.change(screen.getByLabelText('Kategorie von Kiosk am Wochenende'), { target: { value: 'side-income' } })
 
     expect(onUpdate).toHaveBeenCalledWith('income', { kind: 'side-income' })
+  })
+})
+
+describe('PR C: retirement income restructure', () => {
+  const otherStream: RetirementIncomeStream = {
+    id: 'income',
+    name: 'Weiteres Einkommen',
+    kind: 'other',
+    amountMonthlyToday: 0,
+    startAge: 67,
+    endAge: null,
+    amountBasis: 'net',
+    deductionMode: 'none',
+    effectiveDeductionRate: 0,
+  }
+  const statutoryStream: RetirementIncomeStream = {
+    id: 'statutory-pension',
+    name: 'Gesetzliche Rente',
+    kind: 'gesetzliche-rente',
+    support: 'standard',
+    amountMonthlyToday: 2000,
+    startAge: 67,
+    endAge: null,
+    amountBasis: 'gross',
+    deductionMode: 'effectiveHaircut',
+    effectiveDeductionRate: 0,
+  }
+  const sectionProps = { onUpdate: vi.fn(), onAdd: vi.fn(), onRemove: vi.fn() }
+
+  it('edits the statutory start on the card through the moved input id', () => {
+    const onUpdate = vi.fn()
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[statutoryStream]}
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    const start = screen.getByLabelText('Rentenbeginn (Alter)')
+    expect(start).toHaveAttribute('id', 'retirement-income-start-statutory-pension')
+    expect(start).toHaveAttribute('type', 'number')
+    expect(start).toHaveAttribute('min', '0')
+    expect(start).toHaveAttribute('max', '120')
+    expect(start).not.toBeDisabled()
+    fireEvent.change(start, { target: { value: '68' } })
+    expect(onUpdate).toHaveBeenCalledWith('statutory-pension', { startAge: 68 })
+  })
+
+  it('keeps non-statutory starts editable on the card', () => {
+    const onUpdate = vi.fn()
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[{ ...otherStream, kind: 'side-income', name: 'Nebenjob' }]}
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    const start = screen.getByLabelText('Startalter')
+    expect(start).toHaveAttribute('id', 'retirement-income-start-income')
+    fireEvent.change(start, { target: { value: '60' } })
+    expect(onUpdate).toHaveBeenCalledWith('income', { startAge: 60 })
+  })
+
+  it('shows the statutory start read-only in the timeline with per-stream mentions', () => {
+    render(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [
+            { ...statutoryStream, id: 'first', name: 'Erste Rente', startAge: 67 },
+            { ...statutoryStream, id: 'second', name: 'Zweite Rente', startAge: 69 },
+          ],
+          retirementInsurance: createDefaultRetirementInsurance(67),
+        }}
+        errors={{}}
+        onChange={vi.fn()}
+        onTransitionChange={vi.fn()}
+      />,
+    )
+
+    expect(document.getElementById('retirement-income-start-first')).toBeNull()
+    expect(document.getElementById('retirement-income-start-second')).toBeNull()
+    expect(screen.getByText(/Frühester gesetzlicher Rentenbeginn: 67/)).toBeInTheDocument()
+    expect(screen.getByText(/Erste Rente: Alter 67/)).toBeInTheDocument()
+    expect(screen.getByText(/Zweite Rente: Alter 69/)).toBeInTheDocument()
+    expect(screen.getByText(/Rentenbeginn \(Alter\)/)).toBeInTheDocument()
+  })
+
+  it('shows a single statutory start without a per-stream list and keeps the transition branch without statutory streams', () => {
+    const props = { errors: {}, onChange: vi.fn(), onTransitionChange: vi.fn() }
+    const { rerender } = render(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [statutoryStream],
+          retirementInsurance: createDefaultRetirementInsurance(67),
+        }}
+        {...props}
+      />,
+    )
+
+    expect(document.getElementById('retirement-income-start-statutory-pension')).toBeNull()
+    expect(screen.getByText(/Frühester gesetzlicher Rentenbeginn: 67/)).toBeInTheDocument()
+    expect(screen.queryByText(/Gesetzliche Rente: Alter/)).not.toBeInTheDocument()
+
+    rerender(
+      <TimelineSection
+        input={{
+          ...DEFAULT_INPUT,
+          retirementIncomeStreams: [],
+          retirementInsurance: createDefaultRetirementInsurance(undefined),
+        }}
+        {...props}
+      />,
+    )
+    expect(screen.getByText('Keine gesetzliche Rente erfasst.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Übergang der Versicherungsplanung ohne gesetzliche Rente (Alter)')).toHaveAttribute(
+      'id',
+      'insurance-transition',
+    )
+  })
+
+  it('selects Standard and Sonderfall support through the split category', () => {
+    const onUpdate = vi.fn()
+    const props = { onUpdate, onAdd: vi.fn(), onRemove: vi.fn() }
+    const { rerender } = render(<RetirementIncomeStreamsSection {...props} streams={[otherStream]} />)
+
+    fireEvent.change(screen.getByLabelText('Kategorie von Weiteres Einkommen'), {
+      target: { value: 'gesetzliche-rente:standard' },
+    })
+    expect(onUpdate).toHaveBeenCalledWith('income', {
+      kind: 'gesetzliche-rente',
+      support: 'standard',
+      name: 'Gesetzliche Rente',
+    })
+
+    fireEvent.change(screen.getByLabelText('Kategorie von Weiteres Einkommen'), {
+      target: { value: 'betriebsrente:unsupported' },
+    })
+    expect(onUpdate).toHaveBeenCalledWith('income', {
+      kind: 'betriebsrente',
+      support: 'unsupported',
+      name: 'Betriebsrente',
+    })
+
+    rerender(
+      <RetirementIncomeStreamsSection
+        {...props}
+        streams={[{ ...otherStream, kind: 'betriebsrente', support: 'unsupported', name: 'Betriebsrente' }]}
+      />,
+    )
+    expect(screen.getByLabelText('Kategorie von Betriebsrente')).toHaveValue('betriebsrente:unsupported')
+    expect(screen.getByText(/Ausland, Einmalzahlung oder ungeklärt/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Kategorie von Betriebsrente'), { target: { value: 'other' } })
+    expect(onUpdate).toHaveBeenCalledWith('income', expect.objectContaining({ kind: 'other', support: undefined }))
+  })
+
+  it('shows no empty confirmation hurdle for statutory and company pensions', () => {
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[
+          statutoryStream,
+          { ...statutoryStream, id: 'company', name: 'Betriebsrente', kind: 'betriebsrente' },
+        ]}
+        onUpdate={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByLabelText(/Art bestätigen/)).not.toBeInTheDocument()
+    for (const label of ['Kategorie von Gesetzliche Rente', 'Kategorie von Betriebsrente']) {
+      const select = screen.getByLabelText(label)
+      expect(within(select).queryByRole('option', { name: 'Bitte auswählen' })).not.toBeInTheDocument()
+    }
+    expect(screen.getByLabelText('Kategorie von Gesetzliche Rente')).toHaveValue('gesetzliche-rente:standard')
+    expect(screen.getByLabelText('Kategorie von Betriebsrente')).toHaveValue('betriebsrente:standard')
+  })
+
+  it('prefills a complete standard statutory stream that stays removable', () => {
+    const defaults = createDefaultRetirementIncomeStreams(DEFAULT_INPUT)
+    expect(defaults).toHaveLength(1)
+    expect(defaults[0]).toMatchObject({ id: 'statutory-pension', kind: 'gesetzliche-rente', support: 'standard' })
+
+    const onRemove = vi.fn()
+    render(
+      <RetirementIncomeStreamsSection
+        streams={defaults}
+        onUpdate={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={onRemove}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Gesetzliche Rente entfernen' }))
+    expect(onRemove).toHaveBeenCalledWith('statutory-pension')
+  })
+
+  it('groups categories into three explained tiers', () => {
+    render(
+      <RetirementIncomeStreamsSection
+        streams={[otherStream]}
+        onUpdate={sectionProps.onUpdate}
+        onAdd={sectionProps.onAdd}
+        onRemove={sectionProps.onRemove}
+      />,
+    )
+
+    const selector = screen.getByLabelText('Kategorie von Weiteres Einkommen')
+    const automatic = within(selector).getByRole('group', { name: 'KV/PV automatisch berechnet' })
+    expect(within(automatic).getByRole('option', { name: 'Gesetzliche Rente (Standard)' })).toBeInTheDocument()
+    expect(within(automatic).getByRole('option', { name: 'Gesetzliche Rente (Sonderfall)' })).toBeInTheDocument()
+    expect(within(automatic).getByRole('option', { name: 'Betriebsrente (Standard)' })).toBeInTheDocument()
+    expect(within(automatic).getByRole('option', { name: 'Betriebsrente (Sonderfall)' })).toBeInTheDocument()
+    const rental = within(selector).getByRole('group', { name: 'Mieteinnahmen' })
+    expect(within(rental).getByRole('option', { name: 'Mieteinnahmen' })).toBeInTheDocument()
+    const cashflow = within(selector).getByRole('group', { name: 'Cashflow-only' })
+    for (const name of ['Private Rente', 'Nebenjob', 'Brückeneinkommen', 'Sonstiges Einkommen']) {
+      expect(within(cashflow).getByRole('option', { name })).toBeInTheDocument()
+    }
+    expect(screen.getByText(/Sonderfälle über manuelle Phasen-Gesamtbeträge/)).toBeInTheDocument()
+    expect(screen.getByText(/beitragspflichtiger Überschuss/)).toBeInTheDocument()
+    expect(screen.getByText(/kein automatischer KV\/PV-Beitrag/)).toBeInTheDocument()
   })
 })
