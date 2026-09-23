@@ -6,17 +6,19 @@ import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
 import { OptionalNumber } from './OptionalNumber'
 import { capitalMode, needsEstimator } from '../../model/capitalIncome/setup'
+import type { PortfolioEstimatorReadiness } from '../../model/capitalIncome/portfolioEstimator'
 import { useState } from 'react'
 import type { RentenlueckeInput } from '../../model/types'
 import { controllingPensionStream, insurancePhaseRanges, phaseManualReasons, phaseStreams, type RetirementInsurance, type InsurancePhase } from '../../model/retirementInsurance'
 
 export { OptionalNumber }
-export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {}, onJumpToEstimator }: {
+export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {}, onJumpToEstimator, estimatorReadiness }: {
   issues?: ScenarioIssue[]
   coverage?: InsuranceCoverageAnswers; onCoverageChange?: (answers: InsuranceCoverageAnswers) => void
   childrenAnswer?: ChildrenAnswer; onChildrenChange?: (answer: ChildrenAnswer) => void
   insurance: RetirementInsurance; input: RentenlueckeInput; onChange: (insurance: RetirementInsurance) => void
   onJumpToEstimator?: (fieldId: string) => void
+  estimatorReadiness?: PortfolioEstimatorReadiness
 }) {
   const [localCoverage, setLocalCoverage] = useState(defaultCoverageAnswers)
   const [copyMessage, setCopyMessage] = useState('')
@@ -110,7 +112,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
     </section>}
     {showEstimator && <section className="insurance-block" aria-labelledby="insurance-block-4-heading">
       <h3 id="insurance-block-4-heading">4. Kapitalertrags-Schätzung <span className="section-status">{block4Status}</span></h3>
-      <p>{block4Summary}</p>
+      <p>{block4Summary}{estimatorReadiness ? (estimatorReadiness.ready ? ' Portfolio-Bereitschaft: bereit.' : ' Portfolio-Bereitschaft: offen.') : null}</p>
       <p>{ranges.some(({ phase }) => capitalMode(i[phase]) === 'manual') ? 'Automatische Schätzung aktiv – Phasen mit manueller Kapitalbasis nutzen den jeweiligen Monatswert aus Block 3.' : 'Automatische Schätzung aktiv.'} <button type="button" className="secondary-button" id="insurance-block-4-jump-to-vermoegen" onClick={() => { const target = block4Issues[0]?.fieldId ?? 'estimator-fundAcquisitionCost'; if (onJumpToEstimator) onJumpToEstimator(target); else focusField(target) }}>Anschaffungskosten, Umfang bestätigen und Basiszins im Vermögen ergänzen</button></p>
       {block4Issues.length > 0 && <ul>{block4Issues.map(issue => <li key={issue.code}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); if (onJumpToEstimator) onJumpToEstimator(issue.fieldId); else focusField(issue.fieldId) }}>{issue.message}</a></li>)}</ul>}
     </section>}

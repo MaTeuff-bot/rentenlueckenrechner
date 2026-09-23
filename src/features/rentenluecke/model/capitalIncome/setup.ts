@@ -1,6 +1,6 @@
 import { insurancePhaseRanges, phaseManualReasons, phaseStreams } from '../retirementInsurance'
-import { getReturnSeriesCategory, getReturnSeriesOptions } from '../historicalReturns/sourceOptions'
 import type { RentenlueckeInput } from '../types'
+import { portfolioEstimatorReadiness } from './portfolioEstimator'
 
 export function capitalMode(phase: { capitalMode?: 'automatic' | 'manual'; capitalMonthlyToday?: number }) {
   // Existing explicit estimates remain manual. New unanswered phases start automatic.
@@ -17,15 +17,9 @@ export function needsEstimator(input: RentenlueckeInput) {
 }
 export function estimatorSetupIssues(input: RentenlueckeInput): string[] {
   if (!needsEstimator(input)) return []
-  const issues: string[] = []
-  const setup = input.retirementInsurance?.capitalEstimator
-  const buckets = input.estimatorPortfolio
-  if (buckets?.length && buckets.reduce((sum, b) => sum + b.value, 0) === 0) issues.push('Automatische Kapitalbasis benötigt eine positive Ausgangsallokation; Portfoliowerte angeben oder ausdrücklich eine manuelle Kapitalertragsschätzung wählen.')
-  if (buckets && Math.abs(buckets.reduce((sum, b) => sum + b.value, 0) - input.currentCapital) > 0.01) issues.push('Portfoliowerte und Ausgangskapital müssen übereinstimmen.')
-  if (!buckets?.length || buckets.some(b => !b.holding || b.holding === 'unsupported')) issues.push('Automatische Kapitalbasis: alle tatsächlichen Anlagen klassifizieren; nicht unterstützte Anlagen entfernen/ersetzen oder ausdrücklich eine manuelle Kapitalertragsschätzung wählen. Das Portfolio bleibt dabei erhalten.')
-  if (buckets?.some(b => b.holding === 'accumulating-equity-fund') && setup?.fundAcquisitionCost === undefined) issues.push('Anschaffungskosten des gesamten Fondspools in Euro angeben (auch 0 ausdrücklich).')
-  if (buckets?.some(b => b.holding === 'ordinary-bank-deposit' && (getReturnSeriesCategory(b.returnSeriesId) !== 'cash' || getReturnSeriesOptions().find(s => s.id === b.returnSeriesId)?.costTreatment === 'netOfFundCosts'))) issues.push('Bankeinlagen benötigen eine Brutto-Zinsquelle (Cash-Proxy), keine Fonds- oder Kursrendite. Quelle ersetzen oder manuelle Kapitalbasis wählen.')
-  if (!setup?.scopeConfirmed) issues.push('Unterstützten persönlichen Anlageumfang bestätigen.')
-  if (!setup?.lossScopeConfirmed) issues.push('Keine bisherigen Kapitalverluste oder externen Verlustverrechnungen bestätigen; andernfalls manuelle Kapitalbasis wählen.')
-  return issues
+  return portfolioEstimatorReadiness(
+    input.retirementInsurance?.capitalEstimator,
+    input.estimatorPortfolio,
+    input.currentCapital,
+  ).issues
 }

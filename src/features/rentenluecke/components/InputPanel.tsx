@@ -1,5 +1,7 @@
-import { applyCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../model/insuranceCoverage'
+import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
 import { needsEstimator } from '../model/capitalIncome/setup'
+import type { PortfolioEstimatorReadiness, PortfolioEstimatorSettings } from '../model/capitalIncome/portfolioEstimator'
+import { portfolioEstimatorReadiness } from '../model/capitalIncome/portfolioEstimator'
 import { CapitalEstimatorSetup } from './InputPanel/CapitalEstimatorSetup'
 import { useEffect, useState, type MouseEvent } from 'react'
 import {
@@ -61,6 +63,9 @@ type InputPanelProps = {
   allocationError: string | null
   portfolioBucketError: string | null
   onRetirementInsuranceChange: (insurance: RetirementInsurance) => void
+  portfolioEstimatorSettings?: PortfolioEstimatorSettings
+  portfolioEstimatorReadiness?: PortfolioEstimatorReadiness
+  onPortfolioEstimatorSettingsChange?: (settings: PortfolioEstimatorSettings | undefined) => void
   onChange: (field: InputFieldName, value: number) => void
   onLifeTableSexChange?: (value: LifeTableSex) => void
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
@@ -91,6 +96,9 @@ export function InputPanel({
   onChange,
   onLifeTableSexChange,
   onRetirementInsuranceChange,
+  portfolioEstimatorSettings,
+  portfolioEstimatorReadiness: portfolioReadinessProp,
+  onPortfolioEstimatorSettingsChange,
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
   onPortfolioBucketRemove,
@@ -165,8 +173,8 @@ export function InputPanel({
   }
   const tabStatus = (tabId: InputTabId): string => getTabStatus(tabId, issues)
   const tabSummary = (tabId: InputTabId): string => getTabSummary(tabId, summaryContext)
-  const estimatorInsurance = applyCoverage(input.retirementInsurance ?? createDefaultRetirementInsurance(), insuranceCoverageAnswers ?? defaultCoverageAnswers())
-  const showCapitalEstimator = needsEstimator({ ...input, retirementInsurance: estimatorInsurance })
+  const needsAutomaticEstimator = needsEstimator(input)
+  const portfolioReadiness = portfolioReadinessProp ?? portfolioEstimatorReadiness(portfolioEstimatorSettings, portfolioBuckets, calculatePortfolioBucketTotal(portfolioBuckets))
   const jumpToEstimatorField = (fieldId: string) => {
     setActiveTab('vermoegen')
     focusField(fieldId, 'estimator-fundAcquisitionCost')
@@ -248,13 +256,13 @@ export function InputPanel({
             onAdd={onPortfolioBucketAdd}
             onRemove={onPortfolioBucketRemove}
           />
-          {showCapitalEstimator && <CapitalEstimatorSetup insurance={estimatorInsurance} onChange={onRetirementInsuranceChange} onJumpToInsurance={jumpToInsuranceBlock} />}
+          <CapitalEstimatorSetup settings={portfolioEstimatorSettings} readiness={portfolioReadiness} needsAutomatic={needsAutomaticEstimator} onSettingsChange={onPortfolioEstimatorSettingsChange ?? (() => {})} onJumpToInsurance={jumpToInsuranceBlock} />
 
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-versicherung" aria-labelledby="input-tab-versicherung" className="input-tabpanel" hidden={activeTab !== 'versicherung'}>
           <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
-            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} onJumpToEstimator={jumpToEstimatorField} />
+            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} onJumpToEstimator={jumpToEstimatorField} estimatorReadiness={portfolioReadiness} />
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-annahmen" aria-labelledby="input-tab-annahmen" className="input-tabpanel" hidden={activeTab !== 'annahmen'}>

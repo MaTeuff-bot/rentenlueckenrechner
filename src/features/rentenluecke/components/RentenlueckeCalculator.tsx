@@ -20,6 +20,9 @@ export function RentenlueckeCalculator() {
     calculationError,
     allocation,
     portfolioBuckets,
+    portfolioEstimatorSettings,
+    portfolioEstimatorReadiness,
+    updatePortfolioEstimatorSettings,
     retirementIncomeStreams,
     historical,
     historicalValidYears,
@@ -79,6 +82,9 @@ export function RentenlueckeCalculator() {
           onChange={updateField}
           onLifeTableSexChange={updateLifeTableSex}
           onRetirementInsuranceChange={updateRetirementInsurance}
+          portfolioEstimatorSettings={portfolioEstimatorSettings}
+          portfolioEstimatorReadiness={portfolioEstimatorReadiness}
+          onPortfolioEstimatorSettingsChange={updatePortfolioEstimatorSettings}
           onPortfolioBucketChange={updatePortfolioBucket}
           onPortfolioBucketAdd={addPortfolioBucket}
           onPortfolioBucketRemove={removePortfolioBucket}

@@ -132,7 +132,7 @@ describe('InputPanel return source UX', () => {
 
     expect(screen.getAllByText(/mit Zurücklegen/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/kein Backtest/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/keine Prognose/)).toBeInTheDocument()
+    expect(within(screen.getByRole('tabpanel', { name: /Rechenannahmen/ })).getByText(/keine Prognose/)).toBeInTheDocument()
     expect(screen.getByText(/nicht die exakte Rendite eines bestimmten ETF/)).toBeInTheDocument()
   })
 

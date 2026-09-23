@@ -1,4 +1,6 @@
 import { applyCoverage, type InsuranceCoverageAnswers } from '../model/insuranceCoverage'
+import { needsEstimator } from '../model/capitalIncome/setup'
+import { engineCapitalEstimatorFromPortfolio, portfolioEstimatorReadiness, type PortfolioEstimatorSettings } from '../model/capitalIncome/portfolioEstimator'
 import { scenarioIssues } from '../model/scenarioIssues'
 import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
 import { timelineBoundary, transitionAfterStreamsChange } from '../model/scenarioTimeline'
@@ -39,16 +41,38 @@ export function useScenarioState() {
   const [state, setState] = useState(loadInitialState)
   const { portfolioBuckets, retirementIncomeStreams, historical } = state
   const allocation = useMemo(() => calculateAllocationFromBuckets(portfolioBuckets), [portfolioBuckets])
+  const portfolioEstimatorSettings = state.portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
+  const portfolioEstimatorReadinessValue = useMemo(
+    () => portfolioEstimatorReadiness(portfolioEstimatorSettings, portfolioBuckets, calculatePortfolioBucketTotal(portfolioBuckets)),
+    [portfolioEstimatorSettings, portfolioBuckets],
+  )
   const input = useMemo(() => {
     const annualReturn = calculatePortfolioExpectedReturn(allocation)
+    const strippedStoredInsurance = (() => {
+      if (!state.input.retirementInsurance) return undefined
+      const copy = { ...state.input.retirementInsurance } as Record<string, unknown>
+      delete copy.capitalEstimator
+      return copy as unknown as typeof state.input.retirementInsurance
+    })()
+    const baseInsurance = strippedStoredInsurance ? { ...applyCoverage(strippedStoredInsurance, state.insuranceCoverageAnswers), pensionAge: timelineBoundary(retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer ?? { kind: 'missing' }) } : undefined
+    const probeInput = {
+      ...state.input,
+      retirementInsurance: baseInsurance,
+      retirementIncomeStreams,
+      estimatorPortfolio: portfolioBuckets,
+      currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
+    }
+    const needsAutomatic = needsEstimator(probeInput)
+    const engineEstimator = engineCapitalEstimatorFromPortfolio(portfolioEstimatorSettings, needsAutomatic)
+    const engineInsurance = baseInsurance ? { ...baseInsurance, capitalEstimator: engineEstimator } : undefined
     return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
-      retirementInsurance: state.input.retirementInsurance ? { ...applyCoverage(state.input.retirementInsurance, state.insuranceCoverageAnswers), pensionAge: timelineBoundary(retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer ?? { kind: 'missing' }) } : undefined,
+      retirementInsurance: engineInsurance,
       retirementIncomeStreams,
       estimatorPortfolio: portfolioBuckets,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }), annualReturn)
-  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input, state.childrenAnswer, state.explicitInsuranceTransition, state.insuranceCoverageAnswers])
+  }, [allocation, portfolioBuckets, retirementIncomeStreams, state.input, state.childrenAnswer, state.explicitInsuranceTransition, state.insuranceCoverageAnswers, portfolioEstimatorSettings])
 
   const parsedInput = useMemo(() => rentenlueckeInputSchema.safeParse(input), [input])
   const portfolioBucketError = useMemo(() => validatePortfolioBuckets(portfolioBuckets), [portfolioBuckets])
@@ -105,7 +129,15 @@ export function useScenarioState() {
   }
 
   const updateRetirementInsurance = (retirementInsurance: RetirementInsurance) => {
-    setState((current) => ({ ...current, input: { ...current.input, retirementInsurance } }))
+    setState((current) => {
+      const copy = { ...retirementInsurance } as Record<string, unknown>
+      delete copy.capitalEstimator
+      return { ...current, input: { ...current.input, retirementInsurance: copy as unknown as RetirementInsurance } }
+    })
+  }
+
+  const updatePortfolioEstimatorSettings = (portfolioEstimator: PortfolioEstimatorSettings | undefined) => {
+    setState((current) => ({ ...current, portfolioEstimatorSettings: portfolioEstimator }))
   }
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
@@ -184,6 +216,9 @@ export function useScenarioState() {
 
   return {
     input,
+    portfolioEstimatorSettings,
+    portfolioEstimatorReadiness: portfolioEstimatorReadinessValue,
+    updatePortfolioEstimatorSettings,
     childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } as ChildrenAnswer,
     insuranceCoverageAnswers: state.insuranceCoverageAnswers,
     updateInsuranceCoverage,

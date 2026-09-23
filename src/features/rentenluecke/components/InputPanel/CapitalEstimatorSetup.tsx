@@ -1,19 +1,27 @@
-import type { RetirementInsurance } from '../../model/retirementInsurance'
 import { BASIS_RATE_SOURCE, DEFAULT_PROJECTED_BASIS_RATE } from '../../model/capitalIncome/schema'
+import type { PortfolioEstimatorReadiness, PortfolioEstimatorSettings } from '../../model/capitalIncome/portfolioEstimator'
 import { focusField } from '../inputNavigation'
 import { OptionalNumber } from './OptionalNumber'
 
-export function CapitalEstimatorSetup({ insurance, onChange, onJumpToInsurance }: {
-  insurance: RetirementInsurance; onChange: (value: RetirementInsurance) => void
+export function CapitalEstimatorSetup({ settings, readiness, needsAutomatic, onSettingsChange, onJumpToInsurance }: {
+  settings: PortfolioEstimatorSettings | undefined
+  readiness: PortfolioEstimatorReadiness
+  needsAutomatic: boolean
+  onSettingsChange: (value: PortfolioEstimatorSettings | undefined) => void
   onJumpToInsurance?: () => void
 }) {
-  const setup = insurance.capitalEstimator ?? { projectedBasisRate: DEFAULT_PROJECTED_BASIS_RATE }
-  const update = (patch: Partial<typeof setup>) => onChange({ ...insurance, capitalEstimator: { ...setup, ...patch } })
+  const setup = settings ?? { projectedBasisRate: DEFAULT_PROJECTED_BASIS_RATE }
+  const update = (patch: Partial<PortfolioEstimatorSettings>) => onSettingsChange({ ...setup, ...patch } as PortfolioEstimatorSettings)
   const jumpToInsurance = () => {
     if (onJumpToInsurance) onJumpToInsurance()
     else focusField('insurance-block-3-heading')
   }
-  return <fieldset><legend>Automatische Kapitalertragsschätzung</legend>
+  const readinessLabel = readiness.ready
+    ? needsAutomatic ? 'Bereit für automatische Schätzung.' : 'Bereit (optional, derzeit ungenutzt).'
+    : needsAutomatic ? 'Unvollständig – automatische Schätzung blockiert bis zur Ergänzung im Vermögen.' : 'Unvollständig (optional, derzeit ungenutzt) – blockiert keine Ergebnisse.'
+  return <details id="estimator-details" open={needsAutomatic && !readiness.ready ? true : undefined}><summary>Anschaffungskosten und Ertragsschätzung</summary>
+  <fieldset><legend>Anschaffungskosten und Ertragsschätzung</legend>
+    <p id="estimator-readiness" data-testid="estimator-readiness">{readinessLabel}</p>
     <p>Die Schätzung läuft je Versicherungsphase – ob automatisch oder manuell gerechnet wird, steht in der Versicherung. <button type="button" className="secondary-button" id="estimator-jump-to-insurance" onClick={jumpToInsurance}>Kapitalbasis je Phase in der Versicherung prüfen</button></p>
     <p>Alle tatsächlichen Anlagen oben klassifizieren. Unterstützt sind thesaurierende Aktienfonds und gewöhnliche Bankeinlagen. Andere oder ungeklärte Anlagen entfernen/ersetzen oder je Phase ausdrücklich die manuelle Kapitalertragsschätzung wählen; dabei bleibt das Portfolio erhalten.</p>
     <OptionalNumber id="estimator-fundAcquisitionCost" label="Anschaffungskosten des gesamten Fondspools (€)" value={setup.fundAcquisitionCost} onChange={fundAcquisitionCost => update({ fundAcquisitionCost })} />
@@ -30,4 +38,5 @@ export function CapitalEstimatorSetup({ insurance, onChange, onJumpToInsurance }
     <p>Die Suche nach benötigtem Startkapital übernimmt die projizierten Kosten und Vorabpauschalen je Euro Kapital. Bei aufgebrauchtem Vermögen werden hypothetische Neukäufe zum Anschaffungspreis ohne Historie angesetzt.</p>
     <p><strong>Investmentsteuern werden nicht automatisch berechnet oder finanziert. Ergebnisse sind keine vollständig nach Steuern verfügbare Kaufkraft.</strong> Bestehende sonstige Einkommensabzüge bleiben erhalten.</p>
   </fieldset>
+  </details>
 }

@@ -1,5 +1,6 @@
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../../model/types'
+import type { PortfolioEstimatorSettings } from '../../model/capitalIncome/portfolioEstimator'
 
 export type ScenarioState = {
   insuranceCoverageAnswers: import('../../model/insuranceCoverage').InsuranceCoverageAnswers
@@ -8,6 +9,7 @@ export type ScenarioState = {
   input: RentenlueckeInput
   retirementIncomeStreams: RetirementIncomeStream[]
   portfolioBuckets: PortfolioBucket[]
+  portfolioEstimatorSettings?: PortfolioEstimatorSettings
   historical: {
     inflationSourceId: string
   }

@@ -1,5 +1,5 @@
-import { DEFAULT_PROJECTED_BASIS_RATE, estimatorSetupSchema } from './capitalIncome/schema'
-import { capitalMode, needsEstimator, estimatorSetupIssues } from './capitalIncome/setup'
+import { estimatorSetupSchema } from './capitalIncome/schema'
+import { capitalMode, estimatorSetupIssues } from './capitalIncome/setup'
 import { z } from 'zod'
 import { calculateContributions, type ContributionResult } from './contributions/contributionEngine'
 import { indexedContributionThresholds } from './contributions/rules2026'
@@ -17,8 +17,11 @@ export const insurancePhaseSchema = z.object({
   drvSubsidy: z.enum(['confirmed', 'not-received']).optional(),
 })
 export const retirementInsuranceSchema = z.object({
-  // capitalEstimator bleibt hier persistiert; die UI (CapitalEstimatorSetup) lebt im Vermögen-Tab (InputPanel),
-  // Block 4 in der Versicherung ist nur ein Status-Zeiger. Kein Cleanup/Migration des Felds.
+  // Engine-Kompatibilität: Der Ledger liest die automatische Kapitalbasis weiterhin hier.
+  // In-memory besitzt das Vermögen die Einstellungen (ScenarioState.portfolioEstimatorSettings);
+  // useScenarioState injiziert sie je nach Bedarf über einen Adapter. Kein Cleanup von
+  // Entwurfs- oder gültigen Werten bei Status-/Moduswechseln; Block 4 in der Versicherung
+  // ist nur ein Status-Zeiger auf die Portfolio-Bereitschaft.
   capitalEstimator: estimatorSetupSchema.optional(),
   pensionAge: z.number().int().min(0).max(120).optional(),
   referenceYear: z.number().int().min(2026).max(9999),
@@ -168,12 +171,9 @@ export function clearHiddenInvalidInsuranceValues(input: RentenlueckeInput): Ren
       if (!optionalMoney.safeParse(i[phase].capitalMonthlyToday).success) i[phase].capitalMonthlyToday = undefined
     }
   }
-  if (!needsEstimator({ ...input, retirementInsurance: i }) && i.capitalEstimator) {
-    const setup = { ...i.capitalEstimator }
-    if (!estimatorSetupSchema.shape.fundAcquisitionCost.safeParse(setup.fundAcquisitionCost).success) setup.fundAcquisitionCost = undefined
-    if (!estimatorSetupSchema.shape.projectedBasisRate.safeParse(setup.projectedBasisRate).success) setup.projectedBasisRate = DEFAULT_PROJECTED_BASIS_RATE
-    i.capitalEstimator = setup
-  }
+  // Portfolio-Einstellungen (capitalEstimator) werden hier nie bereinigt: gültige wie
+  // ungültige Entwürfe bleiben erhalten; ungenutzte unvollständige Einstellungen blockieren
+  // nicht, benötigte unvollständige Einstellungen blockieren über estimatorSetupIssues.
   if (!automaticPhases.length) {
     if (!retirementInsuranceSchema.shape.insurerAdditionalRate.safeParse(i.insurerAdditionalRate).success) i.insurerAdditionalRate = undefined
     if (i.rates) {

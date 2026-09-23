@@ -87,6 +87,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     } else if (message.includes('Anschaffungskosten')) path = ['retirementInsurance', 'capitalEstimator', 'fundAcquisitionCost']
     else if (message.includes('Anlageumfang')) path = ['retirementInsurance', 'capitalEstimator', 'scopeConfirmed']
     else if (message.includes('Kapitalverluste')) path = ['retirementInsurance', 'capitalEstimator', 'lossScopeConfirmed']
+    else if (message.includes('Basiszins')) { path = ['retirementInsurance', 'capitalEstimator', 'projectedBasisRate']; kind = 'invalid' }
     else if (message.includes('klassifizieren')) {
       const index = Math.max(0, buckets.findIndex(b => !b.holding || b.holding === 'unsupported'))
       path = ['estimatorPortfolio', index, 'holding']; kind = buckets[index]?.holding ? 'invalid' : 'missing'
