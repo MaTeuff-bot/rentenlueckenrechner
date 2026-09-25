@@ -422,10 +422,13 @@ describe('accumulation Umschichtung tax (slice 1b)', () => {
     }), noInsurance)
     expect(r.status).toBe('converged')
     expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThan(0)
-    // Same-path check: engine tax equals hand-applied assessCore on the realized gains.
+    // Same-path check: engine tax equals hand-applied assessCore on the realized
+    // gains plus the once-credited gross bank interest (bank +2% on 40,000 = 800,
+    // unexempted, in the single shared assessment).
+    expect(r.bankInterest).toBeCloseTo(800, 9)
     const expected = assessCore(
       r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
-      r.receivedVorabpauschale, 0, allowance, true)
+      r.receivedVorabpauschale, 0, allowance, true, r.bankInterest)
     expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(expected.taxableWithdrawal, 9)
     expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
     // Funding: the single paid sale covers the tax (gap and insurance are zero).
@@ -448,9 +451,10 @@ describe('accumulation Umschichtung tax (slice 1b)', () => {
       ],
     }), noInsurance)
     expect(r.status).toBe('converged')
+    expect(r.bankInterest).toBeCloseTo(800, 9)
     const expected = assessCore(
       r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
-      r.receivedVorabpauschale, 4_000, allowance, true)
+      r.receivedVorabpauschale, 4_000, allowance, true, r.bankInterest)
     expect(r.withdrawalTax!.taxableBase).toBeCloseTo(expected.taxableBase, 9)
     expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
     expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThanOrEqual(0)

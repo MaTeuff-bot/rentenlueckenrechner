@@ -109,9 +109,15 @@ describe('integrated capital assessment ledger', () => {
     const input = estimatorInput()
     const r = simulateScenarioWithReturnPath(input, Array(5).fill(.068), undefined, path(input))
     expect(r.rows[0].investmentReturn).toBeCloseTo(6800)
-    expect(r.rows[0].closingCapital).toBeCloseTo(108000)
-    expect(r.rows[0].capitalAssessment!.movement.fundSales).toBeCloseTo(1920)
-    expect(r.rows[0].capitalAssessment!.movement.costReleased).toBeCloseTo(1920 / 66000 * 30000)
+    // The accumulation year funds the interest-inclusive Umschichtung tax from the
+    // portfolio: 800 bank interest joins the exempted rebalancing gain, so the paid
+    // sale (tax 149.645) leaves closing below the pre-tax 108,000 (tier-3 pins).
+    expect(r.rows[0].capitalAssessment!.bankInterest).toBeCloseTo(800)
+    expect(r.rows[0].capitalIncomeTax).toBeCloseTo(149.6446661216122)
+    expect(r.rows[0].taxableWithdrawal).toBeCloseTo(1567.3731416933165)
+    expect(r.rows[0].closingCapital).toBeCloseTo(107850.35533387838)
+    expect(r.rows[0].capitalAssessment!.movement.fundSales).toBeCloseTo(1917.3097588113014)
+    expect(r.rows[0].capitalAssessment!.movement.costReleased).toBeCloseTo(871.504435823319)
     expect(r.rows[1].capitalAssessment!.receivedVorabpauschale).toBeGreaterThan(0)
     for (const row of r.rows) {
       expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal, 5)

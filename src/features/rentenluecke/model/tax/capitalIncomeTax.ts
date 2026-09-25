@@ -14,7 +14,7 @@ export const TAX_ALLOWANCE_MODE = 'single-sparerpauschbetrag' as const
 export const SPARERPAUSCHBETRAG_SINGLE = 1_000
 /** §32d EStG: flat rate on taxable capital income; Abgeltungswirkung, no Günstigerprüfung. */
 export const ABGELTUNGSTEUER_RATE = 0.25
-/** §3 SolzG: 5.5% of the Abgeltungsteuer, no exemption-zone nuance at this rate base. */
+/** SolzG §4: 5.5% of the Abgeltungsteuer, no exemption-zone nuance at this rate base. */
 export const SOLIDARITAETSZUSCHLAG_RATE = 0.055
 /** InvStG §20: 30% for qualifying equity funds (>50% equity). */
 export const TEILFREISTELLUNG_EQUITY_FUND = 0.3
@@ -41,6 +41,7 @@ export const taxDisclosures = [
   'Verlustverrechnung nur in einem einzigen Kapitalertrag-Verlusttopf; kein getrennter Aktien-/Aktienfonds-Verlusttopf.',
   'Sparerpauschbetrag nur für Einzelveranlagung (Basis 1.000 EUR/Jahr, mit der Szenario-Inflationsrate skaliert als Planungsannahme; gesetzlich nominal); kein Zusammenveranlagungs-Betrag.',
   'Umschichtungsgewinne der Ansparphase werden nur bei automatischer Kapitalbasis besteuert und aus dem Portfolio finanziert; bei manueller Kapitalbasis bleibt die Steuer eine Entnahme-Näherung ohne Ansparphasen-Modellierung.',
+  'Bankzinsen (EStG §20 Absatz 1 Nummer 7) werden nur bei automatischer Kapitalbasis gesondert erfasst und ohne Teilfreistellung in dieselbe Abgeltungsteuer-Bemessung einbezogen; sie teilen sich Verlusttopf und Sparerpauschbetrag mit Fondsgewinnen und Vorabpauschalen.',
   'Gleichjährige Steuerfinanzierung ist eine Planungsnäherung; keine Abbildung von Vorauszahlungen, Steuerbescheid-Timing oder Abzinsung.',
 ] as const
 
@@ -48,7 +49,7 @@ export const taxDisclosures = [
  * including manual capital estimates): gains are estimated proportionally to the
  * withdrawal share, with no Teilfreistellung as a conservative planning approximation. */
 export const manualApproximationDisclosure =
-  'Entnahmen ohne Depotaufschlüsselung (vereinfachte oder manuelle Kapitalbasis): steuerpflichtige Gewinne werden aus dem Kapitalzuwachs anteilig zur Entnahme geschätzt, ohne Teilfreistellung (konservativ voll steuerpflichtig).' as const
+  'Entnahmen ohne Depotaufschlüsselung (vereinfachte oder manuelle Kapitalbasis): steuerpflichtige Gewinne werden aus dem Kapitalzuwachs anteilig zur Entnahme geschätzt, ohne Teilfreistellung (konservativ voll steuerpflichtig). Bankzinsen sind darin nur pauschal enthalten und werden erst bei automatischer Kapitalbasis gesondert ohne Teilfreistellung besteuert.' as const
 
 const taxStateSchema = z.object({
   scope: z.literal(TAX_SCOPE_DECLARATION),
@@ -91,6 +92,11 @@ const assessmentSchema = z.object({
   fundSaleGain: signed,
   /** Assessed Vorabpauschale income of the year (InvStG §18), single source: estimator rollforward. */
   vorabpauschaleIncome: money,
+  /** Ordinary gross bank interest of the year (EStG §20(1)7), credited once from
+   * the gross bank yield. No Teilfreistellung (InvStG §20 covers funds only);
+   * joins the single assessment after the fund-only exemption, before the shared
+   * loss offset and allowance. Defaults to zero (scalar/manual callers). */
+  bankInterest: money.default(0),
   openingLossCarryforward: money,
   allowanceAvailable: money.default(SPARERPAUSCHBETRAG_SINGLE),
   incomeClass: incomeClassSchema,
@@ -99,14 +105,14 @@ const assessmentSchema = z.object({
 })
 
 /** Per-year Abgeltungsteuer assessment. Order per snapshot: Teilfreistellung on
- * (sale gain + VP income) → loss carryforward offset → Sparerpauschbetrag
- * (effective annual amount, base scaled by inflation; consumed in-year, never
- * refunded across years) → 25% + 5.5% Soli. */
+ * (sale gain + VP income) → + unexempted bank interest → loss carryforward
+ * offset → Sparerpauschbetrag (effective annual amount, base scaled by
+ * inflation; consumed in-year, never refunded across years) → 25% + 5.5% Soli. */
 export function assessCapitalIncomeTax(input: z.input<typeof assessmentSchema>) {
   const p = assessmentSchema.parse(input)
   const result = assessCore(
     p.fundSaleGain, p.vorabpauschaleIncome, p.openingLossCarryforward,
-    p.allowanceAvailable, p.incomeClass === 'equity-fund')
+    p.allowanceAvailable, p.incomeClass === 'equity-fund', p.bankInterest)
   const taxableBase = money.parse(result.taxableBase)
   const abgeltungsteuer = taxableBase * ABGELTUNGSTEUER_RATE
   return {
@@ -128,7 +134,7 @@ export type CapitalIncomeTaxAssessment = ReturnType<typeof assessCapitalIncomeTa
  * year via state); only the loss carryforward does. */
 export function assessYearTax(
   state: CapitalIncomeTaxState,
-  income: { fundSaleGain: number; vorabpauschaleIncome: number; incomeClass: z.infer<typeof incomeClassSchema> },
+  income: { fundSaleGain: number; vorabpauschaleIncome: number; incomeClass: z.infer<typeof incomeClassSchema>; bankInterest?: number },
 ) {
   const s = taxStateSchema.parse(state)
   const result = assessCapitalIncomeTax({

@@ -52,8 +52,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const rates = path ? path[index] : defaultReturns
     if (!rates || new Set(rates.map(r => r.id)).size !== rates.length || rates.some(r => !buckets.some(b => b.id === r.id)))
       throw new Error(`Ungültiger Renditepfad im Alter ${age}: Anlagen müssen eindeutig zugeordnet sein.`)
-    // Abgeltungsteuer on realized fund gains + received Vorabpauschale, both for
-    // retirement Entnahmen and accumulation Umschichtungen (same assessCore path).
+    // Abgeltungsteuer on realized fund gains + received Vorabpauschale + gross
+    // bank interest, both for retirement Entnahmen and accumulation Umschichtungen
+    // (same assessCore path: fund-only exemption first, then unexempted interest,
+    // then the single shared loss offset and allowance).
     // Single-source loss input: the estimator opening state's simulated loss
     // carryforward, shared across accumulation and retirement years. The allowance
     // is the inflation-scaled Sparerpauschbetrag (base 1,000 EUR × factor).

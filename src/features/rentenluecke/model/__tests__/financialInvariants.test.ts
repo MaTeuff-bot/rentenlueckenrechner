@@ -369,8 +369,10 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
     // Estimator ledger, 1 accumulation + 3 retirement years; 5% inflation path;
     // fund +50% / bank +2% every year to force Umschichtung sales above the allowance.
     // Accumulation year 0 (factor 1.0 → allowance 1,000):
-    // funding-sale gain 571.652 + rebalancing gain 7,606.829 = 8,178.481;
-    // ×0.7 = 5,724.937 − 1,000 = 4,724.937 base; tax 4,724.937 × 0.25 × 1.055 = 1,246.202.
+    // funding-sale gain 676.159 + rebalancing gain 7,593.452 = 8,269.611;
+    // ×0.7 = 5,788.728 + bank interest 800 (no exemption) = 6,588.728;
+    // − 1,000 = 5,588.728 base; tax 5,588.728 × 0.25 × 1.055 = 1,474.027.
+    // The gains moved with the interest-inclusive funding sale (tier-3 pins).
     const input = prepare(estimatorScenario())
     const bucketPath = Array.from({ length: 4 }, () => [
       { id: 'fund', totalReturnRate: 0.5 },
@@ -379,8 +381,9 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
     const result = simulateScenarioWithReturnPath(input, [], [0.05, 0.05, 0.05, 0.05], bucketPath)
     const acc = result.accumulationRows[0]
     expect(acc.inflationFactor).toBeMoneyClose(1)
-    expect(acc.capitalIncomeTax).toBeMoneyClose(1246.202019111374)
-    expect(acc.taxableWithdrawal).toBeMoneyClose(5724.936565351181)
+    expect(acc.capitalAssessment!.bankInterest).toBeMoneyClose(800)
+    expect(acc.capitalIncomeTax).toBeMoneyClose(1474.0268854937112)
+    expect(acc.taxableWithdrawal).toBeMoneyClose(6588.727527938242)
     expect(acc.sparerpauschbetragApplied).toBeMoneyClose(1_000)
     expect(acc.gapWithdrawal).toBeMoneyClose(0)
     // Funding: the single paid sale covers the tax (gap and insurance are zero).
@@ -397,15 +400,17 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
       expect(row.inflationFactor).toBeMoneyClose(factors[n])
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000 * factors[n])
     })
-    expect(result.retirementRows[0].capitalIncomeTax).toBeMoneyClose(3624.5290940306722)
+    expect(result.retirementRows[0].capitalIncomeTax).toBeMoneyClose(3919.88543962223)
     // Single-source loss: each retirement tax recomputes from the chained estimator
-    // loss (accumulation closing → retirement opening) through the same core path.
+    // loss (accumulation closing → retirement opening) through the same core path,
+    // including that year's once-credited gross bank interest.
     let openingLoss = result.accumulationRows[0].capitalAssessment!.closingState!.simulatedLossCarryforward
     for (const row of result.retirementRows) {
       const recomputed = assessCore(
         row.capitalAssessment!.sale.adjustedFundSaleGain + row.capitalAssessment!.movement.adjustedFundSaleGain,
         row.capitalAssessment!.receivedVorabpauschale,
-        openingLoss, scaledSparerpauschbetrag(row.inflationFactor), true)
+        openingLoss, scaledSparerpauschbetrag(row.inflationFactor), true,
+        row.capitalAssessment!.bankInterest)
       expect(row.capitalIncomeTax).toBeMoneyClose(recomputed.capitalIncomeTax)
       expect(row.taxableWithdrawal).toBeMoneyClose(recomputed.taxableWithdrawal)
       openingLoss = row.capitalAssessment!.closingState!.simulatedLossCarryforward
