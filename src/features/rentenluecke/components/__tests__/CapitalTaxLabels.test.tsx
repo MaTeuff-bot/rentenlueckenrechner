@@ -44,7 +44,7 @@ function detailedAssessment(fundGain: number, vorabpauschale: number, bankIntere
   } as unknown as YearlyPeriodRow['capitalAssessment']
 }
 
-describe('taxCauseLabel: bank-only rows must not imply fund sales', () => {
+describe('taxCauseLabel: causes use neutral fund wording', () => {
   it('labels bank-only retirement tax as Zinsen', () => {
     const taxed = row({ phase: 'retirement', capitalIncomeTax: 263.75, capitalAssessment: detailedAssessment(0, 0, 2_000) })
     expect(taxCauseLabel(taxed)).toBe('Zinsen')
@@ -57,16 +57,25 @@ describe('taxCauseLabel: bank-only rows must not imply fund sales', () => {
 
   it('labels mixed rows with both causes', () => {
     const retirement = row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 500, 800) })
-    expect(taxCauseLabel(retirement)).toBe('Entnahme + Zinsen')
+    expect(taxCauseLabel(retirement)).toBe('Fondserträge + Zinsen')
     const accumulation = row({ phase: 'accumulation', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 0, 800) })
-    expect(taxCauseLabel(accumulation)).toBe('Umschichtung + Zinsen')
+    expect(taxCauseLabel(accumulation)).toBe('Fondserträge + Zinsen')
   })
 
   it('labels fund-only rows without overclaiming interest', () => {
     const retirement = row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 500, 0) })
-    expect(taxCauseLabel(retirement)).toBe('Entnahme')
+    expect(taxCauseLabel(retirement)).toBe('Fondserträge')
     const accumulation = row({ phase: 'accumulation', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 0, 0) })
-    expect(taxCauseLabel(accumulation)).toBe('Umschichtung')
+    expect(taxCauseLabel(accumulation)).toBe('Fondserträge')
+  })
+
+  it('labels VP-only rows as fund income, not as a sale', () => {
+    const retirement = row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(0, 1_500, 0) })
+    expect(taxCauseLabel(retirement)).toBe('Fondserträge')
+    const accumulation = row({ phase: 'accumulation', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(0, 1_500, 0) })
+    expect(taxCauseLabel(accumulation)).toBe('Fondserträge')
+    const mixed = row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(0, 1_500, 800) })
+    expect(taxCauseLabel(mixed)).toBe('Fondserträge + Zinsen')
   })
 
   it('keeps scalar rows on the withdrawal-only approximation', () => {
@@ -86,16 +95,24 @@ describe('summary tax scope: only actually present causes are named', () => {
 
   it('titles mixed detailed results with the full scope', () => {
     const rows = [row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 0, 800) })]
-    expect(capitalTaxTitleSuffix(rows, true)).toBe(' (Entnahme, Umschichtung, Bankzinsen)')
-    expect(retirementTaxNoun(rows, true)).toBe('Entnahmesteuer (einschließlich Bankzinsen)')
+    expect(capitalTaxTitleSuffix(rows, true)).toBe(' (Fondserträge, Bankzinsen)')
+    expect(retirementTaxNoun(rows, true)).toBe('Fondsertragsteuer (einschließlich Bankzinsen)')
   })
 
   it('does not overclaim interest for fund-only detailed results', () => {
     const rows = [row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 0, 0) })]
-    expect(capitalTaxTitleSuffix(rows, true)).toBe(' (Entnahme, Umschichtung)')
-    expect(retirementTaxNoun(rows, true)).toBe('Entnahmesteuer')
+    expect(capitalTaxTitleSuffix(rows, true)).toBe(' (Fondserträge)')
+    expect(retirementTaxNoun(rows, true)).toBe('Fondsertragsteuer')
     const acc = [row({ phase: 'accumulation', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(1_000, 0, 0) })]
-    expect(accumulationTaxNoun(acc, true)).toBe('Umschichtungssteuer')
+    expect(accumulationTaxNoun(acc, true)).toBe('Fondsertragsteuer')
+  })
+
+  it('titles VP-only detailed results as fund income, not as a sale', () => {
+    const rows = [row({ phase: 'retirement', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(0, 1_500, 0) })]
+    expect(capitalTaxTitleSuffix(rows, true)).toBe(' (Fondserträge)')
+    expect(retirementTaxNoun(rows, true)).toBe('Fondsertragsteuer')
+    const acc = [row({ phase: 'accumulation', capitalIncomeTax: 100, capitalAssessment: detailedAssessment(0, 1_500, 0) })]
+    expect(accumulationTaxNoun(acc, true)).toBe('Fondsertragsteuer')
   })
 
   it('labels bank-only accumulation rows as interest-only', () => {

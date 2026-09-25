@@ -41,13 +41,15 @@ function AdjustLink({
  * once-credited gross bank interest on each assessment, so labels list only
  * causes actually present: bank-only taxed results read `Bankzinsen`/`Zinssteuer`
  * instead of misleadingly implying fund withdrawals or rebalancing sales, and
- * fund-only detailed results do not overclaim interest. Scalar/manual ledgers keep
- * the withdrawal-only approximation wording. Fund cause is any nonzero realized
- * fund sale gain or received Vorabpauschale on a taxed row. */
+ * fund income (realized sale gains and received Vorabpauschale alike) reads the
+ * neutral `Fondserträge`/`Fondsertragsteuer` so VP-only results are not mislabeled
+ * as a sale. Scalar/manual ledgers keep the withdrawal-only approximation wording.
+ * Fund cause is any nonzero realized fund sale gain or received Vorabpauschale on
+ * a taxed row. */
 export function capitalTaxTitleSuffix(rows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
   if (!usesHoldingsBreakdown) return ' Entnahme + Umschichtung'
   const taxed = rows.filter((row) => (row.capitalIncomeTax ?? 0) > 0)
-  if (taxed.length === 0) return ' (Entnahme, Umschichtung, Bankzinsen)'
+  if (taxed.length === 0) return ' (Fondserträge, Bankzinsen)'
   let fund = false
   let interest = false
   for (const row of taxed) {
@@ -56,10 +58,10 @@ export function capitalTaxTitleSuffix(rows: YearlyPeriodRow[], usesHoldingsBreak
     if (assessment.sale.adjustedFundSaleGain + assessment.movement.adjustedFundSaleGain + assessment.receivedVorabpauschale !== 0) fund = true
     if (assessment.bankInterest > 0) interest = true
   }
-  if (fund && interest) return ' (Entnahme, Umschichtung, Bankzinsen)'
+  if (fund && interest) return ' (Fondserträge, Bankzinsen)'
   if (!fund && interest) return ' (Bankzinsen)'
-  if (fund && !interest) return ' (Entnahme, Umschichtung)'
-  return ' (Entnahme, Umschichtung, Bankzinsen)'
+  if (fund && !interest) return ' (Fondserträge)'
+  return ' (Fondserträge, Bankzinsen)'
 }
 
 export function retirementTaxNoun(taxedRetirementRows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
@@ -73,8 +75,8 @@ export function retirementTaxNoun(taxedRetirementRows: YearlyPeriodRow[], usesHo
     if (assessment.bankInterest > 0) interest = true
   }
   if (interest && !fund) return 'Zinssteuer'
-  if (interest && fund) return 'Entnahmesteuer (einschließlich Bankzinsen)'
-  return 'Entnahmesteuer'
+  if (interest && fund) return 'Fondsertragsteuer (einschließlich Bankzinsen)'
+  return 'Fondsertragsteuer'
 }
 
 export function accumulationTaxNoun(taxedAccumulationRows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
@@ -88,8 +90,8 @@ export function accumulationTaxNoun(taxedAccumulationRows: YearlyPeriodRow[], us
     if (assessment.bankInterest > 0) interest = true
   }
   if (interest && !fund) return 'Zinssteuer'
-  if (interest && fund) return 'Umschichtungssteuer (einschließlich Bankzinsen)'
-  return 'Umschichtungssteuer'
+  if (interest && fund) return 'Fondsertragsteuer (einschließlich Bankzinsen)'
+  return 'Fondsertragsteuer'
 }
 
 export function SummaryCards({ result, stochasticSummary, onRequestSection }: SummaryCardsProps) {
@@ -204,8 +206,8 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           ))}
         </ul>
         <p>
-          Entnahmen im Ruhestand (Entnahme), Umschichtungsgewinne der Ansparphase und Bankzinsen bei automatischer
-          Kapitalbasis (Entnahme, Umschichtung, Zinsen) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 %
+          Fondserträge (Entnahmen im Ruhestand, Umschichtungsgewinne und Vorabpauschalen) und Bankzinsen bei automatischer
+          Kapitalbasis (Fondserträge, Zinsen) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 %
           Solidaritätszuschlag) besteuert; Bankzinsen ohne Teilfreistellung in derselben Bemessung mit gemeinsamem
           Verlusttopf und Sparerpauschbetrag. Das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte
           Beträge bleiben als nicht gedeckte Entnahme sichtbar.
