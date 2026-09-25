@@ -6,6 +6,27 @@ type YearlyTableProps = {
   rows: YearlyPeriodRow[]
 }
 
+/** Tax cause without inventing new row fields: the detailed estimator already
+ * carries the once-credited gross bank interest on the assessment. Taxed detailed
+ * rows report each present cause: fund income (`Fondserträge`, covering realized
+ * sale gains and received Vorabpauschale alike so VP-only years are not mislabeled
+ * as a withdrawal or rebalancing sale), gross interest (`Zinsen`), or both.
+ * Bank-only rows therefore read `Zinsen`. Scalar/manual rows keep the
+ * withdrawal-only approximation label. */
+export function taxCauseLabel(row: YearlyPeriodRow): string {
+  if ((row.capitalIncomeTax ?? 0) <= 0) return '—'
+  const fallback = row.phase === 'accumulation' ? 'Umschichtung' : 'Entnahme'
+  const assessment = row.capitalAssessment
+  if (!assessment) return fallback
+  const fundGain = assessment.sale.adjustedFundSaleGain + assessment.movement.adjustedFundSaleGain + assessment.receivedVorabpauschale
+  const hasFundCause = fundGain !== 0
+  const hasInterestCause = assessment.bankInterest > 0
+  if (hasInterestCause && !hasFundCause) return 'Zinsen'
+  if (hasInterestCause && hasFundCause) return 'Fondserträge + Zinsen'
+  if (hasFundCause) return 'Fondserträge'
+  return fallback
+}
+
 export function YearlyTable({ rows }: YearlyTableProps) {
   const [showDetails, setShowDetails] = useState(false)
 
@@ -34,7 +55,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
               <th>Kapital vor Cashflow</th>
               <th>Einzahlung</th>
               <th>Entnahme für Nettolücke</th>
-              <th title="Ruhestand: Entnahmesteuer; Ansparen: Umschichtungssteuer (automatische Kapitalbasis)">Kapitalertragsteuer</th>
+              <th title="Fondsertrag-/Zinssteuer (automatische Kapitalbasis)">Kapitalertragsteuer</th>
               <th title="Einkommensteuer auf die gesetzliche Rente (Rentenbesteuerung, nur Ruhestand)">GRV-Rentensteuer</th>
               <th>Endkapital</th>
               <th>Endkapital heutige Kaufkraft</th>
@@ -54,9 +75,9 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Portfolio-Beitragsbasis (kein Einkommen)</th>
                   <th>Verfügbarer Netto-Cashflow</th>
                   <th>Entnahmelücke</th>
-                  <th title="Ruhestand: Entnahme; Ansparen: Umschichtung">Kapitalertragsteuer (Anlass)</th>
+                  <th title="Fondserträge/Zinsen">Kapitalertragsteuer (Anlass)</th>
                   <th>Steueranlass</th>
-                  <th>Steuerpflichtige Entnahme / Umschichtung</th>
+                  <th>Steuerpflichtige Fondserträge / Zinsen</th>
                   <th>Sparerpauschbetrag angerechnet</th>
                   <th>Nettoentnahme nach Steuer</th>
                   <th>Konsumierter Überschuss</th>
@@ -96,7 +117,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                     <td>{formatCurrency(row.retirementIncomeNet)}</td>
                     <td>{formatCurrency(row.gapWithdrawal)}</td>
                     <td>{formatCurrency(row.capitalIncomeTax ?? 0)}</td>
-                    <td>{(row.capitalIncomeTax ?? 0) > 0 ? (row.phase === 'accumulation' ? 'Umschichtung' : 'Entnahme') : '—'}</td>
+                    <td>{taxCauseLabel(row)}</td>
                     <td>{formatCurrency(row.taxableWithdrawal ?? 0)}</td>
                     <td>{formatCurrency(row.sparerpauschbetragApplied ?? 0)}</td>
                     <td>{formatCurrency(row.netGapWithdrawal ?? row.gapWithdrawal)}</td>

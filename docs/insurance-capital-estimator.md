@@ -3,7 +3,10 @@
 PR2 activates the PR1 estimator in the shared yearly ledger. Deterministic results,
 required-capital search and historical bootstrap use the same fund/bank accounting,
 income and KV/PV calculation. React only edits inputs and displays ledger outputs.
-Investment taxes are neither calculated nor funded.
+The insurance callback itself returns only KV/PV and never adds tax costs; the
+ledger integration separately calculates Kapitalertragsteuer on withdrawals,
+rebalancing gains and gross bank interest and funds it from the portfolio
+(see `docs/kapitalertragsteuer-rules-2026.md`).
 
 ## Setup and persistence
 
@@ -127,7 +130,10 @@ Rate products are validated before statutory caps can hide out-of-range intermed
    plus **total own** KV/PV. Every trial withdraws the same value fraction from all
    current fund and deposit buckets. Fund cost and assessed VP decrease by the sold
    fraction of the fund pool. Deposit withdrawals return principal, including already
-   credited interest; no second income is created. No tax funding is added.
+   credited interest; no second income is created. This insurance step adds no tax
+   funding itself; Kapitalertragsteuer funding is handled by the ledger's separate
+   tax assessment on the same annual income (see
+   `docs/kapitalertragsteuer-rules-2026.md`).
 4. Add explicitly allocated end-year contributions. Fund purchases increase pooled
    acquisition costs; bank contributions increase deposit principal. They earn no
    return this year and are not available for the earlier funding step. This matches

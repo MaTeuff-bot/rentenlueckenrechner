@@ -7,8 +7,13 @@ export function assessCore(
   openingLossCarryforward: number,
   allowanceAvailable: number,
   isEquityFund: boolean,
+  // Ordinary bank interest (EStG §20(1)7): capital income with NO partial
+  // exemption. Joins AFTER the fund-only Teilfreistellung and BEFORE the single
+  // shared loss offset and allowance. Defaults to zero so scalar/manual callers
+  // keep exact legacy behavior.
+  bankInterest = 0,
 ) {
-  const afterFreistellung = (fundSaleGain + vorabpauschaleIncome) * (isEquityFund ? 0.7 : 1)
+  const afterFreistellung = (fundSaleGain + vorabpauschaleIncome) * (isEquityFund ? 0.7 : 1) + bankInterest
   const afterLoss = afterFreistellung - openingLossCarryforward
   const base = afterLoss > 0 ? afterLoss : 0
   const allowanceApplied = allowanceAvailable < base ? allowanceAvailable : base

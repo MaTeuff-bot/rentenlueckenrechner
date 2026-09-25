@@ -347,32 +347,34 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     // Old holdings: min(60,000×0.7×0.032, 3,600) = 1,344 (full-year factor). Annual
     // rebalancing to the initial 60/40 weights sells fund (63,600 vs target 62,160)
     // and the retained-pending convention scales the old-holding VP by the retained
-    // share; verified engine value 1,323.7132… (regression pin, exact formula in
-    // insuranceEstimator.maintainAllocation).
-    expect(vp).toBeMoneyClose(1_323.7132075471698)
-    expect(result.rows[1].capitalAssessment!.receivedVorabpauschale).toBeMoneyClose(1_323.7132075471698)
+    // share; verified engine value 1,323.1625… (regression pin, exact formula in
+    // insuranceEstimator.maintainAllocation). The pin sits below the pre-bank-interest
+    // 1,323.7132 value because the interest-inclusive accumulation tax is funded
+    // from a slightly larger sale, retaining marginally less VP.
+    expect(vp).toBeMoneyClose(1_323.1625766809689)
+    expect(result.rows[1].capitalAssessment!.receivedVorabpauschale).toBeMoneyClose(1_323.1625766809689)
   })
 
   it('assesses and funds Kapitalertragsteuer on withdrawal gains plus Vorabpauschale', () => {
-    // First retirement year (age 67): funding-sale gain 4,325.901 + rebalancing gain
-    // 604.224 + received VP 1,318.879 = 6,249.003; x0.7 (30% Teilfreistellung) =
-    // 4,374.302; allowance 1,000 -> base 3,374.302; tax 3,374.302 x 0.25 x 1.055 = 889.972.
-    // Required withdrawal = 6,000 gap + 6,122.477 insurance + 889.972 tax (tier-3 pins).
-    // Slice 2 (Rentenbesteuerung): Rentenbeginn 2027 → 84.5 %; freibetrag
-    // 15.5 % × 24,000 = 3,720; taxable 20,280; zvE 20,280-102-(5,072.598+1,049.879)
-    // = 14,055.523 → §32a zone 2 → pensionIncomeTax 265 (tier-3 pin). The required
-    // withdrawal grows by the pension tax (13,012.449 + 265 = 13,277.449); the
-    // Kapitalertragsteuer pins are unchanged because the funding sales are unchanged.
+    // First retirement year (age 67): funding-sale gain 4,408.124 + rebalancing gain
+    // 602.234 + received VP 1,318.007 = 6,328.366; x0.7 (30% Teilfreistellung) =
+    // 4,429.856; + bank interest 839.445 (ordinary deposit, no exemption) = 5,269.301;
+    // allowance 1,000 -> base 4,269.301; tax 4,269.301 x 0.25 x 1.055 = 1,126.028.
+    // The larger interest-inclusive capital tax funds a larger sale, which slightly
+    // raises the insurance assessment (KV/PV Sonderausgaben) and lowers the pension
+    // tax to 263 (was 265 fund-only). Required withdrawal = 6,000 gap + insurance +
+    // 1,126.028 capital tax + 263 pension tax = 13,522.780 gap (tier-3 pins).
     const result = simulateScenario(input)
     const first = result.retirementRows[0]
-    expect(first.taxableWithdrawal).toBeMoneyClose(4374.302242179062)
+    expect(first.capitalAssessment!.bankInterest).toBeMoneyClose(839.4450777952111)
+    expect(first.taxableWithdrawal).toBeMoneyClose(5269.301209402183)
     expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
-    expect(first.capitalIncomeTax).toBeMoneyClose(889.9722163747276)
+    expect(first.capitalIncomeTax).toBeMoneyClose(1126.0281939798258)
     expect(first.pensionTaxBase).toBeMoneyClose(20_280)
-    expect(first.pensionIncomeTax).toBeMoneyClose(265)
-    expect(first.retirementIncomeNet).toBeMoneyClose(17612.52304035329)
+    expect(first.pensionIncomeTax).toBeMoneyClose(263)
+    expect(first.retirementIncomeNet).toBeMoneyClose(17603.248252072553)
     expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
-    expect(first.gapWithdrawal).toBeMoneyClose(13277.449176021437)
+    expect(first.gapWithdrawal).toBeMoneyClose(13522.779941907274)
     // Every retirement year is taxed with a fresh annual allowance (scaled by inflation;
     // factor 1 here, so 1,000); accumulation Umschichtung rows carry the same fields.
     for (const row of result.retirementRows) {
@@ -388,9 +390,11 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     expectLedgerConservation(result.rows)
     // Required capital funds gap + both taxes (tier-3 regression pin for the taxed search;
     // slice 2 raises it by the funded GRV-Rentensteuer; the holdings-only funding
-    // take keeps future capital-tax estimates slightly lower than full state scaling).
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34398.651123046875)
-    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(105_000)
+    // take keeps future capital-tax estimates slightly lower than full state scaling.
+    // Both pins moved with the bank-interest-inclusive capital tax: the accumulation
+    // year now funds 69.365 tax (projected 104,930.635 instead of 105,000).
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34552.849772185415)
+    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(104930.63472440137)
   })
 
   it('matches deterministic and reference bootstrap paths and reproduces seeded runs', () => {

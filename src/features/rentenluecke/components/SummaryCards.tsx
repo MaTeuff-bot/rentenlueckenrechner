@@ -3,7 +3,7 @@ import { manualApproximationDisclosure, taxDisclosures } from '../model/tax/capi
 import { pensionTaxDisclosures } from '../model/tax/incomeTax'
 import { formatApproxCurrency, formatCurrency } from './format'
 import type { StochasticSimulationSummary } from '../model/stochasticReturns'
-import type { SimulationResult } from '../model/types'
+import type { SimulationResult, YearlyPeriodRow } from '../model/types'
 import type { FlowSection } from '../model/scenarioIssues'
 
 export type ResultAdjustHandler = (section: FlowSection, fieldId?: string) => void
@@ -37,6 +37,63 @@ function AdjustLink({
   )
 }
 
+/** Cause-aware capital-tax labels. The detailed estimator carries the
+ * once-credited gross bank interest on each assessment, so labels list only
+ * causes actually present: bank-only taxed results read `Bankzinsen`/`Zinssteuer`
+ * instead of misleadingly implying fund withdrawals or rebalancing sales, and
+ * fund income (realized sale gains and received Vorabpauschale alike) reads the
+ * neutral `Fondserträge`/`Fondsertragsteuer` so VP-only results are not mislabeled
+ * as a sale. Scalar/manual ledgers keep the withdrawal-only approximation wording.
+ * Fund cause is any nonzero realized fund sale gain or received Vorabpauschale on
+ * a taxed row. */
+export function capitalTaxTitleSuffix(rows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
+  if (!usesHoldingsBreakdown) return ' Entnahme + Umschichtung'
+  const taxed = rows.filter((row) => (row.capitalIncomeTax ?? 0) > 0)
+  if (taxed.length === 0) return ' (Fondserträge, Bankzinsen)'
+  let fund = false
+  let interest = false
+  for (const row of taxed) {
+    const assessment = row.capitalAssessment
+    if (!assessment) { fund = true; continue }
+    if (assessment.sale.adjustedFundSaleGain + assessment.movement.adjustedFundSaleGain + assessment.receivedVorabpauschale !== 0) fund = true
+    if (assessment.bankInterest > 0) interest = true
+  }
+  if (fund && interest) return ' (Fondserträge, Bankzinsen)'
+  if (!fund && interest) return ' (Bankzinsen)'
+  if (fund && !interest) return ' (Fondserträge)'
+  return ' (Fondserträge, Bankzinsen)'
+}
+
+export function retirementTaxNoun(taxedRetirementRows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
+  if (!usesHoldingsBreakdown || taxedRetirementRows.length === 0) return 'Entnahmesteuer'
+  let fund = false
+  let interest = false
+  for (const row of taxedRetirementRows) {
+    const assessment = row.capitalAssessment
+    if (!assessment) { fund = true; continue }
+    if (assessment.sale.adjustedFundSaleGain + assessment.movement.adjustedFundSaleGain + assessment.receivedVorabpauschale !== 0) fund = true
+    if (assessment.bankInterest > 0) interest = true
+  }
+  if (interest && !fund) return 'Zinssteuer'
+  if (interest && fund) return 'Fondsertragsteuer (einschließlich Bankzinsen)'
+  return 'Fondsertragsteuer'
+}
+
+export function accumulationTaxNoun(taxedAccumulationRows: YearlyPeriodRow[], usesHoldingsBreakdown: boolean): string {
+  if (!usesHoldingsBreakdown || taxedAccumulationRows.length === 0) return 'Umschichtungssteuer'
+  let fund = false
+  let interest = false
+  for (const row of taxedAccumulationRows) {
+    const assessment = row.capitalAssessment
+    if (!assessment) { fund = true; continue }
+    if (assessment.sale.adjustedFundSaleGain + assessment.movement.adjustedFundSaleGain + assessment.receivedVorabpauschale !== 0) fund = true
+    if (assessment.bankInterest > 0) interest = true
+  }
+  if (interest && !fund) return 'Zinssteuer'
+  if (interest && fund) return 'Fondsertragsteuer (einschließlich Bankzinsen)'
+  return 'Fondsertragsteuer'
+}
+
 export function SummaryCards({ result, stochasticSummary, onRequestSection }: SummaryCardsProps) {
   const { summary } = result
   const retirementAge = result.retirementRows[0]?.ageStart ?? result.rows.at(-1)?.ageEnd
@@ -64,6 +121,9 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
   const taxedAccumulationYears = result.accumulationRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0).length
   const averageCapitalIncomeTax = result.retirementRows.length > 0 ? totalCapitalIncomeTax / result.rows.length : 0
   const usesHoldingsBreakdown = result.retirementRows.some((row) => row.capitalAssessment !== undefined)
+  const taxedRows = result.rows.filter((row) => (row.capitalIncomeTax ?? 0) > 0)
+  const taxedRetirementRows = result.retirementRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0)
+  const taxedAccumulationRows = result.accumulationRows.filter((row) => (row.capitalIncomeTax ?? 0) > 0)
 
   return (
     <section aria-labelledby="capital-answer-title">
@@ -100,9 +160,9 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           />
         </article>
         <article className="result-card">
-          <span>Kapitalertragsteuer Entnahme + Umschichtung (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
+          <span>Kapitalertragsteuer{capitalTaxTitleSuffix(taxedRows, usesHoldingsBreakdown)} (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
           <strong>{formatApproxCurrency(totalCapitalIncomeTax, 50)}</strong>
-          <small>{taxedRetirementYears} von {result.retirementRows.length} Ruhestandsjahren mit Entnahmesteuer{taxedAccumulationYears > 0 ? `; ${taxedAccumulationYears} von ${result.accumulationRows.length} Ansparjahren mit Umschichtungssteuer` : ''}</small>
+          <small>{taxedRetirementYears} von {result.retirementRows.length} Ruhestandsjahren mit {retirementTaxNoun(taxedRetirementRows, usesHoldingsBreakdown)}{taxedAccumulationYears > 0 ? `; ${taxedAccumulationYears} von ${result.accumulationRows.length} Ansparjahren mit ${accumulationTaxNoun(taxedAccumulationRows, usesHoldingsBreakdown)}` : ''}</small>
         </article>
         <article className="result-card">
           <span>GRV-Rentensteuer (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averagePensionIncomeTax, 100)}/Jahr` : ''})</span>
@@ -146,10 +206,11 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           ))}
         </ul>
         <p>
-          Entnahmen im Ruhestand (Entnahme) und Umschichtungsgewinne der Ansparphase bei automatischer Kapitalbasis
-          (Umschichtung) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 % Solidaritätszuschlag) besteuert;
-          das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte Beträge bleiben als nicht gedeckte
-          Entnahme sichtbar.
+          Fondserträge (Entnahmen im Ruhestand, Umschichtungsgewinne und Vorabpauschalen) und Bankzinsen bei automatischer
+          Kapitalbasis (Fondserträge, Zinsen) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 %
+          Solidaritätszuschlag) besteuert; Bankzinsen ohne Teilfreistellung in derselben Bemessung mit gemeinsamem
+          Verlusttopf und Sparerpauschbetrag. Das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte
+          Beträge bleiben als nicht gedeckte Entnahme sichtbar.
         </p>
         <ul>
           {taxDisclosures.map((disclosure) => (

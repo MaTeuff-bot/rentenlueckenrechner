@@ -36,7 +36,7 @@ export const estimatorDisclosures = [
   'Opening accumulated Vorabpauschalen are zero. Omitted existing history can distort estimates, including overstating sale income.',
   'Fund acquisition costs and assessed adjustments are pooled; sales are proportional, not FIFO or selective bucket sales.',
   'Annual receipt and insurance funding are planning approximations, not insurer assessment or billing timing.',
-  'Kapitalertragsteuer auf Entnahmen im Ruhestand und auf Umschichtungsgewinne der Ansparphase (Abgeltungsteuer + Solidaritätszuschlag) wird berechnet und aus dem Portfolio finanziert; Sparerpauschbetrag mit Szenario-Inflation skaliert (Planungsannahme, gesetzlich nominal); Kirchensteuer und Günstigerprüfung sind nicht enthalten.',
+  'Kapitalertragsteuer auf Entnahmen im Ruhestand, auf Umschichtungsgewinne der Ansparphase und auf Bankzinsen (Abgeltungsteuer + Solidaritätszuschlag) wird berechnet und aus dem Portfolio finanziert; Bankzinsen ohne Teilfreistellung in derselben Bemessung; Sparerpauschbetrag mit Szenario-Inflation skaliert (Planungsannahme, gesetzlich nominal); Kirchensteuer und Günstigerprüfung sind nicht enthalten.',
 ] as const
 
 /** Coverage declarations must be explicit; unknown/unsupported assets cannot disappear even at zero value. */
@@ -125,9 +125,10 @@ const yearSchema = z.object({
   provenDeductibleAnnualExpenses: money.optional(),
   tolerance: z.number().finite().positive().max(1).default(0.000001),
   maxIterations: z.number().int().min(1).max(256).default(100),
-  // Kapitalertragsteuer on withdrawal-funded capital income (retirement Entnahmen)
-  // and on accumulation rebalancing (Umschichtung) gains. Both feed the same
-  // assessCore path: Teilfreistellung → loss offset → scaled allowance → 25% + Soli.
+  // Kapitalertragsteuer on withdrawal-funded capital income (retirement Entnahmen),
+  // on accumulation rebalancing (Umschichtung) gains and on gross bank interest.
+  // All feed the same assessCore path: fund-only Teilfreistellung → + unexempted
+  // interest → single shared loss offset → scaled allowance → 25% + Soli.
   // Single source for the loss input: the estimator opening state's simulated loss carryforward.
   // Callers pass the inflation-scaled allowance (base 1,000 EUR × factor); the default
   // covers factor 1 only.
@@ -254,12 +255,16 @@ export function simulateEstimatorYear(
     // Pure per trial (no balance consumed); residual stays monotone (tax slope < 1).
     // YearSchema already validated the loss/allowance numbers; the positional pure
     // core keeps trials allocation-light (no per-trial object parsing).
+    // bankInterest is the year's already-credited gross interest (computed once above
+    // from the gross bank yield, never re-credited per trial): fund-only exemption
+    // first, then interest, then the single shared loss offset and allowance.
     const tax = p.withdrawalTax ? assessCore(
       sale.adjustedFundSaleGain + movement.adjustedFundSaleGain,
       receivedVorabpauschale,
       p.withdrawalTax.openingLossCarryforward,
       p.withdrawalTax.allowanceAvailable,
-      true) : null
+      true,
+      bankInterest) : null
     const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0)))
     return { sale, movement, assessment, insurance, tax, required, residual: withdrawal - required }
   }
