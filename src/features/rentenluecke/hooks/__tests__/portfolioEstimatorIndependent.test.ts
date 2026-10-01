@@ -2,7 +2,8 @@
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
-import { createDefaultState } from '../scenarioState/defaults'
+import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
+import { createDefaultState, createSyntheticHistoricalState } from '../scenarioState/defaults'
 import { parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY } from '../scenarioState/persistence'
 import { portfolioEstimatorReadiness } from '../../model/capitalIncome/portfolioEstimator'
 import { useScenarioState } from '../useScenarioState'
@@ -48,16 +49,35 @@ function automaticState() {
   return state
 }
 
+function completeFundOnlyPortfolio(state: ReturnType<typeof createDefaultState>) {
+  state.historical = createSyntheticHistoricalState()
+  state.portfolioBuckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity, holding: 'accumulating-equity-fund' }]
+  state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
+}
+
 describe('independent portfolio estimator (PR F)', () => {
-  it('unused incomplete setup permits results and keeps standalone readiness', () => {
+  it('incomplete setup blocks forecasts in every insurance mode, including all-manual phases', () => {
     const state = validManualState()
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
     const { result } = renderHook(useScenarioState)
     expect(result.current.portfolioEstimatorReadiness.ready).toBe(false)
-    expect(result.current.issues.some(i => i.fieldPath.startsWith('retirementInsurance.capitalEstimator') || i.fieldPath.startsWith('estimatorPortfolio'))).toBe(false)
-    expect(result.current.isValid).toBe(true)
-    expect(result.current.result).not.toBeNull()
+    const estimatorIssue = result.current.issues.find(i => i.fieldPath.startsWith('retirementInsurance.capitalEstimator') || i.fieldPath.startsWith('estimatorPortfolio'))
+    expect(estimatorIssue).toBeDefined()
+    expect(estimatorIssue!.section).toBe('vermoegen')
+    expect(result.current.isValid).toBe(false)
+    expect(result.current.result).toBeNull()
   })
+
+  it('completed portfolio setup forecasts all-manual whole-phase totals without auto-only answers', () => {
+    const state = validManualState()
+    completeFundOnlyPortfolio(state)
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
+    const { result } = renderHook(useScenarioState)
+    expect(result.current.portfolioEstimatorReadiness.ready).toBe(true)
+    expect(result.current.isValid).toBe(true)
+    expect(result.current.calculationError).toBeNull()
+    expect(result.current.result).not.toBeNull()
+  }, 60_000)
 
   it('required incomplete setup blocks with a Vermögen link', () => {
     const state = automaticState()

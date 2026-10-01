@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cashOnlyInput } from './insuranceFixtures'
+import { cashOnlyInput, withFullCostBasis, zeroBucketPath } from './insuranceFixtures'
 import { simulateScenario } from '../simulateScenario'
 import {
   ASSET_CLASS_ASSUMPTIONS,
@@ -16,7 +16,7 @@ import {
 import type { RentenlueckeInput } from '../types'
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return cashOnlyInput(overrides)
+  return withFullCostBasis(cashOnlyInput(overrides))
 }
 
 function settings(overrides: Partial<StochasticSettings> = {}): StochasticSettings {
@@ -95,7 +95,10 @@ describe('stochastic returns', () => {
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0,
     })
-    const result = simulateScenarioWithReturnPath(scenarioInput, [0, 0, 0])
+    // Mandatory detailed portfolio at explicitly modeled zero returns: the
+    // 1,000 fund allocation (full cost basis, no gains) depletes against the
+    // 1,200 gap in year 1 and stays at zero afterwards.
+    const result = simulateScenarioWithReturnPath(scenarioInput, [], undefined, zeroBucketPath(scenarioInput, 3))
 
     expect(result.rows[0].depleted).toBe(true)
     expect(result.rows[1].openingCapital).toBe(0)
@@ -125,14 +128,70 @@ describe('stochastic returns', () => {
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0,
     })
-    const result = simulateScenarioWithReturnPath(scenarioInput, [0])
+    const result = simulateScenarioWithReturnPath(scenarioInput, [], undefined, zeroBucketPath(scenarioInput, 1))
 
     expect(result.rows[0].closingCapitalToday).toBe(0)
     expect(result.summary.survivesUntilPlanningAge).toBe(true)
   })
 
+  it('deducts bucket costs from synthetic sampled fund returns', () => {
+    const zeroVol = ASSET_CLASS_ASSUMPTIONS.map((assumption) => ({ ...assumption, annualVolatility: 0 }))
+    const fund = { id: 'fund', name: 'Fonds', value: 100_000, holding: 'accumulating-equity-fund' as const, returnSeriesId: 'synthetic-equity-assumption-v1' }
+    const base = {
+      currentAge: 66, retirementAge: 67, planningAge: 68, currentCapital: 100_000,
+      monthlyDesiredSpendingToday: 0, monthlyRetirementIncomeToday: 0, monthlyContributionToday: 0,
+      annualInflationRate: 0, retirementIncomeStreams: [],
+    }
+    const noCost = withFullCostBasis(cashOnlyInput({ ...base, estimatorPortfolio: [{ ...fund }] }))
+    const withCost = withFullCostBasis(cashOnlyInput({ ...base, estimatorPortfolio: [{ ...fund, annualCostRate: 0.01 }] }))
+    const sampledNoCost = runStochasticSimulation(noCost, settings({ simulations: 1, seed: 42 }), zeroVol)
+    const sampledCost = runStochasticSimulation(withCost, settings({ simulations: 1, seed: 42 }), zeroVol)
+    expect(sampledCost.rows[0].p50CapitalToday).toBeLessThan(sampledNoCost.rows[0].p50CapitalToday)
+    expect(sampledCost.rows[1].p50CapitalToday).toBeLessThan(sampledNoCost.rows[1].p50CapitalToday)
+    const explicitNoCost = simulateScenarioWithReturnPath(noCost, [], undefined, [
+      [{ id: 'fund', totalReturnRate: 0.07 }],
+      [{ id: 'fund', totalReturnRate: 0.07 }],
+    ])
+    const explicitCost = simulateScenarioWithReturnPath(withCost, [], undefined, [
+      [{ id: 'fund', totalReturnRate: 0.06 }],
+      [{ id: 'fund', totalReturnRate: 0.06 }],
+    ])
+    expect(sampledNoCost.rows[0].p50CapitalToday).toBeCloseTo(explicitNoCost.rows[0].closingCapitalToday, 8)
+    expect(sampledCost.rows[0].p50CapitalToday).toBeCloseTo(explicitCost.rows[0].closingCapitalToday, 8)
+  })
+
+  it('keeps gross bank interest taxable while deducting costs from synthetic sampled bank returns', () => {
+    const zeroVol = ASSET_CLASS_ASSUMPTIONS.map((assumption) => ({ ...assumption, annualVolatility: 0 }))
+    const bank = { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: 'synthetic-cash-assumption-v1' }
+    const base = {
+      currentAge: 66, retirementAge: 67, planningAge: 68, currentCapital: 100_000,
+      monthlyDesiredSpendingToday: 0, monthlyRetirementIncomeToday: 0, monthlyContributionToday: 0,
+      annualInflationRate: 0, retirementIncomeStreams: [],
+    }
+    const noCost = cashOnlyInput({ ...base, estimatorPortfolio: [{ ...bank }] })
+    const withCost = cashOnlyInput({ ...base, estimatorPortfolio: [{ ...bank, annualCostRate: 0.01 }] })
+    const sampledNoCost = runStochasticSimulation(noCost, settings({ simulations: 1, seed: 42 }), zeroVol)
+    const sampledCost = runStochasticSimulation(withCost, settings({ simulations: 1, seed: 42 }), zeroVol)
+    expect(sampledCost.rows[0].p50CapitalToday).toBeLessThan(sampledNoCost.rows[0].p50CapitalToday)
+    const explicitNoCost = simulateScenarioWithReturnPath(noCost, [], undefined, [
+      [{ id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02 }],
+      [{ id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02 }],
+    ])
+    const explicitPreserved = simulateScenarioWithReturnPath(withCost, [], undefined, [
+      [{ id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.02 }],
+      [{ id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.02 }],
+    ])
+    expect(sampledNoCost.rows[0].p50CapitalToday).toBeCloseTo(explicitNoCost.rows[0].closingCapitalToday, 8)
+    expect(sampledCost.rows[0].p50CapitalToday).toBeCloseTo(explicitPreserved.rows[0].closingCapitalToday, 8)
+    expect(explicitPreserved.rows[0].capitalIncomeTax).toBeCloseTo(explicitNoCost.rows[0].capitalIncomeTax ?? 0, 8)
+    expect((explicitPreserved.rows[0].capitalIncomeTax ?? 0)).toBeGreaterThan(0)
+  })
+
   it('does not increase success probability when desired spending rises', () => {
-    const stochasticSettings = settings({ simulations: 200, seed: 456 })
+    // Paired market paths (same seed → identical sampled returns): higher
+    // spending can only deplete each path weakly earlier, so the inequality is
+    // exact for any simulation count; 50 paths keep the detailed-ledger run fast.
+    const stochasticSettings = settings({ simulations: 50, seed: 456 })
     const lowerSpending = runStochasticSimulation(
       input({ monthlyDesiredSpendingToday: 2_000 }),
       stochasticSettings,

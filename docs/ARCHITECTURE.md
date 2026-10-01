@@ -15,7 +15,7 @@ demselben Simulationsergebnis ab und berechnen keine eigene Geschäftslogik.
 
 ## Modell-Unterbereiche
 
-- `model/capitalIncome/` — Automatische/manuelle Kapitalertragsbasis-Schätzung für freiwillige Phasen samt Ledger-Anbindung.
+- `model/capitalIncome/` — Detaillierte Portfolio-Kapitalertragsbasis (Pflicht in allen Versicherungsmodi) samt Ledger-Anbindung.
 - `model/historicalReturns/` — Historische Rendite-/Inflationsregister, Quellenoptionen, Bootstrap-Stichproben/-Simulation, erwartete Renditen.
 - `model/returnData/` — Gebündelte statische Datensätze (JST-/Bundesbank-Produktionsreihen, ETF-Historien) für `historicalReturns/`.
 - `model/contributions/` — Beitrags-/Bemessungsengine nach 2026er-Regeln (KV/PV-Obergrenzen, DRV-Zuschusslogik) für Versicherungsphasen.

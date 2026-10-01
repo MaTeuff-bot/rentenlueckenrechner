@@ -164,7 +164,7 @@ export function simulateEstimatorYear(
     const movement = p.buckets.find(m => m.id === b.id)!
     const r = movement.totalReturnRate
     // Negative deposit proxies may represent fees/losses, not negative assessable interest.
-    if (b.eligibility === 'ordinary-bank-deposit' && (movement.grossBankReturnRate ?? r) < 0) throw new Error('Negative bank return: negativer Brutto-Bankzinspfad nicht abgedeckt; Quelle prüfen oder manuelle Kapitalbasis wählen.')
+    if (b.eligibility === 'ordinary-bank-deposit' && (movement.grossBankReturnRate ?? r) < 0) throw new Error('Negative bank return: negativer Brutto-Bankzinspfad nicht abgedeckt; Quelle prüfen.')
     const gain = signed.parse(b.value * r)
     investmentReturn += gain
     contribution += movement.contribution
@@ -220,7 +220,7 @@ export function simulateEstimatorYear(
       if (b.eligibility === 'accumulating-equity-fund') {
         fundSales += Math.max(0, b.value - target)
         const purchase = Math.max(0, target - b.value)
-        if (purchase > 0 && m.totalReturnRate === -1) throw new Error('Cannot purchase a fund at zero NAV (Allokationskauf nach vollständigem Fondsverlust nicht abgedeckt; manuelle Kapitalbasis wählen).')
+        if (purchase > 0 && m.totalReturnRate === -1) throw new Error('Cannot purchase a fund at zero NAV (Allokationskauf nach vollständigem Fondsverlust nicht abgedeckt).')
         fundPurchases += purchase
         pending += (oldHoldingVp.get(b.id) ?? 0) * (1 - sale.fraction) * (b.value > 0 ? Math.min(1, target / b.value) : 0)
         if (purchase > 0) pending += calculateVorabpauschale({ startValue: purchase / (1 + m.totalReturnRate), endValue: purchase, projectedBasisRate: p.projectedBasisRate, acquisitionMonth: 12 })

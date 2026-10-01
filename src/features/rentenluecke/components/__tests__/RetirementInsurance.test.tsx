@@ -63,14 +63,14 @@ describe('guided insurance fields and ledger breakdown', () => {
     expect(screen.getByLabelText('Kassenindividueller Zusatzbeitrag (%)')).toHaveAttribute('aria-invalid', 'true')
     expect(breakdown()).not.toBeInTheDocument()
   })
-  it('requires unknown-status capital and subsidy answers, allows explicit zero, hides them under KVdR', () => {
+  it('requires unknown-status subsidy answers, never per-phase capital answers, hides them under KVdR', () => {
     render(<Harness />)
     confirmKvdr()
     change('Versicherungsstatus – Rentenphase', 'unknown')
     expect(screen.getByText(/Für diese Planung nehmen wir freiwillige GKV an/)).toBeVisible()
-    expect(breakdown()).not.toBeInTheDocument()
-    change('Kapitalbasis – Rentenphase', 'manual')
-    change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
+    // The mandatory detailed portfolio replaces per-phase capital questions in every mode.
+    expect(screen.queryByLabelText('Kapitalbasis – Rentenphase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
     expect(breakdown()).not.toBeInTheDocument()
     change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
@@ -78,12 +78,14 @@ describe('guided insurance fields and ledger breakdown', () => {
     expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Rentenversicherungszuschuss einplanen?')).not.toBeInTheDocument()
   })
-  it('keeps a saved manual phase in manual mode when its estimate is cleared', () => {
-    render(<Harness initial={pension()} config={automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 100, drvSubsidy: 'not-received' } })} />)
-    change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '')
-    expect(screen.getByLabelText('Kapitalbasis – Rentenphase')).toHaveValue('manual')
-    expect(screen.getByLabelText('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)')).toHaveValue(null)
-    expect(breakdown()).not.toBeInTheDocument()
+  it('tolerates a saved legacy capital estimate without capital UI and keeps the automatic forecast', () => {
+    render(<Harness initial={pension()} config={automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 100, drvSubsidy: 'not-received' } })} />)
+    // Retired engine meaning: no per-phase capital control is rendered, and the
+    // tolerated legacy value never blocks the detailed-portfolio forecast.
+    expect(screen.queryByLabelText('Kapitalbasis – Rentenphase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
+    expect(breakdown()).toBeInTheDocument()
+    expect(screen.getByTestId('mandatory-capital-notice')).toBeVisible()
   })
   it('answers through birth years and returns to missing when the final row is removed', () => {
     render(<Harness config={automaticInsurance({ isParent: undefined })} initial={pension()} />)
@@ -127,8 +129,8 @@ describe('guided insurance fields and ledger breakdown', () => {
     change('Versicherungsstatus – Rentenphase', 'voluntary')
     expect(screen.getByLabelText(/Beitragsrelevanter Mietüberschuss/)).toBeVisible()
     change(/Beitragsrelevanter Mietüberschuss/, '1500')
-    change('Kapitalbasis – Rentenphase', 'manual')
-    change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
+    // No per-phase capital answers exist anymore; the detailed portfolio taxes the same method.
+    expect(screen.queryByLabelText('Kapitalbasis – Rentenphase')).not.toBeInTheDocument()
     change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
     change('Kategorie von Pension', `${kind}:standard`)
@@ -184,8 +186,7 @@ describe('guided insurance fields and ledger breakdown', () => {
     expect(screen.getByLabelText(/Beitragsrelevanter Mietüberschuss/)).toBeVisible()
     change('Betragsart von Pension', 'gross')
     change(/Beitragsrelevanter Mietüberschuss/, '1500')
-    change('Kapitalbasis – Rentenphase', 'manual')
-    change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
+    expect(screen.queryByLabelText('Kapitalbasis – Rentenphase')).not.toBeInTheDocument()
     change('Rentenversicherungszuschuss einplanen?', 'not-received')
     expect(breakdown()).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText(/Eigene KV\/PV-Beiträge einsetzen – (Rentenphase|Phase ab Versicherungsübergang)/))
@@ -254,11 +255,14 @@ it('copies in both directions without asserting bridge-only coverage and keeps m
   expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen – Rentenphase/)).toBeVisible()
 })
 
-it('retains valid inactive manual totals, capital and subsidy but clears the active override on return', () => {
+it('retains valid inactive manual totals and subsidy, ignores legacy capital, and restores the override', () => {
   render(<Harness initial={pension()} config={automaticInsurance({ pension: { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed' } })} />)
   const summary = screen.getByTestId('insurance-pension-summary')
   expect(summary).toHaveTextContent('Unbekannt · freiwillige GKV angenommen · automatisch')
   expect(summary).not.toHaveTextContent('€')
+  // The tolerated legacy estimate is surfaced by the change notice, never as an editable capital fact.
+  expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
+  expect(screen.getByTestId('mandatory-capital-notice')).toBeVisible()
   fireEvent.click(screen.getByLabelText('Eigene KV/PV-Beiträge einsetzen – Rentenphase'))
   expect(screen.queryByLabelText('Rentenversicherungszuschuss einplanen?')).toBeNull()
   change('Eigene KV nach allen Zuschüssen – Rentenphase (€/Monat heute)', '0')
@@ -267,7 +271,7 @@ it('retains valid inactive manual totals, capital and subsidy but clears the act
   fireEvent.click(within(screen.getByRole('group', { name: 'Besondere Umstände – Rentenphase' })).getByLabelText('Alle Standardregeln genügen (automatische Berechnung)'))
   expect(screen.getByLabelText('Eigene KV/PV-Beiträge einsetzen – Rentenphase')).not.toBeChecked()
   expect(screen.getByLabelText('Rentenversicherungszuschuss einplanen?')).toHaveValue('confirmed')
-  expect(screen.getByLabelText(/Beitragsrelevante Kapitalerträge/)).toHaveValue(123)
+  expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
   expect(breakdown()).toBeInTheDocument()
   fireEvent.click(screen.getByLabelText('Eigene KV/PV-Beiträge einsetzen – Rentenphase'))
   expect(screen.getByLabelText(/Eigene KV nach allen Zuschüssen/)).toHaveValue(0)
@@ -438,4 +442,36 @@ it('merges the bridge checklists into one radiogroup while keeping common and br
   expect(bridge.getByLabelText('Alle Standardregeln genügen (automatische Berechnung)')).toBeChecked()
   expect(bridge.getByText('Keine dieser Sonderumstände angegeben.')).toBeVisible()
   expect(screen.queryByLabelText(/Eigene KV nach allen Zuschüssen – Brücke/)).not.toBeInTheDocument()
+})
+
+it('dismisses the legacy mandatory-capital notice immediately without touching portfolio readiness', () => {
+  localStorage.clear()
+  const legacy = automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed' } })
+  const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 68 })
+  const readiness = { ready: true, issues: [], needsFundCost: true }
+  const view = render(<RetirementInsuranceSection insurance={legacy} input={input} onChange={() => {}} estimatorReadiness={readiness} />)
+  expect(screen.getByTestId('mandatory-capital-notice')).toBeVisible()
+  expect(screen.getByText(/Portfolio-Bereitschaft: bereit/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Verstanden' }))
+  expect(screen.queryByTestId('mandatory-capital-notice')).not.toBeInTheDocument()
+  expect(localStorage.getItem('rentenlueckenrechner.mandatory-detailed-capital-notice.v1')).toBe('dismissed')
+  expect(screen.getByText(/Portfolio-Bereitschaft: bereit/)).toBeInTheDocument()
+  view.unmount()
+})
+
+it('keeps the dismissed legacy notice hidden on remount while retaining the legacy signal in memory', () => {
+  localStorage.clear()
+  localStorage.setItem('rentenlueckenrechner.mandatory-detailed-capital-notice.v1', 'dismissed')
+  const legacy = automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 123, drvSubsidy: 'confirmed' } })
+  const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 68 })
+  const readiness = { ready: true, issues: [], needsFundCost: true }
+  const view = render(<RetirementInsuranceSection insurance={legacy} input={input} onChange={() => {}} estimatorReadiness={readiness} />)
+  expect(screen.queryByTestId('mandatory-capital-notice')).not.toBeInTheDocument()
+  expect(screen.getByText(/Portfolio-Bereitschaft: bereit/)).toBeInTheDocument()
+  view.unmount()
+  const second = render(<RetirementInsuranceSection insurance={legacy} input={input} onChange={() => {}} estimatorReadiness={readiness} />)
+  expect(screen.queryByTestId('mandatory-capital-notice')).not.toBeInTheDocument()
+  expect(localStorage.getItem('rentenlueckenrechner.mandatory-detailed-capital-notice.v1')).toBe('dismissed')
+  second.unmount()
+  localStorage.clear()
 })

@@ -1,5 +1,5 @@
 import { estimatorSetupSchema } from './capitalIncome/schema'
-import { capitalMode, estimatorSetupIssues } from './capitalIncome/setup'
+import { estimatorSetupIssues } from './capitalIncome/setup'
 import { z } from 'zod'
 import { calculateContributions, type ContributionResult } from './contributions/contributionEngine'
 import { indexedContributionThresholds } from './contributions/rules2026'
@@ -17,11 +17,11 @@ export const insurancePhaseSchema = z.object({
   drvSubsidy: z.enum(['confirmed', 'not-received']).optional(),
 })
 export const retirementInsuranceSchema = z.object({
-  // Engine-Kompatibilität: Der Ledger liest die automatische Kapitalbasis weiterhin hier.
+  // Engine-Kompatibilität: Der Ledger liest die detaillierte Kapitalbasis weiterhin hier.
   // In-memory besitzt das Vermögen die Einstellungen (ScenarioState.portfolioEstimatorSettings);
-  // useScenarioState injiziert sie je nach Bedarf über einen Adapter. Kein Cleanup von
-  // Entwurfs- oder gültigen Werten bei Status-/Moduswechseln; Block 4 in der Versicherung
-  // ist nur ein Status-Zeiger auf die Portfolio-Bereitschaft.
+  // useScenarioState injiziert sie immer über einen Adapter. Legacy capitalMode/capitalMonthlyToday
+  // werden toleriert, aber engine-seitig ignoriert und beim Serialisieren entfernt.
+  // Block 4 in der Versicherung ist ein Pflicht-Verweis auf die Portfolio-Bereitschaft.
   capitalEstimator: estimatorSetupSchema.optional(),
   pensionAge: z.number().int().min(0).max(120).optional(),
   referenceYear: z.number().int().min(2026).max(9999),
@@ -105,7 +105,6 @@ export function insuranceSetupIssues(input: RentenlueckeInput): string[] {
     if (!p.status) issues.push(`${label}: Versicherungsstatus auswählen.`)
     if (!p.circumstances) issues.push(`${label}: Versicherungsumstände bestätigen.`)
     if (p.status && p.status !== 'kvdr') {
-      if (capitalMode(p) === 'manual' && p.capitalMonthlyToday === undefined) issues.push(`${label}: Kapitalertragsbasis schätzen oder 0 eintragen.`)
       if (phase === 'pension' && !p.drvSubsidy) issues.push(`${label}: Erhalt des DRV-Zuschusses angeben.`)
     }
     for (const s of relevant) {
@@ -132,6 +131,9 @@ export function contributionForYear(input: RentenlueckeInput, age: number, infla
   const active = activeIncomeStreams(streams, age)
   const reasons = phaseManualReasons(i, phase, phaseStreams(streams, i, phase, input.retirementAge, input.planningAge))
   const common = { personId: 'person', phaseId: phase, phase, calendarYear: i.referenceYear + age - input.currentAge, cashflowBeforeInsuranceMonthly: cash }
+  if (!reasons.length && p.status !== 'kvdr' && annualCapitalAssessment === undefined) {
+    throw new Error('Detaillierte Kapitalbasis erforderlich: automatische freiwillige Bemessung benötigt die modellierte Kapitalbemessung aus dem Portfolio.')
+  }
   const result = reasons.length ? calculateContributions({ ...common, mode: 'manual', reason: reasons.join('; '), kvMonthly: p.kvMonthlyToday! * inflation, pvMonthly: p.pvMonthlyToday! * inflation }) : calculateContributions({
     ...common, mode: 'automatic', status: p.status,
     scope: { kind: 'standard-domestic-no-employment' },
@@ -142,7 +144,7 @@ export function contributionForYear(input: RentenlueckeInput, age: number, infla
     statutoryPensions: active.filter(s => s.kind === 'gesetzliche-rente').map(s => ({ id: s.id, grossMonthly: s.amountMonthlyToday * inflation })),
     occupationalPensions: active.filter(s => s.kind === 'betriebsrente').map(s => ({ id: s.id, grossMonthly: s.amountMonthlyToday * inflation })),
     rentalAssessmentMonthly: active.filter(s => s.kind === 'rental-income').reduce((sum, s) => sum + (s.rentalAssessmentMonthlyToday ?? 0) * inflation, 0),
-    capitalAssessmentMonthly: p.status === 'kvdr' ? undefined : (annualCapitalAssessment === undefined ? p.capitalMonthlyToday! * inflation : annualCapitalAssessment / 12),
+    capitalAssessmentMonthly: p.status === 'kvdr' ? undefined : annualCapitalAssessment! / 12,
     drvSubsidy: phase === 'pension' ? p.drvSubsidy : undefined,
   })
   if (result.status !== 'automatic' && result.status !== 'manual') throw new Error(`KV/PV nicht vollständig: ${JSON.stringify(result)}`)
@@ -167,13 +169,16 @@ export function clearHiddenInvalidInsuranceValues(input: RentenlueckeInput): Ren
       if (!optionalMoney.safeParse(i[phase].kvMonthlyToday).success) i[phase].kvMonthlyToday = undefined
       if (!optionalMoney.safeParse(i[phase].pvMonthlyToday).success) i[phase].pvMonthlyToday = undefined
     }
-    if (!active || manual || capitalMode(i[phase]) === 'automatic' || !i[phase].status || i[phase].status === 'kvdr') {
-      if (!optionalMoney.safeParse(i[phase].capitalMonthlyToday).success) i[phase].capitalMonthlyToday = undefined
+    // Legacy capitalMode/capitalMonthlyToday haben keine Engine-Bedeutung mehr:
+    // ungültige Werte werden bereinigt (dürfen nicht blockieren), gültige bleiben
+    // für die Änderungsanzeige erhalten und werden beim Serialisieren entfernt.
+    if (i[phase].capitalMode !== undefined && i[phase].capitalMode !== 'automatic' && i[phase].capitalMode !== 'manual') {
+      i[phase].capitalMode = undefined
     }
+    if (!optionalMoney.safeParse(i[phase].capitalMonthlyToday).success) i[phase].capitalMonthlyToday = undefined
   }
   // Portfolio-Einstellungen (capitalEstimator) werden hier nie bereinigt: gültige wie
-  // ungültige Entwürfe bleiben erhalten; ungenutzte unvollständige Einstellungen blockieren
-  // nicht, benötigte unvollständige Einstellungen blockieren über estimatorSetupIssues.
+  // ungültige Entwürfe bleiben erhalten; unvollständige Einstellungen blockieren immer über estimatorSetupIssues.
   if (!automaticPhases.length) {
     if (!retirementInsuranceSchema.shape.insurerAdditionalRate.safeParse(i.insurerAdditionalRate).success) i.insurerAdditionalRate = undefined
     if (i.rates) {

@@ -28,8 +28,8 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
       <dt>Verfügbares Einkommen nach KV/PV und GRV-Rentensteuer</dt><dd><strong>{monthly(row.retirementIncomeNet)}</strong></dd>
     </dl>
     {row.unfundedWithdrawal > 0 && <p role="alert">Vermögenslücke: {formatCurrency(row.unfundedWithdrawal)} im Jahr nicht finanzierbar, einschließlich KV/PV.</p>}
-    {row.capitalAssessment && <details><summary>Automatische Kapitalbasis – Jahreswerte</summary>
-      <p>Kontoführung aus derselben Jahresrechnung; für KVdR bleibt diese Kapitalbasis beitragsfrei. Eine gewählte manuelle Phasenbasis ersetzt die automatische Bemessung, nicht die Anlagen.</p>
+    {row.capitalAssessment && <details><summary>Detaillierte Kapitalbasis – Jahreswerte</summary>
+      <p>Kontoführung aus derselben Jahresrechnung; für KVdR bleibt diese Kapitalbasis beitragsfrei. Die Bemessung stammt immer aus dem detaillierten Portfolio (Vermögen) – auch bei phasenweise manuell eingesetzten Gesamtbeiträgen, die nur die Versicherung ersetzen.</p>
       <dl className="insurance-reconciliation">
         <dt>Brutto-Bankzinsen (bereits in Rendite enthalten)</dt><dd>{formatCurrency(row.capitalAssessment.bankInterest)}</dd>
         <dt>Zugeflossene Vorabpauschale aus dem Vorjahr</dt><dd>{formatCurrency(row.capitalAssessment.receivedVorabpauschale)}</dd>
@@ -38,7 +38,7 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
         <dt>Fondseinkommen nach 30 % Teilfreistellung</dt><dd>{formatCurrency(row.capitalAssessment.assessment.fundIncomeAfterExemption)}</dd>
         <dt>Berücksichtigter jährlicher Kostenpauschbetrag</dt><dd>{formatCurrency(row.capitalAssessment.assessment.expenseAllowance)}</dd>
         <dt>Simulierte verbleibende Kapitalverluste</dt><dd>{formatCurrency(row.capitalAssessment.assessment.closingSimulatedLoss)}</dd>
-        <dt>Automatisch geschätzte Kapitalbasis</dt><dd>{formatCurrency(row.capitalAssessment.assessment.annualAssessment)}</dd>
+        <dt>Detailliert bemessene Kapitalbasis</dt><dd>{formatCurrency(row.capitalAssessment.assessment.annualAssessment)}</dd>
         <dt>Für diese Phase verwendete Kapitalbasis</dt><dd>{formatCurrency(row.portfolioContributionBase)}</dd>
         <dt>Vorabpauschale für Zufluss im Folgejahr</dt><dd>{formatCurrency(row.capitalAssessment.pendingVorabpauschale)}</dd>
         <dt>Finanzierungsentnahme einschließlich KV/PV</dt><dd>{formatCurrency(row.capitalAssessment.paidWithdrawal)}</dd>

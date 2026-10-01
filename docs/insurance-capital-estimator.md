@@ -10,28 +10,21 @@ rebalancing gains and gross bank interest and funds it from the portfolio
 
 ## Setup and persistence
 
-New voluntary/unknown phases start with automatic capital assessment. Existing
-explicit monthly capital estimates, including zero, retain manual mode. Bridge and
-pension choices are independent. A manual capital estimate leaves the portfolio and
-otherwise supported automatic KV/PV intact; whole-phase manual KV/PV remains reserved
-for unsupported insurance circumstances or explicit selection.
+Detailed portfolio assessment is mandatory in every insurance mode (KVdR, voluntary/unknown, whole-phase manual totals). Bridge and pension share the same detailed portfolio method; whole-phase manual KV/PV totals replace only insurance, never portfolio eligibility. Legacy per-phase capitalMode/capitalMonthlyToday have no engine meaning; they are tolerated on load and dropped on save with a change notice.
 
 Every holding must be classified independently from its return proxy, including
 zero-value holdings. Only accumulating qualifying equity funds and ordinary bank
-deposits are supported. Unclassified/unsupported holdings block automatic estimation
-until removed/replaced or an explicit manual capital estimate is selected. No partial
-coverage, automatic switching or liquidation occurs. Fund acquisition cost is required
+deposits are supported. Unclassified/unsupported holdings block every forecast
+until removed/replaced. No partial coverage, automatic switching or liquidation occurs. Fund acquisition cost is required
 in euros (zero is explicit); it excludes bank principal. Scope and eligible loss-pool
 declarations are required. Missing values do not produce a complete forecast.
-An all-zero opening portfolio is incomplete for automatic estimation because no
-allocation weights can be derived; an explicit manual capital estimate remains
-available. Depletion after a valid opening allocation is supported and retains that
+An all-zero opening portfolio is incomplete because no
+allocation weights can be derived. Depletion after a valid opening allocation is supported and retains that
 allocation for hypothetical required-capital searches.
 
-Persistence stays at version/key v13. Classification, setup and phase modes are
+Persistence stays at version/key v15. Classification, setup and holdings are
 additive optional fields; valid existing amounts, income streams, allocation and
-other inputs survive. The older GKV release's v1–v12 cleanup is unchanged; this PR
-introduces no reset or unrelated storage deletion.
+other inputs survive with no reset. Legacy per-phase capitalMode/capitalMonthlyToday are tolerated on load and dropped on save; a version-marked change notice explains that separate manual estimates are no longer used and portfolio setup is independently required.
 
 ## Projected Basiszins and calendar convention
 
@@ -82,9 +75,8 @@ qualifying equity funds and ordinary deposits. Unknown/distributing funds, bonds
 individual securities, money-market funds merely named “cash”, legacy holdings,
 changes in fund classification, wrappers, business assets, foreign/special events,
 and joint holdings are outside this engine's automatic contract. There is no partial
-coverage or automatic manual-mode switch. The UI offers explicit manual capital
-assessment or removal/replacement of unsupported holdings; whole-phase manual
-KV/PV is not required merely by this portfolio gate.
+coverage. The UI offers removal/replacement of unsupported holdings; whole-phase manual
+KV/PV totals remain for unsupported insurance circumstances only and never bypass portfolio eligibility.
 
 The scope declaration means one person's domestic private standard holdings,
 acquired after 2017, with opening holdings already owned before the first modelled
@@ -97,7 +89,7 @@ No per-fund cost or FIFO tracking is used. The supported opening loss declaratio
 explicitly confirms no pre-existing losses and no external offsets. This is a
 coverage limit, not an unapproved assumption that everyone has zero loss history.
 Simulated eligible losses are tracked after partial exemption. Any need for opening
-loss history or outside pools requires manual assessment until separately supported.
+loss history or outside pools blocks the forecast until separately supported.
 Offset eligibility/evidence must be confirmed by the caller; the model cannot establish
 broker/tax-office certification or make a loss usable merely by computing it.
 
@@ -172,8 +164,8 @@ recovery events or recognition of total-loss deductions are outside automatic sc
 The callback receives annual assessable capital income and returns total annual own
 KV/PV after participation/subsidy; other income, minimum and the shared ceilings must
 be computed once by the contribution engine. It must not add assessed income to
-spendable income, or include tax costs. Existing manual capital basis must be replaced
-explicitly when this estimator is selected. For KVdR the callback ignores ordinary
+spendable income, or include tax costs. Retired per-phase manual capital estimates
+are never selected or read; the detailed portfolio always supplies the callback. For KVdR the callback ignores ordinary
 capital assessment, but accounting can continue for a later voluntary phase.
 
 The solver brackets withdrawal between zero and assets available before contributions.

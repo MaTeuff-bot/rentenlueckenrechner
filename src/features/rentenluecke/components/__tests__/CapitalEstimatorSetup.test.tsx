@@ -6,10 +6,11 @@ import { describe, expect, it } from 'vitest'
 import { RetirementInsuranceSection } from '../InputPanel/RetirementInsuranceSection'
 import { CapitalEstimatorSetup } from '../InputPanel/CapitalEstimatorSetup'
 import { PortfolioBucketSection } from '../InputPanel/PortfolioBucketSection'
-import { needsEstimator } from '../../model/capitalIncome/setup'
+import { needsDetailedPortfolio } from '../../model/capitalIncome/setup'
 import { engineCapitalEstimatorFromPortfolio, portfolioEstimatorReadiness, type PortfolioEstimatorSettings } from '../../model/capitalIncome/portfolioEstimator'
 import { automaticInsurance, insuredInput, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { insuranceSetupIssues } from '../../model/retirementInsurance'
+import { pensionTaxDisclosures } from '../../model/tax/incomeTax'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns/constants'
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
 
@@ -21,7 +22,7 @@ function Harness() {
   const [settings, setSettings] = useState<PortfolioEstimatorSettings | undefined>(undefined)
   const [buckets, setBuckets] = useState<PortfolioBucket[]>([{ id: 'fund', name: 'Depot', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }])
   const baseInput = insuredInput({ currentAge: 65, retirementAge: 65, estimatorPortfolio: buckets, retirementInsurance: insurance })
-  const needsAutomatic = needsEstimator({ ...baseInput, retirementInsurance: insurance })
+  const needsAutomatic = needsDetailedPortfolio({ ...baseInput, retirementInsurance: insurance })
   const readiness = portfolioEstimatorReadiness(settings, buckets, 100000)
   const engineInput = insuredInput({ currentAge: 65, retirementAge: 65, estimatorPortfolio: buckets, retirementInsurance: { ...insurance, capitalEstimator: engineCapitalEstimatorFromPortfolio(settings, needsAutomatic) } })
   const issues = insuranceSetupIssues(engineInput)
@@ -34,35 +35,46 @@ function Harness() {
   </>
 }
 const change = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
-describe('automatic capital setup interactions', () => {
-  it('requires classification, cost and declarations; preserves portfolio under independent manual overrides', () => {
+describe('mandatory detailed capital setup interactions', () => {
+  it('requires classification, cost and declarations in every insurance mode; no per-phase manual capital UI', () => {
     render(<Harness />)
-    expect(screen.getByLabelText('Kapitalbasis – Brücke')).toHaveValue('automatic')
-    expect(screen.getByLabelText('Kapitalbasis – Rentenphase')).toHaveValue('automatic')
+    // Retired per-phase manual capital estimates have no UI meaning anymore.
+    expect(screen.queryByLabelText('Kapitalbasis – Brücke')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Kapitalbasis – Rentenphase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Beitragsrelevante Kapitalerträge/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('estimator-readiness')).toHaveTextContent('Unvollständig')
     expect(screen.getByRole('status')).not.toHaveTextContent('Vollständig')
     change('Tatsächliche Anlageart von Depot', 'accumulating-equity-fund')
     change('Anschaffungskosten des gesamten Fondspools (€)', '0')
     fireEvent.click(screen.getByLabelText(/Anlageumfang bestätigt/))
     fireEvent.click(screen.getByLabelText(/Verlustumfang bestätigt/))
+    expect(screen.getByTestId('estimator-readiness')).toHaveTextContent('Bereit für detaillierte Schätzung.')
     expect(screen.getByRole('status')).toHaveTextContent('Vollständig')
     fireEvent.click(screen.getByText('Erweitert – projizierter Basiszins'))
     expect(screen.getByLabelText('Konstanter nominaler Basiszins (%)')).toHaveValue(3.2)
     change('Anschaffungskosten des gesamten Fondspools (€)', '')
     expect(screen.getByRole('status')).toHaveTextContent('Anschaffungskosten')
+    expect(screen.getByTestId('estimator-readiness')).toHaveTextContent('Unvollständig')
+    change('Anschaffungskosten des gesamten Fondspools (€)', '0')
     change('Tatsächliche Anlageart von Depot', 'unsupported')
     expect(screen.getByRole('status')).toHaveTextContent('entfernen/ersetzen')
-    change('Kapitalbasis – Brücke', 'manual')
-    change('Beitragsrelevante Kapitalerträge – Brücke (€/Monat heute)', '100')
-    expect(screen.getByRole('status')).not.toHaveTextContent('Vollständig')
-    change('Kapitalbasis – Rentenphase', 'manual')
-    change('Beitragsrelevante Kapitalerträge – Rentenphase (€/Monat heute)', '0')
-    expect(screen.getByRole('status')).toHaveTextContent('Vollständig')
+    // The portfolio itself is preserved independently of insurance answers.
     expect(screen.getByLabelText('Tatsächliche Anlageart von Depot')).toHaveValue('unsupported')
     expect(screen.getByRole('spinbutton', { name: /Aktueller Wert von Depot/ })).toHaveValue(100000)
-    expect(screen.queryByLabelText(/Eigene KV nach allen Zuschüssen/)).not.toBeInTheDocument()
-    change('Kapitalbasis – Brücke', 'automatic')
-    expect(screen.getByRole('status')).toHaveTextContent('entfernen/ersetzen')
-    change('Kapitalbasis – Brücke', 'manual')
-    expect(screen.getByLabelText('Beitragsrelevante Kapitalerträge – Brücke (€/Monat heute)')).toHaveValue(100)
+  })
+  it('discloses the precise pension-tax funding limitation and bank blocking warning', () => {
+    render(<Harness />)
+    expect(screen.getByText(/Einkommenslücke – kein aufgebrauchtes Vermögen nötig/)).toBeInTheDocument()
+    expect(screen.getByText(/Die Bestände sinken nur proportional/)).toBeInTheDocument()
+    expect(screen.getByText(/Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf/)).toBeInTheDocument()
+    expect(screen.getByText(/Dieser Teil und spätere Steuerschätzungen können dadurch verzerrt sein/)).toBeInTheDocument()
+    expect(screen.getByText(/kann ein einziger abgetasteter Negativpfad die gesamte Berechnung blockieren/)).toBeInTheDocument()
+    const visibleTaxNotes = pensionTaxDisclosures.join(' ')
+    expect(visibleTaxNotes).toContain('Zusatzentnahme für die GRV-Rentensteuer bei Einkommenslücke')
+    expect(visibleTaxNotes).toContain('kein Vermögensverbrauch nötig')
+    expect(visibleTaxNotes).toContain('kein Verkaufsgewinn')
+    expect(visibleTaxNotes).toContain('keine Kapitalertragsteuer')
+    expect(visibleTaxNotes).toContain('keine Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf')
+    expect(visibleTaxNotes).toContain('spätere Steuerschätzungen verzerrt sein können')
   })
 })

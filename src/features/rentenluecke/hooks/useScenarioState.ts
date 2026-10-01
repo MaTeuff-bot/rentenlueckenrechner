@@ -1,5 +1,5 @@
 import { applyCoverage, type InsuranceCoverageAnswers } from '../model/insuranceCoverage'
-import { needsEstimator } from '../model/capitalIncome/setup'
+import { needsDetailedPortfolio } from '../model/capitalIncome/setup'
 import { engineCapitalEstimatorFromPortfolio, portfolioEstimatorReadiness, type PortfolioEstimatorSettings } from '../model/capitalIncome/portfolioEstimator'
 import { scenarioIssues } from '../model/scenarioIssues'
 import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
@@ -62,8 +62,8 @@ export function useScenarioState() {
       estimatorPortfolio: portfolioBuckets,
       currentCapital: calculatePortfolioBucketTotal(portfolioBuckets),
     }
-    const needsAutomatic = needsEstimator(probeInput)
-    const engineEstimator = engineCapitalEstimatorFromPortfolio(portfolioEstimatorSettings, needsAutomatic)
+    const needsDetailed = needsDetailedPortfolio(probeInput as unknown as Parameters<typeof needsDetailedPortfolio>[0])
+    const engineEstimator = engineCapitalEstimatorFromPortfolio(portfolioEstimatorSettings, needsDetailed)
     const engineInsurance = baseInsurance ? { ...baseInsurance, capitalEstimator: engineEstimator } : undefined
     return withDeterministicPortfolioReturn(clearHiddenInvalidInsuranceValues({
       ...state.input,
@@ -101,7 +101,7 @@ export function useScenarioState() {
       const result = simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
       return { result, stochasticSummary: runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings), calculationError: null }
     } catch (error) {
-      return { result: null, stochasticSummary: null, calculationError: `Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)} Automatische Kapitalbasis prüfen oder ausdrücklich manuelle Kapitalertragsschätzung wählen.` }
+      return { result: null, stochasticSummary: null, calculationError: `Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)} Detaillierte Kapitalbasis im Vermögen prüfen.` }
     }
   }, [historicalSettings, isValid, parsedInput])
   const { result, stochasticSummary, calculationError } = calculation

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { cashOnlyInput } from './insuranceFixtures'
+import { cashOnlyInput, withFullCostBasis, zeroBucketPath } from './insuranceFixtures'
+import { simulateScenarioWithReturnPath } from '../stochasticReturns'
 import {
   calculateRetirementIncomeForYear,
   createDefaultRetirementIncomeStreams,
   migrateAggregateRetirementIncomeToStream,
 } from '../retirementIncomeStreams'
-import { simulateScenario } from '../simulateScenario'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../types'
 
 function stream(overrides: Partial<RetirementIncomeStream> = {}): RetirementIncomeStream {
@@ -23,7 +23,10 @@ function stream(overrides: Partial<RetirementIncomeStream> = {}): RetirementInco
 }
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
-  return cashOnlyInput({
+  // Full cost basis plus explicitly modeled zero returns keep the historical
+  // 0 %-return hand numbers honest: no gains, interest or Vorabpauschale arise,
+  // so no Kapitalertragsteuer is assessed on the mandatory detailed ledger.
+  return withFullCostBasis(cashOnlyInput({
     currentAge: 67,
     retirementAge: 67,
     planningAge: 70,
@@ -34,7 +37,12 @@ function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
     annualReturnBeforeRetirement: 0,
     annualReturnInRetirement: 0,
     ...overrides,
-  })
+  }))
+}
+
+function zeroPathResult(scenarioInput: RentenlueckeInput) {
+  return simulateScenarioWithReturnPath(scenarioInput, [], undefined,
+    zeroBucketPath(scenarioInput, scenarioInput.planningAge - scenarioInput.currentAge))
 }
 
 describe('retirement income streams', () => {
@@ -58,8 +66,8 @@ describe('retirement income streams', () => {
 
   it('preserves legacy simulation results when streams are omitted or use the default zero haircut', () => {
     const legacyInput = input({ monthlyDesiredSpendingToday: 3_000 })
-    const legacy = simulateScenario(legacyInput)
-    const withDefaultStream = simulateScenario({
+    const legacy = zeroPathResult(legacyInput)
+    const withDefaultStream = zeroPathResult({
       ...legacyInput,
       retirementIncomeStreams: createDefaultRetirementIncomeStreams(legacyInput),
     })
@@ -69,7 +77,7 @@ describe('retirement income streams', () => {
   })
 
   it('deducts a gross-stream haircut and increases gap withdrawals', () => {
-    const result = simulateScenario(
+    const result = zeroPathResult(
       input({ retirementIncomeStreams: [stream({ effectiveDeductionRate: 0.1 })] }),
     )
     const [row] = result.retirementRows
@@ -79,7 +87,11 @@ describe('retirement income streams', () => {
     expect(row.retirementIncomeNet).toBe(21_600)
     expect(row.retirementIncome).toBe(row.retirementIncomeNet)
     expect(row.gapWithdrawal).toBe(2_400)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(7_200, 0)
+    // 3 × 2,400 at modeled zero returns with no capital tax, within the ledger
+    // search's €1 stop epsilon.
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(7_200)
+    expect(required).toBeLessThanOrEqual(7_201)
   })
 
   it('ignores haircut settings for a net stream', () => {
@@ -95,7 +107,7 @@ describe('retirement income streams', () => {
   })
 
   it('includes a stream from startAge and excludes it at endAge', () => {
-    const result = simulateScenario(
+    const result = zeroPathResult(
       input({
         planningAge: 71,
         retirementIncomeStreams: [stream({ startAge: 68, endAge: 70 })],
@@ -107,7 +119,7 @@ describe('retirement income streams', () => {
   })
 
   it('reports consumed surplus without adding it to portfolio capital', () => {
-    const result = simulateScenario(
+    const result = zeroPathResult(
       input({
         planningAge: 68,
         retirementIncomeStreams: [stream({ amountMonthlyToday: 3_000 })],
@@ -121,20 +133,24 @@ describe('retirement income streams', () => {
   })
 
   it('uses net rather than gross stream income in required-capital search', () => {
-    const gross = simulateScenario(
+    // Zero-start blocks every forecast; both searches open with a positive
+    // allocation on the mandatory detailed ledger at modeled zero returns.
+    const gross = zeroPathResult(
       input({
-        currentCapital: 0,
         retirementIncomeStreams: [stream({ effectiveDeductionRate: 0.25 })],
       }),
     )
-    const net = simulateScenario(
+    const net = zeroPathResult(
       input({
-        currentCapital: 0,
         retirementIncomeStreams: [stream({ amountBasis: 'net', effectiveDeductionRate: 0.25 })],
       }),
     )
 
-    expect(gross.summary.requiredCapitalAtRetirement).toBeCloseTo(18_000, 0)
+    // 3 × 6,000 gap at modeled zero returns with no capital tax, within the
+    // ledger search's €1 stop epsilon; the net stream leaves no gap at all.
+    const required = gross.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(18_000)
+    expect(required).toBeLessThanOrEqual(18_001)
     expect(net.summary.requiredCapitalAtRetirement).toBe(0)
   })
 })

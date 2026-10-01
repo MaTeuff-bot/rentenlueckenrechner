@@ -63,7 +63,9 @@ function renderEstimatorSplit(input: RentenlueckeInput, onRetirementInsuranceCha
 }
 
 function estimatorInput(): RentenlueckeInput {
-  return insuredInput({
+  // Deliberately incomplete detailed setup so block 4 carries open points:
+  // unclassified portfolio legs and missing cost/confirmations block every mode.
+  const complete = insuredInput({
     retirementIncomeStreams: [pension()],
     retirementInsurance: {
       ...automaticInsurance(),
@@ -71,6 +73,9 @@ function estimatorInput(): RentenlueckeInput {
       pension: { status: 'voluntary', circumstances: 'standard', drvSubsidy: 'confirmed' },
     },
   })
+  return { ...complete,
+    estimatorPortfolio: (complete.estimatorPortfolio as unknown[]).map(bucket => ({ ...(bucket as object), holding: undefined })) as typeof complete.estimatorPortfolio,
+    retirementInsurance: complete.retirementInsurance && { ...complete.retirementInsurance, capitalEstimator: undefined } }
 }
 
 function renderVersicherungTab(input: RentenlueckeInput, coverage: InsuranceCoverageAnswers, children: ChildrenAnswer) {
@@ -169,7 +174,7 @@ describe('Versicherung tab regroup into four blocks', () => {
 })
 
 describe('Kapitalertragsschätzung split Vermögen / Versicherung', () => {
-  it('renders the estimator fieldset in Vermögen when needsEstimator, not in Versicherung', () => {
+  it('renders the estimator fieldset in Vermögen (mandatory in every mode), not in Versicherung', () => {
     renderEstimatorSplit(estimatorInput())
     fireEvent.click(screen.getByRole('tab', { name: /Versicherung/ }))
     const versicherungPanel = document.getElementById('input-tabpanel-versicherung')!

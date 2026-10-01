@@ -1,29 +1,38 @@
 import { generateHistoricalInflationPath, sampleHistoricalYearsForPath } from '../historicalReturns/bootstrapSampling'
 import { describe, expect, it } from 'vitest'
 import { automaticInsurance, insuredInput, pension } from './insuranceFixtures'
-import { createPortfolioComponents, createSeededRandom, simulateScenarioWithReturnPath } from '../stochasticReturns'
-import { createHistoricalBootstrapSeed, DEFAULT_HISTORICAL_INFLATION_SERIES_ID, DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
-  findInflationSourceOption, generateHistoricalReturnPath, getValidHistoricalYears,
+import { createSeededRandom, simulateScenarioWithReturnPath } from '../stochasticReturns'
+import { sampledBucketReturns } from '../capitalIncome/returns'
+import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
+import { createHistoricalBootstrapSeed, DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
+  findInflationSourceOption, getValidHistoricalYears,
   runHistoricalBootstrapSimulation, simulateHistoricalBootstrapReferenceScenario, simulateHistoricalBootstrapScenario } from '../historicalReturns'
 import type { RentenlueckeInput } from '../types'
 
+const insured: RentenlueckeInput = insuredInput({
+  currentAge: 66, retirementAge: 66, planningAge: 71,
+  currentCapital: 100_000,
+  // Fund-only portfolio: bank legs honestly reject negative gross paths (no
+  // clamp/resample/drop), so the bootstrap comparisons use fund holdings only.
+  estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 100_000,
+    holding: 'accumulating-equity-fund' as const,
+    returnSeriesId: 'synthetic-equity-assumption-v1' }],
+  retirementIncomeStreams: [pension({ amountMonthlyToday: 50, effectiveDeductionRate: 0.05 })],
+  retirementInsurance: automaticInsurance({
+    bridge: { status: 'unknown', circumstances: 'standard' },
+    pension: { status: 'voluntary', circumstances: 'standard', drvSubsidy: 'confirmed' },
+  }),
+})
 const settings = {
-  portfolioComponents: createPortfolioComponents({ equity: 0.7, bonds: 0.2, fixed: 0.1 }, DEFAULT_HISTORICAL_RETURN_SERIES_IDS),
+  portfolioComponents: createPortfolioComponentsFromBuckets(insured.estimatorPortfolio!),
   inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   simulations: 5,
 }
-const insured: RentenlueckeInput = insuredInput({
-  currentAge: 66, retirementAge: 66, planningAge: 71,
-  retirementIncomeStreams: [pension({ amountMonthlyToday: 50, effectiveDeductionRate: 0.05 })],
-  retirementInsurance: automaticInsurance({
-    bridge: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 20000 },
-    pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 20000, drvSubsidy: 'confirmed' },
-  }),
-})
 
 describe('insurance bootstrap and reference consistency', () => {
   it('keeps market seeds stable for insurance-only edits and repeats identical summaries', () => {
     const manual = { ...insured, retirementInsurance: automaticInsurance({
+      capitalEstimator: insured.retirementInsurance!.capitalEstimator,
       bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
     }) }
@@ -39,16 +48,33 @@ describe('insurance bootstrap and reference consistency', () => {
     const reference = simulateHistoricalBootstrapReferenceScenario(insured, settings)
     const bootstrap = simulateHistoricalBootstrapScenario(insured, settings)
     expect(reference.metadata.sampledYears).toEqual(bootstrap.metadata.sampledYears)
-    for (const [index, row] of reference.retirementRows.entries()) {
-      const sample = bootstrap.retirementRows[index]
-      expect(row.retirementIncomeNet).toBe(sample.retirementIncomeNet)
-      expect(row.healthInsurance).toBe(sample.healthInsurance)
-      expect(row.careInsurance).toBe(sample.careInsurance)
-      expect(row.gapWithdrawal).toBe(sample.gapWithdrawal)
+    // Modeled assessment path: insurance costs exceed the 570/yr pension income,
+    // so available income is negative and the gap exceeds desired spending.
+    for (const row of [...reference.retirementRows, ...bootstrap.retirementRows]) {
       expect(row.retirementIncomeNet).toBeLessThan(0)
       expect(row.gapWithdrawal).toBeGreaterThan(row.desiredSpending)
     }
-    expect(reference.summary.requiredCapitalAtRetirement).toBe(bootstrap.summary.requiredCapitalAtRetirement)
+    // Pension tax is capital-independent, so it matches exactly across return paths.
+    for (const [index, row] of reference.retirementRows.entries()) {
+      expect(row.pensionIncomeTax).toBe(bootstrap.retirementRows[index].pensionIncomeTax)
+    }
+    // Exact cashflow identity where insurance is return-independent (manual totals):
+    // gaps then differ only by the funded capital-tax component.
+    const manual = { ...insured, retirementInsurance: automaticInsurance({
+      capitalEstimator: insured.retirementInsurance!.capitalEstimator,
+      bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+      pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
+    }) }
+    const manualReference = simulateHistoricalBootstrapReferenceScenario(manual, settings)
+    const manualBootstrap = simulateHistoricalBootstrapScenario(manual, settings)
+    for (const [index, row] of manualReference.retirementRows.entries()) {
+      const sample = manualBootstrap.retirementRows[index]
+      expect(row.retirementIncomeNet).toBe(sample.retirementIncomeNet)
+      expect(row.healthInsurance).toBe(sample.healthInsurance)
+      expect(row.careInsurance).toBe(sample.careInsurance)
+      expect(row.gapWithdrawal - sample.gapWithdrawal).toBeCloseTo(
+        (row.capitalIncomeTax ?? 0) - (sample.capitalIncomeTax ?? 0), 8)
+    }
   })
 
   it('aggregates actual insured path ledgers into bootstrap percentiles', () => {
@@ -56,13 +82,14 @@ describe('insurance bootstrap and reference consistency', () => {
     const rng = createSeededRandom(summary.metadata.seed)
     const inflation = findInflationSourceOption(settings.inflationSourceId, insured.annualInflationRate)!
     const years = getValidHistoricalYears(settings.portfolioComponents, inflation)
+    const horizon = insured.planningAge - insured.currentAge
     const paths = Array.from({ length: settings.simulations }, () => {
       const pathSeed = Math.floor(rng() * 4_294_967_296)
       const returnSeed = Math.floor(rng() * 4_294_967_296)
-      const sampled = sampleHistoricalYearsForPath(settings.portfolioComponents, inflation, years, 5, pathSeed)
-      return simulateScenarioWithReturnPath(insured,
-        generateHistoricalReturnPath(settings.portfolioComponents, inflation, sampled, createSeededRandom(returnSeed)),
-        generateHistoricalInflationPath(inflation, sampled))
+      const sampled = sampleHistoricalYearsForPath(settings.portfolioComponents, inflation, years, horizon, pathSeed)
+      return simulateScenarioWithReturnPath(insured, [],
+        generateHistoricalInflationPath(inflation, sampled),
+        sampledBucketReturns(settings.portfolioComponents, inflation, sampled, createSeededRandom(returnSeed)))
     })
     for (const [index, row] of summary.rows.entries()) {
       const capital = paths.map((path) => path.rows[index].closingCapitalToday).sort((a, b) => a - b)

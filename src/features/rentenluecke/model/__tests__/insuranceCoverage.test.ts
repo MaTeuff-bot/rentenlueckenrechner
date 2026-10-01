@@ -96,8 +96,17 @@ it('completed coverage preserves full ledger, required capital and fixed-seed st
   const input = insuredInput({ currentAge: 65, retirementAge: 65, annualInflationRate: .02 })
   const adapted = { ...input, retirementInsurance: applyCoverage(input.retirementInsurance!, completedCoverage()) }
   expect(simulateScenario(adapted)).toEqual(simulateScenario(input))
+  // Stochastic parity on a fund-only portfolio: sampled bank legs honestly
+  // reject negative gross paths (no clamp/resample/drop), so the fixed-seed
+  // comparison uses fund holdings only; fund legs model negative years directly.
+  const fundBucket = input.estimatorPortfolio!.find(bucket => bucket.holding === 'accumulating-equity-fund')!
+  const fundOnlyBase = { ...input, currentCapital: fundBucket.value, estimatorPortfolio: [{ ...fundBucket }],
+    retirementInsurance: { ...input.retirementInsurance!,
+      capitalEstimator: { ...input.retirementInsurance!.capitalEstimator!, fundAcquisitionCost: fundBucket.value } } }
+  const fundOnlyAdapted = { ...fundOnlyBase, retirementInsurance: applyCoverage(fundOnlyBase.retirementInsurance!, completedCoverage()) }
+  expect(simulateScenario(fundOnlyAdapted)).toEqual(simulateScenario(fundOnlyBase))
   const settings = { simulations: 8, seed: 8123, allocation: { equity: .6, bonds: .3, fixed: .1 } }
-  expect(runStochasticSimulation(adapted, settings)).toEqual(runStochasticSimulation(input, settings))
+  expect(runStochasticSimulation(fundOnlyAdapted, settings)).toEqual(runStochasticSimulation(fundOnlyBase, settings))
 })
 
 describe.each(['bridge', 'pension'] as const)('binding conservative transfer from %s', source => {

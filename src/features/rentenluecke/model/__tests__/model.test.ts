@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { cashOnlyInput } from './insuranceFixtures'
+import { cashOnlyInput, withFullCostBasis, zeroBucketPath } from './insuranceFixtures'
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { normalizeInput } from '../normalizeInput'
 import { simulateAccumulationRows } from '../simulateAccumulation'
 import { simulateRetirementRows } from '../simulateRetirement'
 import { simulateScenario } from '../simulateScenario'
+import { simulateScenarioWithReturnPath } from '../stochasticReturns'
 import type { RentenlueckeInput } from '../types'
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
@@ -18,39 +19,50 @@ describe('Rentenluecke model', () => {
     // Rentenbesteuerung (slice 2) applies: the inflated pension (2 % default
     // inflation over 27 years, 97.5 % Besteuerungsanteil for Rentenbeginn 2053)
     // owes 4,105.06 pension tax against a 4,096.53 pre-tax surplus, leaving a
-    // small first-year gap of 8.53. Required capital funds that net gap.
-    const result = simulateScenario(
-      input({
-        currentCapital: 10_000,
-        monthlyDesiredSpendingToday: 1_800,
-        monthlyRetirementIncomeToday: 2_000,
-      }),
-    )
+    // small first-year gap of 8.53. Pension tax and gap are return-independent;
+    // the mandatory detailed ledger runs at explicitly modeled zero returns with
+    // a full cost basis (no capital tax), so required capital is the nominal
+    // 23-year gap sum within the ledger search's €1 stop epsilon (1,782.33).
+    const scenarioInput = withFullCostBasis(input({
+      currentCapital: 10_000,
+      monthlyDesiredSpendingToday: 1_800,
+      monthlyRetirementIncomeToday: 2_000,
+    }))
+    const result = simulateScenarioWithReturnPath(scenarioInput, [], undefined,
+      zeroBucketPath(scenarioInput, scenarioInput.planningAge - scenarioInput.currentAge))
 
     const first = result.retirementRows[0]
     expect(first.pensionIncomeTax).toBeCloseTo(4105.061976321859, 8)
     expect(first.gapWithdrawal).toBeCloseTo(8.534432383203239, 8)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(1132.1350429656745, 8)
+    const gapSum = result.retirementRows.reduce((sum, row) => sum + row.gapWithdrawal, 0)
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(gapSum)
+    expect(required).toBeLessThanOrEqual(gapSum + 1)
     expect(result.summary.monthlyGapToday).toBeCloseTo(5 / 12, 8)
     expect(result.retirementRows.every((row) => row.gapWithdrawal === 0)).toBe(false)
   })
 
   it('uses annual gap times retirement years as required capital with no return and no inflation', () => {
-    const result = simulateScenario(
-      input({
-        retirementAge: 67,
-        planningAge: 70,
-        monthlyDesiredSpendingToday: 3_000,
-        monthlyRetirementIncomeToday: 2_000,
-        annualInflationRate: 0,
-        annualReturnInRetirement: 0,
-      }),
-    )
-
     // Slice 2: the 24,000 GRV pension (Rentenbeginn 2053 → 97.5 %) owes 2,405/yr
-    // GRV-Rentensteuer, so each year's gap is 12,000 + 2,405 = 14,405 and the
-    // required capital is 3 × 14,405 = 43,215 (the gap is net of ALL deductions).
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(43_215, 0)
+    // GRV-Rentensteuer, so each year's gap is 12,000 + 2,405 = 14,405 (net of ALL
+    // deductions). The mandatory detailed ledger runs at explicitly modeled zero
+    // returns with a full cost basis (no capital tax), so required capital is the
+    // 3 × 14,405 = 43,215 nominal sum within the ledger search's €1 stop epsilon.
+    const scenarioInput = withFullCostBasis(input({
+      retirementAge: 67,
+      planningAge: 70,
+      monthlyDesiredSpendingToday: 3_000,
+      monthlyRetirementIncomeToday: 2_000,
+      annualInflationRate: 0,
+      annualReturnInRetirement: 0,
+    }))
+    const result = simulateScenarioWithReturnPath(scenarioInput, [], undefined,
+      zeroBucketPath(scenarioInput, scenarioInput.planningAge - scenarioInput.currentAge))
+
+    expect(result.retirementRows.map(row => row.gapWithdrawal)).toEqual([14_405, 14_405, 14_405])
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(43_215)
+    expect(required).toBeLessThanOrEqual(43_216)
   })
 
   it('applies accumulation return before adding the end-of-year contribution', () => {

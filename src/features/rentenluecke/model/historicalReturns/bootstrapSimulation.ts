@@ -2,8 +2,6 @@ import { simulateCapitalLedgerPath } from '../capitalIncome/ledger'
 import { normalizeInput } from '../normalizeInput'
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { expectedBucketReturns, sampledBucketReturns } from '../capitalIncome/returns'
-import { needsEstimator } from '../capitalIncome/setup'
-import { simulateScenario } from '../simulateScenario'
 import { createSeededRandom, simulateScenarioWithReturnPath } from '../stochasticReturns'
 import type { RentenlueckeInput } from '../types'
 import {
@@ -38,7 +36,7 @@ export function simulateHistoricalBootstrapScenario(
   const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
   return {
-    ...simulateScenarioWithReturnPath(input, returnPath, inflationPath, needsEstimator(input) ? sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(seed)) : undefined),
+    ...simulateScenarioWithReturnPath(input, returnPath, inflationPath, sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(seed))),
     metadata: { validYears, sampledYears, seed },
   }
 }
@@ -48,7 +46,7 @@ export function simulateHistoricalBootstrapReferenceScenario(
   settings: HistoricalBootstrapSettings,
 ): HistoricalBootstrapScenarioResult {
   const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
-  const baseline = needsEstimator(input) ? { rows: Array.from({ length: input.planningAge - input.currentAge }) } : simulateScenario(input)
+  const baseline = { rows: Array.from({ length: input.planningAge - input.currentAge }) }
   const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
   const seed = createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 })
   const sampledYears = sampleHistoricalYearsForPath(
@@ -63,7 +61,7 @@ export function simulateHistoricalBootstrapReferenceScenario(
   const expectedReturnPath = Array.from({ length: baseline.rows.length }, () => expectedAnnualReturn)
 
   return {
-    ...simulateScenarioWithReturnPath(input, expectedReturnPath, generateHistoricalInflationPath(inflationSource, sampledYears), needsEstimator(input) ? expectedReturnPath.map(() => expectedBucketReturns(input, settings)) : undefined),
+    ...simulateScenarioWithReturnPath(input, expectedReturnPath, generateHistoricalInflationPath(inflationSource, sampledYears), expectedReturnPath.map(() => expectedBucketReturns(input, settings))),
     metadata: { validYears, sampledYears, seed },
   }
 }
@@ -73,7 +71,7 @@ export function runHistoricalBootstrapSimulation(
   settings: HistoricalBootstrapSettings,
 ): HistoricalBootstrapSimulationSummary {
   const inflationSource = getRequiredInflationSource(settings.inflationSourceId, input.annualInflationRate)
-  const baseline = needsEstimator(input) ? { rows: Array.from({ length: input.planningAge - input.currentAge }) } : simulateScenario(input)
+  const baseline = { rows: Array.from({ length: input.planningAge - input.currentAge }) }
   const validYears = getValidHistoricalYears(settings.portfolioComponents, inflationSource)
   const years = baseline.rows.length
   const seed = createHistoricalBootstrapSeed(input, settings)
@@ -86,23 +84,16 @@ export function runHistoricalBootstrapSimulation(
     createHistoricalBootstrapSeed(input, { ...settings, simulations: 1 }),
   )
   const referenceResult = simulateHistoricalBootstrapReferenceScenario(input, settings)
-  const capitalScenario = needsEstimator(input) ? normalizeInput(rentenlueckeInputSchema.parse(input)) : null
+  const capitalScenario = normalizeInput(rentenlueckeInputSchema.parse(input))
   const pathResults = Array.from({ length: settings.simulations }, () => {
     const pathSeed = Math.floor(rng() * 4_294_967_296)
     const returnSeed = Math.floor(rng() * 4_294_967_296)
     const sampledYears = sampleHistoricalYearsForPath(settings.portfolioComponents, inflationSource, validYears, years, pathSeed)
-    const returnPath = generateHistoricalReturnPath(
-      settings.portfolioComponents,
-      inflationSource,
-      sampledYears,
-      createSeededRandom(returnSeed),
-    )
     const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
-    if (capitalScenario) return simulateCapitalLedgerPath(capitalScenario,
+    return simulateCapitalLedgerPath(capitalScenario,
       sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(returnSeed)),
       index => inflationPath[index] ?? input.annualInflationRate)
-    return simulateScenarioWithReturnPath(input, returnPath, inflationPath)
   })
   const successfulPaths = pathResults.filter((result) => result.summary.survivesUntilPlanningAge).length
   const rows = referenceResult.rows.map((referenceRow, rowIndex) => {
