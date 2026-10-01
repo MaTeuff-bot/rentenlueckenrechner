@@ -25,10 +25,10 @@ The demonstrated benefit is timeout reliability on this one-CPU container. No su
 | Candidate, same profiling reporters | 1 | 215.70 | 730/730; 39 files |
 | Final ordinary command, run 1 | 1 | 233.14 | 730/730; 39 files |
 | Final ordinary command, run 2 (consecutive) | 1 | 221.25 | 730/730; 39 files |
-| Baseline maintained Playwright | 1 | 298.02 | 9/9 |
+| Baseline maintained Playwright | 1 | 298.02* | 9/9 |
 | Final maintained Playwright | 1 | 297.36 | 9/9 |
 
-The one comparable profiling pair is about 3.5% shorter wall time, but final ordinary runs straddle the baseline. This is not evidence for a general performance target or 30–40% speedup. Summed test execution fell from 332.05s to 165.23s under lower contention, while removing concurrency means that improvement does not translate directly to suite wall time. Three candidate full runs passed; this does not guarantee flake elimination under all loads.
+*Coordinator-recorded wall value (log independently confirms 9/9; exact seconds not independently JSON-verified). The one comparable profiling pair is about 3.5% shorter wall time, but final ordinary runs straddle the baseline. This is not evidence for a general performance target or 30–40% speedup. Vitest-reported aggregate tests time fell from 332.05s to 165.23s under lower contention, while removing concurrency means that improvement does not translate directly to suite wall time. Three candidate full runs passed; this does not guarantee flake elimination under all loads.
 
 Selected per-test profiling durations (seconds):
 
@@ -45,7 +45,7 @@ Synchronous work can overrun the nominal timeout before Vitest reports failure. 
 
 ## Review and gates
 
-- Independent fresh-context review: no blocking findings. Specifically audited byte-unchanged application tests, actual cgroup selection, two-CPU fixtures, tight ancestors, and portable host tests. One README fallback wording error was corrected: failed affinity lookup conservatively selects 1, not `cpus().length`.
+- Independent fresh-context review: no blocking findings. Specifically audited byte-unchanged application tests, actual cgroup selection, two-CPU fixtures, tight ancestors, and portable host tests. One README fallback wording error was corrected: failed affinity lookup conservatively selects 1, not `cpus().length`. A fresh final-head review at `50a0308` re-verified preservation, evidence reconciliation and non-blocking notes (Vitest aggregate metric wording; baseline Playwright wall is coordinator-reported).
 - Coordinator verified lint, `npx tsc -b`, production build, two consecutive ordinary full Vitest runs, and maintained Playwright suite. Playwright desktop Chromium plus narrow smoke is not Safari/mobile-browser equivalence.
 - Planning and implementation used the configured Codex Meta `muse-spark-1.3-contributor` / `xhigh` lane. Coordinator preserved the diff when a lane revision repeated completed checks, then independently verified it. Coordinator made documentation/evidence edits only.
 - Baseline and profiled candidate emitted the existing React suspended-resource `act(...)` warning; no assertion failure resulted. It is not hidden by a config change.
