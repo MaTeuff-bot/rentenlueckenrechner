@@ -82,7 +82,7 @@ npm run build       # tsc -b && vite build
 
 ### Test-Worker
 
-`vitest.config.ts` nutzt `maxWorkers: resolveMaxWorkers()` aus `vitest.workers.ts`: `max(1, min(2, Affinität, floor(Quota/Periode)))` bei endlicher positiver Cgroup-Quote, sonst `max(1, min(2, Affinität))`. Reihenfolge v2-`cpu.max`, dann v1-`cpu.cfs_quota_us`/`cpu.cfs_period_us`, dann Affinität (`availableParallelism`, konservativer Fallback: 1). Es werden nur `/sys/fs/cgroup` (v2) sowie `/sys/fs/cgroup/cpu` und `/sys/fs/cgroup/cpu,cpuacct` (v1) gelesen; der Pfad aus `/proc/self/cgroup` wird samt Vorfahren geprüft, die engste Quote gewinnt. Eigene Mounts fallen auf die gedeckelte Affinität zurück. Kein Env-Override; `testTimeout: 10_000` und alle Fixtures bleiben unverändert.
+`vitest.config.ts` setzt fest `maxWorkers: 1`: die Unit-Suite läuft in einer konsistent bereitgestellten Umgebung (1-CPU-Container lokal, CI-Runner), Cgroup-Erkennung war unnötige Komplexität. Ein Worker hält simulationslastige Tests unter den 10-s-Budgets; `testTimeout: 10_000` und alle Fixtures bleiben unverändert. Messung: docs/verification/test-performance-workers.md.
 
 ### Dependabot
 
