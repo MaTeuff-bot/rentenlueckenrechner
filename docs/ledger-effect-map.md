@@ -19,7 +19,7 @@ Cashflows: `contribution`, `desiredSpending`, `retirementIncome(Gross/Net)`,
 Embedded sub-ledgers (each with its own doc):
 - `insurance` — KV/PV contribution line
   (`docs/gkv-pv-rules-2026.md`)
-- `capitalAssessment` — automatic capital-income estimator year
+- `capitalAssessment` — detailed capital-income estimator year (mandatory in every insurance mode)
   (`docs/insurance-capital-estimator.md`)
 
 ## Effect map (feature → reads → writes)

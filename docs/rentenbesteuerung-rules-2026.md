@@ -80,9 +80,11 @@ NOT enter the zvE (Abgeltung fertig, slices 1/1b are separate).
 - GRV pensions starting before the simulation use the simulation's first GRV
   year for the Rentenfreibetrag (no historical pension data in the model).
 - Pre-2023 pension starts use the linear Besteuerungsanteil extension.
-- The estimator funding take realizes no capital gains and retains the loss
-  carryforward (slight optimistic bias on future capital-tax estimates,
-  small versus holdings).
+- The estimator funding take only scales holdings down proportionally: it realizes
+  no capital gains, releases no acquisition-cost or Vorabpauschalen history,
+  and leaves the loss carryforward unchanged. No error bound is established
+  by this implementation — the funded take's own capital tax is unmodeled and
+  later capital-tax estimates can be distorted.
 - Quarterly prepayments, Steuerbescheid timing, or discounting of the tax to a
   different year than its assessment.
 

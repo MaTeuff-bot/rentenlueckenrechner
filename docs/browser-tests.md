@@ -19,14 +19,29 @@ Journeys (all on Chromium unless noted):
    chart and year table.
 2. `e2e/readiness-links.spec.ts` — missing answers block the forecast, issue
    links focus the relevant controls, correcting enables results.
-3. `e2e/persistence.spec.ts` — reload retains portfolio and insurance
-   settings and recomputes results.
-4. `e2e/capital-mode.spec.ts` — automatic/manual capital-assessment switching
-   updates inputs, readiness and disclosures.
-5. `e2e/bank-rejection.spec.ts` — existing unsupported negative-gross-bank-return
+3. `e2e/persistence.spec.ts` — reload retains the nonzero cost basis,
+   holdings, insurance answers and the deterministic required-capital result
+   text (stable text compared before/after, not discarded).
+4. `e2e/capital-mode.spec.ts` — mandatory detailed-portfolio gating across
+   insurance modes: no per-phase capital selects, mode switching preserves
+   portfolio settings, whole-phase manual totals never bypass the portfolio,
+   breaking portfolio setup blocks the forecast again; KVdR pension keeps the
+   same gating, shows the KVdR label, preserves the nonzero basis across
+   mode switches and asserts the precise pension-tax funding limitation in
+   the visible tax notes.
+5. `e2e/insurance-manual.spec.ts` — fresh both-phase whole totals via the
+   explicit manual radios with automatic-only family/subsidy answers
+   UNANSWERED (suggested additional rate cleared, no children answer, no DRV
+   subsidy branch): missing portfolio cost/scope blocks the forecast,
+   completing the estimator with a nonzero basis enables detailed results
+   with the manual totals as the selected contributions; basis, holdings and
+   manual totals survive insurance switches and reload. All visible-control
+   journeys use fresh UI input only (no seeded storage, no engine injection,
+   no force clicks).
+6. `e2e/bank-rejection.spec.ts` — existing unsupported negative-gross-bank-return
    rejection via real controls (bank + synthetic cash). Asserts the
    `Negative bank return` error and absent forecast; no bank success is claimed.
-6. `e2e/narrow-smoke.spec.ts` — narrow-viewport smoke of journey 1 (project `narrow`).
+7. `e2e/narrow-smoke.spec.ts` — narrow-viewport smoke of journey 1 (project `narrow`).
 
 Shared helpers live in `e2e/fixtures.ts` with explicit readiness answers
 derived from `model/capitalIncome/setup.ts`,

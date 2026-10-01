@@ -17,8 +17,9 @@ Statute recheck date: `2026-09-25` (EStG §20(1)7/(6)/(9), §32d; InvStG §§20/
 - Opening holdings, acquisition costs, assessed/pending Vorabpauschalen, the
   once-credited gross bank interest (`bankInterest`, from the gross bank yield —
   fees and net returns never reduce it) and loss carryforward from the estimator
-  state (only in automatic-capital mode; manual capital estimates have no
-  holdings breakdown, see boundary below).
+  state (the detailed portfolio is mandatory in every insurance mode; retired
+  per-phase manual capital estimates have no holdings breakdown and no engine
+  meaning, see boundary below).
 - Inflation factor (nominal ledger units throughout; no separate real-tax track).
 
 **Writes (per year, new optional fields on `YearlyPeriodRow`):**
@@ -71,16 +72,14 @@ reference-scenario and invariant suites pin the new numbers.
 - Tax on capital income *outside* realized sales/VP/gross bank interest (unrealized gains, thesaurierung
   without sale; dividends are not supported holdings anyway — accumulating funds
   and bank deposits only).
-- Accumulation-phase tax (Umschichtung gains AND bank interest) only in automatic-capital
-  (estimator) mode; manual capital estimates keep the disclosed withdrawal-only
-  approximation with no Ansparphasen modeling and no separately identified bank interest.
+- Accumulation-phase tax (Umschichtung gains AND bank interest) is always modeled in the detailed portfolio ledger (mandatory in every insurance mode); there is no manual withdrawal-only approximation.
 - Quarterly prepayments, Steuerbescheid timing, or discounting of the tax to a
   different year than its assessment.
 - No Krypto, Termingeschäfte, REIT special rules, or foreign withholding tax.
 
 Scope declaration (estimator pattern): `single-person-domestic-private-post-2017-no-special-events`,
 allowance mode `single-sparerpauschbetrag`. Any state outside the declaration blocks
-the tax calculation and falls back to the disclosed pre-tax numbers.
+the forecast; there is no fallback to disclosed pre-tax numbers.
 
 ## Vertical slice
 
@@ -91,4 +90,4 @@ the tax calculation and falls back to the disclosed pre-tax numbers.
   `capitalIncomeTax` and net spendable amounts.
 - PR1 bank interest (this PR): gross bank interest joins the same assessment after
   the fund-only exemption (no separate recomputation; ledger rows consume the
-  corrected totals); manual approximation unchanged; statute recheck 2026-09-25.
+  corrected totals); mandatory detailed portfolio in every insurance mode; statute recheck 2026-09-25.

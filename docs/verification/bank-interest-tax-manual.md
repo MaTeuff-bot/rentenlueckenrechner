@@ -36,10 +36,9 @@ Engine behavior underneath is covered by
    (`estimator-fundAcquisitionCost`) explicitly (0 allowed); tick
    `Anlageumfang bestätigt…` (`estimator-scopeConfirmed`) and
    `Verlustumfang bestätigt…` (`estimator-lossScopeConfirmed`).
-3. Tab `Versicherung`: set BOTH `Kapitalbasis – Brücke`
-   (`insurance-bridge-capitalMode`) and `Kapitalbasis – Rentenphase`
-   (`insurance-pension-capitalMode`) to
-   `Automatisch aus dem Portfolio schätzen`; answer per-phase
+3. Tab `Versicherung`: there are no per-phase `Kapitalbasis` selects anymore —
+   the detailed portfolio taxes every insurance mode with the same method.
+   Answer per-phase
    `Versicherungsstatus` (`insurance-{phase}-status`), `Besondere Umstände`
    coverage, own monthly KV/PV where required,
    `Rentenversicherungszuschuss einplanen?` (`insurance-pension-drvSubsidy`) for
@@ -87,30 +86,25 @@ therefore be guaranteed from source; the steps below are conditional, and the
 ## 3. Unsupported-path stop / report instruction
 
 If `Ergebnis` shows `Berechnung unvollständig: … Negativer
-Brutto-Bankzinspfad nicht abgedeckt … Automatische Kapitalbasis prüfen oder
-ausdrücklich manuelle Kapitalertragsschätzung wählen.` (a sampled bootstrap
+Brutto-Bankzinspfad nicht abgedeckt … Quelle prüfen. Detaillierte Kapitalbasis
+im Vermögen prüfen.` (a sampled bootstrap
 year drew negative gross bank interest, which `simulateEstimatorYear`
 rejects): STOP. Record fixture + message (screenshot/note) and report it — do
-not clamp, edit, or bypass draws. Then either set the affected phase(s) to
-`Manuelle Kapitalertragsschätzung` (§4) or replace the bank return source and
-re-run. Note the whole `Ergebnis` (plan table AND P10/P50/P90) blanks together:
+not clamp, edit, or bypass draws. Then replace the bank return source and
+re-run; there is no manual capital fallback anymore. Note the whole `Ergebnis` (plan table AND P10/P50/P90) blanks together:
 both are computed in one bootstrap run, so one rejected bank draw fails the
 entire calculation, not just a distribution tail.
 
-## 4. Manual mode (BOTH phases required for scalar wording)
+## 4. Retired per-phase manual capital estimates (no scalar wording anymore)
 
-1. Set BOTH `insurance-bridge-capitalMode` AND `insurance-pension-capitalMode`
-   to `Manuelle Kapitalertragsschätzung` and enter both
-   `Beitragsrelevante Kapitalerträge – … (€/Monat heute)` values
-   (`insurance-{phase}-capitalMonthlyToday`, 0 allowed). One phase alone is not
-   enough: the other phase keeps detailed (`capitalAssessment`) rows, so
-   cause-aware labels persist.
-2. Expect only when no detailed rows remain: title
-   `Kapitalertragsteuer Entnahme + Umschichtung` (scalar wording, no
-   parentheses) plus the pauschal disclosure under
-   `Hinweise zur Renten- und Kapitalertragsteuer`
-   (`Entnahmen ohne Depotaufschlüsselung … Bankzinsen sind darin nur pauschal
-   enthalten …`); bank interest is never separately identified here.
+Per-phase `Kapitalbasis` selects and `Beitragsrelevante Kapitalerträge`
+inputs no longer exist: every forecast uses the detailed portfolio, so
+cause-aware capital labels always apply and the old scalar wording
+(`Kapitalertragsteuer Entnahme + Umschichtung`, `Entnahmen ohne
+Depotaufschlüsselung …`) must never appear. Whole-phase manual KV/PV totals
+(`unsupported` circumstances) replace only the insurance contributions —
+verify they never change capital labels and never unblock an incomplete
+portfolio setup.
 
 ## 5. Plan vs distribution (do not hand-compare)
 
@@ -127,6 +121,7 @@ entire calculation, not just a distribution tail.
 ## 6. Persistence / reload
 
 1. Reload the page: buckets, holding classification, estimator checkboxes + fund
-   cost, per-phase `Kapitalbasis`, and insurance answers must survive
+   cost, and insurance answers must survive
    (localStorage `rentenlueckenrechner.scenario.v15`) and results must
-   recompute identically.
+   recompute identically. Retired per-phase `Kapitalbasis` fields are dropped
+   on save; a stored legacy payload only raises the honest change notice.

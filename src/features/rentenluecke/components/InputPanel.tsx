@@ -1,5 +1,5 @@
 import type { InsuranceCoverageAnswers } from '../model/insuranceCoverage'
-import { needsEstimator } from '../model/capitalIncome/setup'
+import { needsDetailedPortfolio } from '../model/capitalIncome/setup'
 import type { PortfolioEstimatorReadiness, PortfolioEstimatorSettings } from '../model/capitalIncome/portfolioEstimator'
 import { portfolioEstimatorReadiness } from '../model/capitalIncome/portfolioEstimator'
 import { CapitalEstimatorSetup } from './InputPanel/CapitalEstimatorSetup'
@@ -173,7 +173,7 @@ export function InputPanel({
   }
   const tabStatus = (tabId: InputTabId): string => getTabStatus(tabId, issues)
   const tabSummary = (tabId: InputTabId): string => getTabSummary(tabId, summaryContext)
-  const needsAutomaticEstimator = needsEstimator(input)
+  const needsAutomaticEstimator = needsDetailedPortfolio(input)
   const portfolioReadiness = portfolioReadinessProp ?? portfolioEstimatorReadiness(portfolioEstimatorSettings, portfolioBuckets, calculatePortfolioBucketTotal(portfolioBuckets))
   const jumpToEstimatorField = (fieldId: string) => {
     setActiveTab('vermoegen')
@@ -182,10 +182,8 @@ export function InputPanel({
   }
   const jumpToInsuranceBlock = () => {
     setActiveTab('versicherung')
-    const modeSelect = typeof document === 'undefined' ? null : document.querySelector<HTMLSelectElement>('select[id^="insurance-"][id$="-capitalMode"]')
-    const target = modeSelect?.id ?? 'insurance-block-3-heading'
-    focusField(target)
-    window.setTimeout(() => focusField(target), 0)
+    focusField('insurance-block-3-heading')
+    window.setTimeout(() => focusField('insurance-block-3-heading'), 0)
   }
   const handleIssueClick = (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
     event.preventDefault()

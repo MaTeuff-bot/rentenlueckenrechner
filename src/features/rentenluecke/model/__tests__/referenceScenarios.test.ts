@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { applyCoverage, type InsuranceCoverageAnswers } from '../insuranceCoverage'
 import { completedCoverage } from './insuranceFixtures'
 import { timelineBoundary } from '../scenarioTimeline'
-import { automaticInsurance, cashOnlyInput, insuredInput, pension } from './insuranceFixtures'
+import { automaticInsurance, cashOnlyInput, insuredInput, pension, withFullCostBasis, zeroBucketPath } from './insuranceFixtures'
 import { clearHiddenInvalidInsuranceValues } from '../retirementInsurance'
 import { simulateScenario } from '../simulateScenario'
-import { simulateScenarioWithReturnPath, runStochasticSimulation, createSeededRandom, generatePortfolioReturnPath } from '../stochasticReturns'
+import { simulateScenarioWithReturnPath, runStochasticSimulation } from '../stochasticReturns'
 import { runHistoricalBootstrapSimulation, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
-import { needsEstimator } from '../capitalIncome/setup'
+import { needsDetailedPortfolio } from '../capitalIncome/setup'
 import type { RentenlueckeInput, YearlyPeriodRow } from '../types'
 
 /**
@@ -96,7 +96,7 @@ const deterministicSettings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, si
 
 /** S1: standard KVdR retirement, tiny horizon so every figure is hand-computable. */
 export function kvdrStandardScenario(): RentenlueckeInput {
-  return cashOnlyInput({
+  return withFullCostBasis(cashOnlyInput({
     currentAge: 66, retirementAge: 67, planningAge: 69,
     currentCapital: 100_000, monthlyContributionToday: 0,
     monthlyDesiredSpendingToday: 2_000,
@@ -110,12 +110,12 @@ export function kvdrStandardScenario(): RentenlueckeInput {
     retirementIncomeStreams: [
       { ...pension(), name: 'Gesetzliche Rente', support: 'standard' },
     ],
-  })
+  }))
 }
 
 /** S2: early retirement at 60, statutory pension at 67 → 7-year voluntary bridge. */
 export function earlyRetirementBridgeScenario(): RentenlueckeInput {
-  return cashOnlyInput({
+  return withFullCostBasis(cashOnlyInput({
     currentAge: 60, retirementAge: 60, planningAge: 72,
     currentCapital: 500_000, monthlyContributionToday: 0,
     monthlyDesiredSpendingToday: 2_500,
@@ -129,12 +129,12 @@ export function earlyRetirementBridgeScenario(): RentenlueckeInput {
     retirementIncomeStreams: [
       { ...pension({ startAge: 67 }), name: 'GV Rente' },
     ],
-  })
+  }))
 }
 
-/** S3: voluntary GKV in retirement with explicit manual capital-income basis. */
-export function voluntaryManualCapitalScenario(): RentenlueckeInput {
-  const input = cashOnlyInput({
+/** S3: voluntary GKV in retirement with the modeled portfolio assessment. */
+export function voluntaryPortfolioCapitalScenario(): RentenlueckeInput {
+  return withFullCostBasis(cashOnlyInput({
     currentAge: 67, retirementAge: 67, planningAge: 70,
     currentCapital: 200_000, monthlyContributionToday: 0,
     monthlyDesiredSpendingToday: 2_000,
@@ -143,14 +143,12 @@ export function voluntaryManualCapitalScenario(): RentenlueckeInput {
       pensionAge: 67, referenceYear: 2026, insurerAdditionalRate: 0.029,
       isParent: false, childrenConfirmed: true, childBirthYears: [],
       bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
-      pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'manual',
-        capitalMonthlyToday: 100, drvSubsidy: 'not-received' },
+      pension: { status: 'voluntary', circumstances: 'standard', drvSubsidy: 'not-received' },
     },
     retirementIncomeStreams: [
       { ...pension({ amountMonthlyToday: 1_500 }), name: 'GV Rente' },
     ],
-  })
-  return input
+  }))
 }
 
 /** S4: automatic capital-income estimator (accumulating fund + bank deposit). */
@@ -186,19 +184,19 @@ export function zeroStartAccumulationScenario(): RentenlueckeInput {
 
 /** S6: depleted capital in retirement (planning age outlives the money). */
 export function depletedScenario(): RentenlueckeInput {
-  return cashOnlyInput({
+  return withFullCostBasis(cashOnlyInput({
     currentAge: 67, retirementAge: 67, planningAge: 75,
     currentCapital: 10_000, monthlyContributionToday: 0,
     monthlyDesiredSpendingToday: 2_000,
     monthlyRetirementIncomeToday: 0,
     annualInflationRate: 0, annualReturnInRetirement: 0,
-  })
+  }))
 }
 
 const SCENARIOS = {
   'kvdr-standard': kvdrStandardScenario,
   'early-bridge': earlyRetirementBridgeScenario,
-  'voluntary-manual-capital': voluntaryManualCapitalScenario,
+  'voluntary-portfolio-capital': voluntaryPortfolioCapitalScenario,
   'estimator-automatic': estimatorScenario,
   'zero-start': zeroStartAccumulationScenario,
   'depleted': depletedScenario,
@@ -212,6 +210,11 @@ export type ScenarioName = keyof typeof SCENARIOS
 
 describe('reference scenario S1: standard KVdR retirement', () => {
   const input = prepare(kvdrStandardScenario())
+  // Mandatory detailed portfolio with explicitly modeled zero returns: the full
+  // cost basis means withdrawals realize no gains, and min(start × 0.7 × rate,
+  // end − start) = 0 accrues no Vorabpauschale, so no Kapitalertragsteuer arises.
+  const years = input.planningAge - input.currentAge
+  const zeroPath = zeroBucketPath(input, years)
 
   it('computes the hand-calculated ledger exactly', () => {
     // Age 67: pension 24,000 gross. KVdR: KV basis 24,000 ≤ ceiling 69,750 (5812.5*12);
@@ -221,8 +224,9 @@ describe('reference scenario S1: standard KVdR retirement', () => {
     // 24,000 → Rentenfreibetrag 15.5 % × 24,000 = 3,720 (frozen). Taxable share
     // 24,000-3,720 = 20,280; zvE 20,280-102-(2,100+1,008) = 17,070; §32a zone 2
     // (y=0.4722 → 864.99…) → pensionIncomeTax 864. Net 20,892-864 = 20,028.
-    // Desired 24,000 → gap 3,972/yr. Capital 100,000 at 0% funds 3 years; never depleted.
-    const result = simulateScenario(input)
+    // Desired 24,000 → gap 3,972/yr. Capital 100,000 at modeled 0% funds 3 years;
+    // never depleted.
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
     expect(result.retirementRows).toHaveLength(2)
     for (const row of result.retirementRows) {
       expect(row.retirementIncomeGross).toBeMoneyClose(24_000)
@@ -235,30 +239,37 @@ describe('reference scenario S1: standard KVdR retirement', () => {
     }
     expect(result.summary.survivesUntilPlanningAge).toBe(true)
     expectLedgerConservation(result.rows)
-    // Slice 1: zero return means no taxable gains, so no tax is assessed or funded;
-    // the gap is met in full and required capital is unchanged by the tax.
+    // No taxable gains, interest or Vorabpauschale at modeled zero returns, so no
+    // tax is assessed or funded. The 3,972 paid withdrawal funds exactly the
+    // 3,108 KV/PV share plus the 864 pension tax, leaving no net remainder.
     for (const row of result.retirementRows) {
       expect(row.capitalIncomeTax).toBeMoneyClose(0)
       expect(row.taxableWithdrawal).toBeMoneyClose(0)
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(0)
-      expect(row.netGapWithdrawal).toBeMoneyClose(row.gapWithdrawal)
+      expect(row.netGapWithdrawal).toBeCloseTo(0, 8)
     }
   })
 
   it('pins required capital: 3,972 for one year, funded forever at 0% with income above zero gap', () => {
-    // At 0% return the gap repeats 3,972 every year (3,108 pre-tax gap + 864
-    // GRV-Rentensteuer, slice 2); required capital = 2 × 3,972 = 7,944.
-    const result = simulateScenario(input)
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(7_944)
+    // At modeled 0% the gap repeats 3,972 every year (3,108 pre-tax gap + 864
+    // GRV-Rentensteuer, slice 2); required capital is the 2 × 3,972 = 7,944
+    // nominal sum within the ledger search's €1 stop epsilon.
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(7_944)
+    expect(required).toBeLessThanOrEqual(7_945)
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(100_000)
   })
 })
 
 describe('reference scenario S2: early retirement with voluntary bridge', () => {
   const input = prepare(earlyRetirementBridgeScenario())
+  // Whole-phase manual bridge totals (explicitly unsupported circumstances) plus
+  // the mandatory detailed portfolio at explicitly modeled zero returns.
+  const zeroPath = zeroBucketPath(input, input.planningAge - input.currentAge)
 
   it('runs the bridge manually at 67−60=7 years, then KVdR', () => {
-    const result = simulateScenario(input)
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
     expect(result.retirementRows).toHaveLength(12)
     const bridge = result.retirementRows.filter(r => r.ageStart < 67)
     const pensionPhase = result.retirementRows.filter(r => r.ageStart >= 67)
@@ -296,27 +307,57 @@ describe('reference scenario S2: early retirement with voluntary bridge', () => 
   })
 })
 
-describe('reference scenario S3: voluntary GKV with manual capital basis', () => {
-  const input = prepare(voluntaryManualCapitalScenario())
+describe('reference scenario S3: voluntary GKV with modeled portfolio assessment', () => {
+  const input = prepare(voluntaryPortfolioCapitalScenario())
+  // Mandatory detailed portfolio at explicitly modeled zero returns: no gains,
+  // interest or Vorabpauschale arise, so the solved annual capital assessment is
+  // exactly 0 and no Kapitalertragsteuer is assessed. The 18,000 pension alone
+  // sits below the 69,750 shared ceiling, so no capping applies.
+  const zeroPath = zeroBucketPath(input, input.planningAge - input.currentAge)
 
-  it('assesses pension, minimum top-up and capital in the shared ceiling', () => {
-    // Verified engine output (probe): voluntary pension 18,000 gross.
-    // KV: statutory 18,000×17.5% = 3,150, no KVdR share, plus capital basis
-    // 1,200×16.9% (reduced rate) = 202.80 → own KV 3,352.80.
-    // PV: childless surcharge, 4.2%×18,000 = 756 + capital 1,200×4.2% = 50.40 → 806.40.
-    const result = simulateScenario(input)
+  it('assesses the pension at the voluntary rates with no invented capital income', () => {
+    // Voluntary pension 18,000 gross: KV 18,000×17.5% = 3,150 (no KVdR half
+    // share, no DRV subsidy received); PV childless 4.2%×18,000 = 756.
+    // Slice 2: Rentenbeginn 2026 → 84%; freibetrag 16%×18,000 = 2,880; taxable
+    // 15,120; zvE = 15,120−102−(3,150+756) = 11,112 below the Grundfreibetrag →
+    // pensionIncomeTax 0. Net 18,000−3,150−756 = 14,094; gap 24,000−14,094 = 9,906.
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
+    expect(result.retirementRows).toHaveLength(3)
     for (const row of result.retirementRows) {
-      expect(row.careInsurance).toBeMoneyClose(806.4)
-      expect(row.portfolioContributionBase).toBeMoneyClose(1_200)
-      expect(row.healthInsurance).toBeMoneyClose(3_352.8)
-      // Slice 1: manual capital basis at 0% return has no taxable gains (gain-proportional
-      // base is zero), so no tax is assessed; the calculation is never blocked.
+      expect(row.retirementIncomeGross).toBeMoneyClose(18_000)
+      expect(row.portfolioContributionBase).toBe(0)
+      expect(row.healthInsurance).toBeMoneyClose(3_150)
+      expect(row.careInsurance).toBeMoneyClose(756)
+      expect(row.pensionTaxBase).toBeMoneyClose(15_120)
+      expect(row.pensionIncomeTax).toBe(0)
+      expect(row.retirementIncomeNet).toBeMoneyClose(14_094)
+      expect(row.gapWithdrawal).toBeMoneyClose(9_906)
       expect(row.capitalIncomeTax).toBeMoneyClose(0)
       expect(row.taxableWithdrawal).toBeMoneyClose(0)
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(0)
-      expect(row.netGapWithdrawal).toBeMoneyClose(row.gapWithdrawal)
     }
     expectLedgerConservation(result.rows)
+  })
+
+  it('uses the same tax method as KVdR with contribution-induced amounts, never double-deducted', () => {
+    // Same exogenous flows under KVdR: the statutory 17.5% applies to the same
+    // 18,000 assessment, but KVdR halves the own KV share (1,575 vs 3,150) while
+    // PV stays 756. The lower own insurance lowers Sonderausgaben, so zvE rises
+    // to 15,120−102−(1,575+756) = 12,687 → pensionIncomeTax 48 (vs 0 above);
+    // net 18,000−1,575−756−48 = 15,621; gap 8,379. Method identical, amounts
+    // differ only through the insurance rules; insurance is deducted exactly once.
+    const kvdr = prepare({ ...voluntaryPortfolioCapitalScenario(),
+      retirementInsurance: { ...voluntaryPortfolioCapitalScenario().retirementInsurance!,
+        pension: { status: 'kvdr', circumstances: 'standard' } },
+    })
+    const row = simulateScenarioWithReturnPath(kvdr, [], undefined, zeroBucketPath(kvdr, kvdr.planningAge - kvdr.currentAge)).retirementRows[0]
+    expect(row.insurance).toMatchObject({ selectedStatus: 'kvdr', effectiveStatus: 'kvdr' })
+    expect(row.healthInsurance).toBeMoneyClose(1_575)
+    expect(row.careInsurance).toBeMoneyClose(756)
+    expect(row.pensionIncomeTax).toBeMoneyClose(48)
+    expect(row.retirementIncomeNet).toBeMoneyClose(15_621)
+    expect(row.gapWithdrawal).toBeMoneyClose(8_379)
+    expect(row.retirementIncomeDeductions).toBeMoneyClose(row.retirementIncomeOtherDeductions + row.healthInsurance + row.careInsurance)
   })
 })
 
@@ -330,7 +371,7 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
   ])
 
   it('needs the estimator and funds it from the actual portfolio', () => {
-    expect(needsEstimator(input)).toBe(true)
+    expect(needsDetailedPortfolio(input)).toBe(true)
     const result = simulateScenarioWithReturnPath(input, [], undefined, bucketPath)
     // Year 1 (age 66, accumulation): opening 100,000; return 60,000*.06+40,000*.02 = 4,400;
     // closing 104,400. KV/PV of accumulation phase are 0 (paid outside the portfolio).
@@ -416,29 +457,25 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
 describe('reference scenario S5: zero-start accumulation', () => {
   const input = prepare(zeroStartAccumulationScenario())
 
-  it('accumulates exactly the contributed amounts and never invents returns', () => {
-    // 2 accumulation years × 12,000 = 24,000 at 0% return and 0% inflation.
-    const result = simulateScenario(input)
-    expect(result.accumulationRows).toHaveLength(2)
-    expect(result.accumulationRows[0].closingCapital).toBeMoneyClose(12_000)
-    expect(result.accumulationRows[1].closingCapital).toBeMoneyClose(24_000)
-    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(24_000)
-    expectZeroStartNeverBorrows(result.rows)
-    expectLedgerConservation(result.rows)
-    // Retirement at 68–70: desired 24,000/yr, zero pension income (explicit override) →
-    // gap 24,000/yr vs 24,000 capital. The first year is exactly consumed (closing 0,
-    // not depleted by the epsilon rule); the following years are unfunded.
-    expect(result.summary.survivesUntilPlanningAge).toBe(false)
-    expect(result.retirementRows.some(row => row.depleted)).toBe(true)
-    expect(result.retirementRows.at(-1)!.unfundedWithdrawal).toBeGreaterThan(0)
+  it('blocks zero-start forecasts with a truthful diagnostic instead of inventing capital', () => {
+    // No zero-start support: a zero opening allocation cannot start the detailed
+    // ledger, even with accumulation contributions. The forecast blocks with the
+    // positive-allocation diagnostic on every public route; the required-capital
+    // trial endpoint at zero (candidate(0)) is unaffected — see requiredCapital.
+    expect(input.currentCapital).toBe(0)
+    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
+    expect(() => simulateScenarioWithReturnPath(input, [], undefined, zeroBucketPath(input, input.planningAge - input.currentAge))).toThrow(/positive Ausgangsallokation/)
   })
 })
 
 describe('reference scenario S6: depleted capital', () => {
   const input = prepare(depletedScenario())
+  // Full cost basis plus explicitly modeled zero returns: no gains, interest or
+  // Vorabpauschale, so no Kapitalertragsteuer changes the depletion arithmetic.
+  const zeroPath = zeroBucketPath(input, input.planningAge - input.currentAge)
 
   it('marks depletion, clamps capital at zero and reports unfunded withdrawals', () => {
-    const result = simulateScenario(input)
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
     // 10,000 capital, 24,000 gap at 0%: depleted in year 1 with 14,000 unfunded.
     expect(result.retirementRows[0].depleted).toBe(true)
     expect(result.retirementRows[0].unfundedWithdrawal).toBeMoneyClose(14_000)
@@ -452,11 +489,18 @@ describe('reference scenario S6: depleted capital', () => {
     expect(result.summary.depletionAge).toBe(67)
     expectZeroStartNeverBorrows(result.rows)
     expectLedgerConservation(result.rows)
+    // At modeled 0% with no capital tax, required capital is the 8 × 24,000 =
+    // 192,000 nominal sum within the ledger search's €1 stop epsilon.
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(192_000)
+    expect(required).toBeLessThanOrEqual(192_001)
   })
 })
 
 describe('cross-scenario invariants and return paths', () => {
-  const names = Object.keys(SCENARIOS) as ScenarioName[]
+  // Zero-start blocks every forecast (S5); all runnable scenarios below carry a
+  // positive opening allocation on the mandatory detailed portfolio.
+  const names = (Object.keys(SCENARIOS) as ScenarioName[]).filter(name => name !== 'zero-start')
 
   it('every scenario survives schema validation and full-ledger conservation', () => {
     for (const name of names) {
@@ -483,15 +527,11 @@ describe('cross-scenario invariants and return paths', () => {
 
   it('deterministic seed reproduces identical stochastic paths (same seed → same result)', () => {
     const input = prepare(kvdrStandardScenario())
-    const path = (seed: number) => generatePortfolioReturnPath(
-      input.planningAge - input.currentAge,
-      { equity: 0.6, bonds: 0.3, fixed: 0.1 },
-      undefined,
-      createSeededRandom(seed))
-    const a = simulateScenarioWithReturnPath(input, path(42_000))
-    const b = simulateScenarioWithReturnPath(input, path(42_000))
-    expect(a.rows).toEqual(b.rows)
-    const c = simulateScenarioWithReturnPath(input, path(42_001))
+    const settings = { simulations: 4, seed: 42_000, allocation: { equity: 0.6, bonds: 0.3, fixed: 0.1 } } as const
+    const a = runStochasticSimulation(input, settings)
+    const b = runStochasticSimulation(input, settings)
+    expect(a).toEqual(b)
+    const c = runStochasticSimulation(input, { ...settings, seed: 42_001 })
     expect(c.rows).not.toEqual(a.rows)
   })
 

@@ -12,6 +12,7 @@ import type { ScenarioState } from './types'
 
 export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v15'
 export const RESET_NOTICE_KEY = 'rentenlueckenrechner.ux-pr2-reset-notice'
+export const MANDATORY_CAPITAL_NOTICE_KEY = 'rentenlueckenrechner.mandatory-detailed-capital-notice.v1'
 // Draft validation checks shape/types, deliberately not calculation validity.
 // Nonfinite input is encoded as a tagged draft value, never a financial answer.
 const draftNumber = z.custom<number>(value => typeof value === 'number')
@@ -56,6 +57,37 @@ export function extractPortfolioSettingsForPersistence(state: ScenarioState): Sc
   return state.portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
 }
 
+export function hasLegacyManualCapitalEstimate(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const insurance = (value as { retirementInsurance?: { bridge?: Record<string, unknown>; pension?: Record<string, unknown> } }).retirementInsurance
+    ?? (value as { input?: { retirementInsurance?: { bridge?: Record<string, unknown>; pension?: Record<string, unknown> } } }).input?.retirementInsurance
+  if (!insurance) return false
+  for (const phase of ['bridge', 'pension'] as const) {
+    const p = insurance[phase] as Record<string, unknown> | undefined
+    if (!p) continue
+    if (p.capitalMode !== undefined || p.capitalMonthlyToday !== undefined) return true
+  }
+  return false
+}
+
+export function readMandatoryCapitalNotice(): string | null {
+  if (typeof localStorage === 'undefined') return null
+  return localStorage.getItem(MANDATORY_CAPITAL_NOTICE_KEY)
+}
+
+export function dismissMandatoryCapitalNotice(): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(MANDATORY_CAPITAL_NOTICE_KEY, 'dismissed')
+}
+
+function ensureMandatoryCapitalNoticeForLegacy(stored: unknown): void {
+  if (typeof localStorage === 'undefined') return
+  if (!hasLegacyManualCapitalEstimate(stored)) return
+  if (localStorage.getItem(MANDATORY_CAPITAL_NOTICE_KEY) === null) {
+    localStorage.setItem(MANDATORY_CAPITAL_NOTICE_KEY, 'pending')
+  }
+}
+
 export function serializeScenarioState(state: ScenarioState): string {
   const { portfolioEstimatorSettings, ...rest } = state
   const legacySettings = portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
@@ -63,9 +95,16 @@ export function serializeScenarioState(state: ScenarioState): string {
   if (storedInput.retirementInsurance) {
     const insuranceWithoutEstimator = { ...storedInput.retirementInsurance } as Record<string, unknown>
     delete insuranceWithoutEstimator.capitalEstimator
+    const bridge = { ...(insuranceWithoutEstimator.bridge as Record<string, unknown> | undefined) } as Record<string, unknown>
+    const pension = { ...(insuranceWithoutEstimator.pension as Record<string, unknown> | undefined) } as Record<string, unknown>
+    delete bridge.capitalMode
+    delete bridge.capitalMonthlyToday
+    delete pension.capitalMode
+    delete pension.capitalMonthlyToday
+    const cleanedWithoutEstimator = { ...insuranceWithoutEstimator, bridge, pension }
     storedInput.retirementInsurance = legacySettings === undefined
-      ? insuranceWithoutEstimator as unknown as typeof storedInput.retirementInsurance
-      : { ...insuranceWithoutEstimator, capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
+      ? cleanedWithoutEstimator as unknown as typeof storedInput.retirementInsurance
+      : { ...cleanedWithoutEstimator, capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
   } else if (legacySettings !== undefined) {
     storedInput.retirementInsurance = { capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
   }
@@ -81,6 +120,7 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     })
     const persisted = persistedScenarioSchema.safeParse(parsed)
     if (!persisted.success) return createDefaultState()
+    ensureMandatoryCapitalNoticeForLegacy(parsed)
     const state = persisted.data
     const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
     const storedInsurance = state.input.retirementInsurance

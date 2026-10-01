@@ -1,7 +1,9 @@
 import { ASSET_CLASS_ASSUMPTIONS } from './stochasticAssumptions'
 export { ASSET_CLASS_ASSUMPTIONS, DEFAULT_ASSET_ALLOCATION, DEFAULT_STOCHASTIC_SETTINGS } from './stochasticAssumptions'
-import { needsEstimator } from './capitalIncome/setup'
-import { simulateCapitalLedger, type BucketReturnPath } from './capitalIncome/ledger'
+import { needsDetailedPortfolio } from './capitalIncome/setup'
+import { simulateCapitalLedger, simulateCapitalLedgerPath, type BucketReturnPath } from './capitalIncome/ledger'
+import { findSyntheticReturnSeries, isSyntheticReturnSeriesId } from './historicalReturns/returnSeriesRegistry'
+import { applySourceCostTreatment } from './historicalReturns/bootstrapSampling'
 import { deriveSummary } from './deriveSummary'
 import { rentenlueckeInputSchema } from './inputSchema'
 import { normalizeInput } from './normalizeInput'
@@ -163,8 +165,8 @@ export function simulateScenarioWithReturnPath(
   const getAnnualInflation = inflationPath
     ? (yearIndex: number) => inflationPath[yearIndex] ?? scenario.annualInflationRate
     : undefined
-  if (needsEstimator(parsed)) {
-    if (returnPath.length && !bucketPath) throw new Error('Automatische Kapitalbasis benötigt Renditen je Anlage, keinen aggregierten Pfad.')
+  if (needsDetailedPortfolio(parsed)) {
+    if (!bucketPath) throw new Error('Detaillierte Kapitalbasis benötigt Renditen je Anlage, keinen aggregierten Pfad.')
     return simulateCapitalLedger(scenario, bucketPath, getAnnualInflation)
   }
   const accumulationRows = simulateAccumulationRows(scenario, getAnnualReturn, getAnnualInflation)
@@ -203,7 +205,18 @@ export function runStochasticSimulation(
   const deterministicResult = simulateScenario(input)
   const years = deterministicResult.rows.length
   const rng = createSeededRandom(settings.seed)
+  const parsedForBuckets = rentenlueckeInputSchema.parse(input)
+  const useDetailed = needsDetailedPortfolio(parsedForBuckets)
+  // Stochastic detailed paths aggregate actual ledger rows/survival per sampled
+  // per-bucket path, like the bootstrap. The required-capital search is skipped
+  // per path (it is unused for percentiles/success); the deterministic plan line
+  // above carries the authoritative search.
+  const capitalScenario = useDetailed ? normalizeInput(parsedForBuckets) : undefined
   const pathResults = Array.from({ length: settings.simulations }, () => {
+    if (useDetailed) {
+      const bucketPath = generateSyntheticBucketReturnPath(parsedForBuckets, years, rng, assumptions)
+      return simulateCapitalLedgerPath(capitalScenario!, bucketPath, () => capitalScenario!.annualInflationRate)
+    }
     const returnPath = generatePortfolioReturnPath(years, settings.allocation, assumptions, rng)
     return simulateScenarioWithReturnPath(input, returnPath)
   })
@@ -228,6 +241,36 @@ export function runStochasticSimulation(
     successProbability: successfulPaths / settings.simulations,
     rows,
   }
+}
+
+function generateSyntheticBucketReturnPath(
+  input: RentenlueckeInput,
+  years: number,
+  rng: () => number,
+  assumptions: AssetClassAssumption[] = ASSET_CLASS_ASSUMPTIONS,
+): BucketReturnPath {
+  const buckets = input.estimatorPortfolio ?? []
+  if (!buckets.length) throw new Error('Detaillierte Kapitalbasis benötigt Renditen je Anlage, keinen aggregierten Pfad.')
+  return Array.from({ length: years }, () =>
+    buckets.map((bucket) => {
+      const gross = sampleSyntheticBucketReturn(bucket.returnSeriesId, rng, assumptions)
+      const totalReturnRate = applySourceCostTreatment(gross, bucket.returnSeriesId, bucket.annualCostRate ?? 0)
+      const grossBankReturnRate = bucket.holding === 'ordinary-bank-deposit' ? gross : undefined
+      return { id: bucket.id, totalReturnRate, grossBankReturnRate }
+    }),
+  )
+}
+
+function sampleSyntheticBucketReturn(returnSeriesId: string, rng: () => number, assumptions: AssetClassAssumption[]): number {
+  if (!isSyntheticReturnSeriesId(returnSeriesId)) {
+    throw new Error('Synthetische stochastische Simulation benötigt synthetische Renditequellen je Anlage; historische Anlagen über den Bootstrap abdecken.')
+  }
+  const series = findSyntheticReturnSeries(returnSeriesId)
+  if (!series) throw new Error(`Unbekannte synthetische Renditequelle: ${returnSeriesId}`)
+  const override = assumptions.find((assumption) => assumption.key === series.assumptionKey)
+  const mean = override?.expectedAnnualReturn ?? series.expectedAnnualReturn
+  const volatility = override?.annualVolatility ?? series.annualVolatility
+  return Math.max(-1, sampleNormal(rng, mean, volatility))
 }
 
 function percentile(sortedValues: number[], percentileValue: number): number {

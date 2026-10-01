@@ -7,7 +7,8 @@ import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS, SYNTHETIC_RETURN_SERIES_IDS } fro
 import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import { useScenarioState } from '../useScenarioState'
-import { createDefaultState } from '../scenarioState/defaults'
+import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
+import { createDefaultState, createSyntheticHistoricalState } from '../scenarioState/defaults'
 import { parsePersistedScenarioState, serializeScenarioState } from '../scenarioState/persistence'
 
 beforeEach(() => {
@@ -131,7 +132,13 @@ describe('useScenarioState', () => {
 
   it('updates output and supports adding/removing retirement income streams', () => {
     const state = createDefaultState()
-    state.input = { ...state.input, currentAge: 65, planningAge: 70 }
+    state.childrenAnswer = { kind: 'none' }
+    state.insuranceCoverageAnswers = completedCoverage()
+    state.retirementIncomeStreams[0].support = 'standard'
+    state.input = { ...state.input, currentAge: 67, retirementAge: 67, planningAge: 68, retirementInsurance: automaticInsurance() }
+    state.historical = createSyntheticHistoricalState()
+    state.portfolioBuckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity, holding: 'accumulating-equity-fund' }]
+    state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
     localStorage.setItem('rentenlueckenrechner.scenario.v15', serializeScenarioState(state))
     const { result } = renderHook(() => useScenarioState())
     act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
@@ -139,11 +146,15 @@ describe('useScenarioState', () => {
     const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
 
     act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
-    // The 20 % haircut applies to the gross; the GRV-Rentensteuer (slice 2, assessed
-    // on the GRV face gross) additionally reduces the spendable net.
+    // The 20 % haircut lands in other deductions; automatic voluntary KV/PV now
+    // additionally assess the modeled capital base, so the honest identity keeps
+    // every deduction explicit instead of assuming contributions away.
     const updatedRow = result.current.result!.retirementRows[0]
-    expect(updatedRow.retirementIncomeNet)
-      .toBeCloseTo(updatedRow.retirementIncomeGross * 0.8 - (updatedRow.pensionIncomeTax ?? 0))
+    expect(updatedRow.retirementIncomeNet).toBeCloseTo(updatedRow.retirementIncomeGross
+      - updatedRow.retirementIncomeOtherDeductions
+      - updatedRow.healthInsurance
+      - updatedRow.careInsurance
+      - (updatedRow.pensionIncomeTax ?? 0))
     expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
 
     act(() => result.current.addRetirementIncomeStream())

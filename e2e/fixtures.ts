@@ -52,13 +52,62 @@ export async function setupEstimator(page: Page) {
   await page.locator('#estimator-fundAcquisitionCost').fill('0');
   await page.locator('#estimator-scopeConfirmed').check();
   await page.locator('#estimator-lossScopeConfirmed').check();
-  await expect(page.locator('#estimator-readiness')).toHaveText(/Bereit f.r automatische Sch.tzung/);
+  await expect(page.locator('#estimator-readiness')).toHaveText(/Bereit f.r detaillierte Sch.tzung/);
 }
 
 export async function setupSharedInsurance(page: Page) {
   await page.getByRole('tab', { name: /Versicherung/ }).click();
   await page.locator('#insurance-pension-drvSubsidy').selectOption('not-received');
   await page.getByRole('button', { name: 'Keine anerkannten Kinder', exact: true }).click();
+}
+
+export async function openEstimatorDetails(page: Page) {
+  if (!(await page.locator('#estimator-fundAcquisitionCost').isVisible())) {
+    await page.locator('#estimator-details > summary').click();
+  }
+  await expect(page.locator('#estimator-fundAcquisitionCost')).toBeVisible();
+}
+
+export async function setupEstimatorWithCost(page: Page, cost: string) {
+  await page.getByRole('tab', { name: /Verm.gen/ }).click();
+  await openEstimatorDetails(page);
+  await page.locator('#estimator-fundAcquisitionCost').fill(cost);
+  await page.locator('#estimator-scopeConfirmed').check();
+  await page.locator('#estimator-lossScopeConfirmed').check();
+  await expect(page.locator('#estimator-readiness')).toHaveText(/Bereit f.r detaillierte Sch.tzung/);
+}
+
+// Fresh both-phase whole totals via the explicit manual radios (not via an
+// unsupported status): auto-only answers stay unanswered — the suggested
+// additional rate is cleared while an automatic phase still shows it, children
+// and DRV subsidy are never answered. Valid only when every phase is manual;
+// block 2 (rate/children) is hidden then, so no auto-only input can block.
+export async function setupBothPhaseManualTotals(
+  page: Page,
+  bridge: { kv: string; pv: string },
+  pension: { kv: string; pv: string },
+) {
+  await page.getByRole('tab', { name: /Versicherung/ }).click();
+  await page.locator('#insurance-insurerAdditionalRate').fill('');
+  await page.getByLabel('Eigene KV/PV-Beiträge einsetzen – Brücke', { exact: true }).check();
+  await page.locator('#insurance-bridge-kvMonthlyToday').fill(bridge.kv);
+  await page.locator('#insurance-bridge-pvMonthlyToday').fill(bridge.pv);
+  await page.getByLabel('Eigene KV/PV-Beiträge einsetzen – Rentenphase', { exact: true }).check();
+  await page.locator('#insurance-pension-kvMonthlyToday').fill(pension.kv);
+  await page.locator('#insurance-pension-pvMonthlyToday').fill(pension.pv);
+}
+
+export async function openTaxNotes(page: Page) {
+  const summary = page.getByText('Hinweise zur Renten- und Kapitalertragsteuer', { exact: true });
+  const open = await summary.evaluate((el) => (el.parentElement as HTMLDetailsElement).open);
+  if (!open) await summary.click();
+}
+
+export async function expectPensionTaxLimitation(page: Page) {
+  await openTaxNotes(page);
+  await expect(page.getByText(/Zusatzentnahme f.r die GRV-Rentensteuer bei Einkommenslücke/)).toBeVisible();
+  await expect(page.getByText(/kein Verm.gensverbrauch n.tig/)).toBeVisible();
+  await expect(page.getByText(/keine Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf/)).toBeVisible();
 }
 
 export async function setupFundOnlyBridge(page: Page) {

@@ -13,8 +13,10 @@ export function calculateRetirementIncomeForYear(input: RentenlueckeInput, age: 
   }
   const insurance = contributionForYear(input, age, inflation, (gross - otherDeductions) / 12, annualCapitalAssessment)
   const kv = insurance.ownKvMonthly * 12, pv = insurance.ownPvMonthly * 12
-  const phase = input.retirementInsurance![insurance.phase]
-  const portfolioBase = insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' ? (annualCapitalAssessment ?? phase.capitalMonthlyToday! * 12 * inflation) : 0
+  if (insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' && annualCapitalAssessment === undefined) {
+    throw new Error('Detaillierte Kapitalbasis erforderlich: portfolioBase benötigt die modellierte Kapitalbemessung.')
+  }
+  const portfolioBase = insurance.status === 'automatic' && insurance.effectiveStatus === 'voluntary' ? annualCapitalAssessment ?? 0 : 0
   return { gross, otherDeductions, kv, pv, portfolioBase, deductions: otherDeductions + kv + pv, net: insurance.availableIncomeMonthly * 12, insurance }
 }
 

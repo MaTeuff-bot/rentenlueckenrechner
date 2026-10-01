@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
-import { createDefaultState } from '../../hooks/scenarioState/defaults'
+import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
+import { createDefaultState, createSyntheticHistoricalState } from '../../hooks/scenarioState/defaults'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 
 import '@testing-library/jest-dom/vitest'
@@ -38,8 +39,13 @@ beforeEach(() => {
   const state = createDefaultState()
   state.insuranceCoverageAnswers = completedCoverage()
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
-  state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
-  state.retirementIncomeStreams = state.retirementIncomeStreams.map(stream => ({ ...stream, support: 'standard' }))
+  state.input = { ...state.input, currentAge: 65, retirementAge: 65, planningAge: 66, retirementInsurance: automaticInsurance() }
+  state.retirementIncomeStreams = state.retirementIncomeStreams.map((stream) => ({ ...stream, support: 'standard' }))
+  // Mandatory detailed portfolio: fund-only synthetic setup with fixed inflation
+  // keeps the forecast deterministic and free of the honest bank-path rejection.
+  state.historical = createSyntheticHistoricalState()
+  state.portfolioBuckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity, holding: 'accumulating-equity-fund' }]
+  state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
   localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
 })
 
@@ -102,10 +108,10 @@ describe('RentenlueckeCalculator', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Vermögen/ }))
 
     expect(document.getElementById('currentCapital')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 50.000')
-    fireEvent.change(inputById('portfolio-value-equity'), { target: { value: '40000' } })
-    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 55.000')
-    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Aktien 72,7 %')
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 100.000')
+    fireEvent.change(inputById('portfolio-value-fund'), { target: { value: '40000' } })
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Gesamtwert: 40.000')
+    expect(screen.getByLabelText('Portfolio-Zusammenfassung')).toHaveTextContent('Aktien 100 %')
     expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
   })
 

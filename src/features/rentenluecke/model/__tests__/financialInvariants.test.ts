@@ -7,18 +7,23 @@ import { simulateScenario } from '../simulateScenario'
 import { simulateScenarioWithReturnPath } from '../stochasticReturns'
 import { assessCore } from '../tax/pureCore'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
-import { simulateHistoricalBootstrapScenario, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID } from '../historicalReturns'
+import { simulateHistoricalBootstrapScenario, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 import { runStochasticSimulation } from '../stochasticReturns'
 import type { RentenlueckeInput, YearlyPeriodRow } from '../types'
+import { normalizeInput } from '../normalizeInput'
+import { simulateAccumulationRows } from '../simulateAccumulation'
+import { simulateRetirementRows } from '../simulateRetirement'
+import { calculateRequiredCapitalAtRetirement } from '../requiredCapital'
 import {
   depletedScenario,
   earlyRetirementBridgeScenario,
   estimatorScenario,
   kvdrStandardScenario,
-  voluntaryManualCapitalScenario,
+  voluntaryPortfolioCapitalScenario,
   zeroStartAccumulationScenario,
 } from './referenceScenarios.test'
+import { withScaledCapital, zeroBucketPath } from './insuranceFixtures'
 
 /**
  * Financial-correctness sweep (hardening PR3). Extends the PR2 reference suite with
@@ -118,11 +123,17 @@ describe('multi-decade convention drift: engine vs independent accumulator', () 
   it('matches an independently written accumulator over 60 years', () => {
     // Return on opening capital, contribution added at year end, both inflated —
     // the README-documented convention. Independent loop, different code path.
+    // Unit check on the standalone accumulation helper (narrowly legitimate
+    // non-forecast use); shipped forecasts always run the detailed ledger.
     const input = prepare(kvdrStandardScenario())
     const long: RentenlueckeInput = {
       ...input,
       currentAge: 30, retirementAge: 67, planningAge: 68,
-      currentCapital: 50_000, monthlyContributionToday: 500,
+      currentCapital: 50_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 50_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
+      monthlyContributionToday: 500,
       monthlyDesiredSpendingToday: 1_000, monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0.02, annualReturnBeforeRetirement: 0.05,
       annualReturnInRetirement: 0,
@@ -133,46 +144,56 @@ describe('multi-decade convention drift: engine vs independent accumulator', () 
         pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       },
     }
-    const result = simulateScenario(long)
+    const rows = simulateAccumulationRows(normalizeInput(long))
     let capital = 50_000
     for (let yearIndex = 0; yearIndex < 37; yearIndex++) {
       const inflationFactor = 1.02 ** yearIndex
       capital = capital * 1.05 + 6_000 * inflationFactor
     }
-    expect(result.accumulationRows).toHaveLength(37)
-    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(capital)
+    expect(rows).toHaveLength(37)
+    expect(rows.at(-1)!.closingCapital).toBeMoneyClose(capital)
   })
 
   it('keeps a 50-year zero-return zero-inflation run exactly linear (no compounding of rounding)', () => {
     // All-manual insurance keeps long horizons free of missing pensionAge issues.
+    // Zero-start blocks forecasts, so the run opens with 1,000 on a matched
+    // portfolio bucket. Standalone helper math (narrowly legitimate non-forecast
+    // use); shipped forecasts always run the detailed ledger.
     const input = prepare({ ...zeroStartAccumulationScenario(),
       currentAge: 0, retirementAge: 50, planningAge: 100,
+      currentCapital: 1_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 1_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
       monthlyContributionToday: 1_000, monthlyDesiredSpendingToday: 12_000 / 12,
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0, annualReturnInRetirement: 0,
       retirementIncomeStreams: [],
       retirementInsurance: {
         referenceYear: 2026, childBirthYears: [], pensionAge: 50,
+        capitalEstimator: { fundAcquisitionCost: 1_000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true },
         bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
         pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       },
     }, true)
-    const result = simulateScenario(input)
-    expect(result.accumulationRows.at(-1)!.closingCapital).toBeMoneyClose(50 * 12_000)
-    // Retirement consumption is exactly linear: 600,000 − 12,000 per year, reaching
-    // exactly zero at the final row (success under the exact-zero rule).
-    expect(result.retirementRows).toHaveLength(50)
-    for (const [index, row] of result.retirementRows.entries()) {
-      expect(row.closingCapital).toBeMoneyClose(50 * 12_000 - 12_000 * (index + 1))
+    const scenario = normalizeInput(input)
+    const accumulationRows = simulateAccumulationRows(scenario)
+    expect(accumulationRows.at(-1)!.closingCapital).toBeMoneyClose(1_000 + 50 * 12_000)
+    // Retirement consumption is exactly linear: 601,000 − 12,000 per year, ending
+    // at the 1,000 opening remainder with no depletion and no rounding drift.
+    const retirementRows = simulateRetirementRows(scenario, accumulationRows.at(-1)!.closingCapital)
+    expect(retirementRows).toHaveLength(50)
+    for (const [index, row] of retirementRows.entries()) {
+      expect(row.closingCapital).toBeMoneyClose(601_000 - 12_000 * (index + 1))
+      expect(row.depleted).toBe(false)
     }
-    expect(result.retirementRows.at(-1)!.closingCapital).toBe(0)
-    expect(result.summary.survivesUntilPlanningAge).toBe(true)
+    expect(retirementRows.at(-1)!.closingCapital).toBe(1_000)
   })
 })
 
 describe('real/nominal reconciliation', () => {
   it('divides closing capital by the cumulative factor at year end (yearIndex+1)', () => {
-    for (const scenario of [kvdrStandardScenario, earlyRetirementBridgeScenario, voluntaryManualCapitalScenario, depletedScenario]) {
+    for (const scenario of [kvdrStandardScenario, earlyRetirementBridgeScenario, voluntaryPortfolioCapitalScenario, depletedScenario]) {
       const result = simulateScenario(prepare(scenario()))
       for (const row of allRows(result)) {
         // Engine convention: closingCapitalToday divides by the cumulative factor of
@@ -197,8 +218,9 @@ describe('real/nominal reconciliation', () => {
 describe('bootstrap accounting consistency', () => {
   const settings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 3 } as const
 
-  it('every sampled bootstrap path satisfies row conservation, for scalar and estimator ledgers', () => {
-    for (const makeScenario of [kvdrStandardScenario, earlyRetirementBridgeScenario, voluntaryManualCapitalScenario, zeroStartAccumulationScenario, depletedScenario, estimatorScenario]) {
+  it('every sampled bootstrap path satisfies row conservation on the detailed ledger', () => {
+    // Zero-start blocks every forecast (S5) and is covered by the blocking test below.
+    for (const makeScenario of [kvdrStandardScenario, earlyRetirementBridgeScenario, voluntaryPortfolioCapitalScenario, depletedScenario, estimatorScenario]) {
       const input = prepare(makeScenario())
       // Bootstrap functions require portfolioComponents; build them from the buckets
       // when present, otherwise an empty list keeps fixed inflation valid (all years
@@ -213,13 +235,20 @@ describe('bootstrap accounting consistency', () => {
           expect(row.closingCapital, `${makeScenario.name} age ${row.ageStart}`).toBeMoneyClose(
             row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal)
         } else {
-          // Slice-1 funding rule: the portfolio funds gap + Kapitalertragsteuer.
+          // No public route reaches the scalar path anymore; every row carries
+          // the detailed assessment. Kept as a guard, never as a forecast.
           expect(row.closingCapital, `${makeScenario.name} age ${row.ageStart}`).toBeMoneyClose(
             row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - (row.capitalIncomeTax ?? 0) + row.unfundedWithdrawal)
         }
         expect(Number.isFinite(row.closingCapital)).toBe(true)
       }
     }
+  })
+
+  it('blocks zero-start bootstrap forecasts with the positive-allocation diagnostic', () => {
+    const input = prepare(zeroStartAccumulationScenario())
+    const settingsWithComponents = { ...settings, portfolioComponents: [] }
+    expect(() => simulateHistoricalBootstrapScenario(input, settingsWithComponents)).toThrow(/positive Ausgangsallokation/)
   })
 
   it('reference and sampled paths share identical insurance cashflows when inflation is fixed', () => {
@@ -233,12 +262,17 @@ describe('bootstrap accounting consistency', () => {
       expect(row.healthInsurance).toBeMoneyClose(other.healthInsurance)
       expect(row.careInsurance).toBeMoneyClose(other.careInsurance)
       expect(row.retirementIncomeNet).toBeMoneyClose(other.retirementIncomeNet)
-      expect(row.gapWithdrawal).toBeMoneyClose(other.gapWithdrawal)
+      // Same insurance method, return-induced amounts only in the capital tax:
+      // the gap carries the funded Kapitalertragsteuer, so gaps differ exactly
+      // by the capital-tax component (pension tax is capital-independent).
+      expect(row.pensionIncomeTax).toBeMoneyClose(other.pensionIncomeTax ?? 0)
+      expect(row.gapWithdrawal - other.gapWithdrawal).toBeMoneyClose(
+        (row.capitalIncomeTax ?? 0) - (other.capitalIncomeTax ?? 0))
     }
   })
 
   it('stochastic summaries agree with their own deterministic plan line length and bounds', () => {
-    const input = prepare(voluntaryManualCapitalScenario())
+    const input = prepare(voluntaryPortfolioCapitalScenario())
     const summary = runStochasticSimulation(input, { simulations: 5, seed: 314, allocation: { equity: 0.5, bonds: 0.3, fixed: 0.2 } })
     const deterministic = simulateScenario(input)
     expect(summary.rows).toHaveLength(deterministic.rows.length)
@@ -250,7 +284,13 @@ describe('bootstrap accounting consistency', () => {
 
 describe('phase cashflow boundaries', () => {
   it('contributions end exactly at retirement age and never occur in retirement rows', () => {
-    const input = prepare({ ...zeroStartAccumulationScenario(), currentCapital: 1_000 })
+    // Zero-start blocks forecasts, so the run opens with 1,000 on a matched
+    // portfolio bucket; contributions still end exactly at retirement age.
+    const input = prepare({ ...zeroStartAccumulationScenario(), currentCapital: 1_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 1_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
+    })
     const result = simulateScenario(input)
     expect(result.accumulationRows.every(row => row.contribution > 0)).toBe(true)
     expect(result.retirementRows.every(row => row.contribution === 0)).toBe(true)
@@ -275,21 +315,28 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
     // year gain = 5,000 x 24,000/105,000 = 1,142.857; allowance 1,000 -> base 142.857;
     // tax = 142.857 x 0.25 x 1.055 = 37.678571...; closing = 105,000 - 24,000 - 37.678571...
     // Year 2 repeats exactly (gain = G x r/(1+r) is capital-independent while fully funded).
+    // Standalone helper math (narrowly legitimate non-forecast use); shipped
+    // forecasts always run the detailed ledger, never this scalar path.
     const input = prepare({ ...zeroStartAccumulationScenario(),
       currentAge: 67, retirementAge: 67, planningAge: 69, currentCapital: 100_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 100_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
       monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0, annualReturnInRetirement: 0.05,
       retirementIncomeStreams: [],
       retirementInsurance: {
         referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        capitalEstimator: { fundAcquisitionCost: 100_000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true },
         bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
         pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       },
     }, true)
-    const result = simulateScenario(input)
-    expect(result.retirementRows).toHaveLength(2)
-    for (const row of result.retirementRows) {
+    const scenario = normalizeInput(input)
+    const retirementRows = simulateRetirementRows(scenario, 100_000)
+    expect(retirementRows).toHaveLength(2)
+    for (const row of retirementRows) {
       expect(row.capitalIncomeTax).toBeMoneyClose(37.67857142857144)
       expect(row.taxableWithdrawal).toBeMoneyClose(1142.857142857143)
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000)
@@ -299,10 +346,10 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
       expect(row.closingCapital).toBeMoneyClose(
         row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
     }
-    expect(result.retirementRows[0].closingCapital).toBeMoneyClose(80962.32142857143)
+    expect(retirementRows[0].closingCapital).toBeMoneyClose(80962.32142857143)
     // Required capital funds gap + tax, not just the gap (2 x 24,000 = 48,000 pre-tax basis).
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(44696.044921875)
-    expect(result.summary.survivesUntilPlanningAge).toBe(true)
+    expect(calculateRequiredCapitalAtRetirement(scenario)).toBeMoneyClose(44696.044921875)
+    expect(retirementRows.every(row => !row.depleted)).toBe(true)
   })
 
   it('funds tax first and keeps the shortfall visible when proceeds are insufficient', () => {
@@ -310,18 +357,23 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
     // tax (2,000 - 1,000) x 0.25 x 1.055 = 263.75; need 24,263.75 -> unfunded 2,263.75.
     const input = prepare({ ...zeroStartAccumulationScenario(),
       currentAge: 67, retirementAge: 67, planningAge: 68, currentCapital: 20_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 20_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
       monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0, annualReturnInRetirement: 0.1,
       retirementIncomeStreams: [],
       retirementInsurance: {
         referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        capitalEstimator: { fundAcquisitionCost: 20_000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true },
         bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
         pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       },
     }, true)
-    const result = simulateScenario(input)
-    const row = result.retirementRows[0]
+    // Standalone helper math (narrowly legitimate non-forecast use); shipped
+    // forecasts always run the detailed ledger, never this scalar path.
+    const row = simulateRetirementRows(normalizeInput(input), 20_000)[0]
     expect(row.capitalIncomeTax).toBeMoneyClose(263.75)
     expect(row.depleted).toBe(true)
     expect(row.closingCapital).toBe(0)
@@ -425,19 +477,25 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
     // = 1,257.143; base 157.143; tax 157.143 × 0.25 × 1.055 = 41.446429.
     const input = prepare({ ...zeroStartAccumulationScenario(),
       currentAge: 67, retirementAge: 67, planningAge: 69, currentCapital: 100_000,
+      estimatorPortfolio: [{ id: 'fund', name: 'Fonds', value: 100_000,
+        holding: 'accumulating-equity-fund' as const,
+        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
       monthlyContributionToday: 0, monthlyDesiredSpendingToday: 2_000,
       monthlyRetirementIncomeToday: 0,
       annualInflationRate: 0.1, annualReturnInRetirement: 0.05,
       retirementIncomeStreams: [],
       retirementInsurance: {
         referenceYear: 2026, childBirthYears: [], pensionAge: 67,
+        capitalEstimator: { fundAcquisitionCost: 100_000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true },
         bridge: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
         pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 },
       },
     }, true)
-    const result = simulateScenario(input)
-    expect(result.retirementRows).toHaveLength(2)
-    const [first, second] = result.retirementRows
+    // Standalone helper math (narrowly legitimate non-forecast use); shipped
+    // forecasts always run the detailed ledger, never this scalar path.
+    const retirementRows = simulateRetirementRows(normalizeInput(input), 100_000)
+    expect(retirementRows).toHaveLength(2)
+    const [first, second] = retirementRows
     expect(first.inflationFactor).toBeMoneyClose(1)
     expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
     expect(first.taxableWithdrawal).toBeMoneyClose(1142.857142857143)
@@ -447,7 +505,7 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
     expect(second.sparerpauschbetragApplied).toBeMoneyClose(1_100)
     expect(second.taxableWithdrawal).toBeMoneyClose(1257.1428571428576)
     expect(second.capitalIncomeTax).toBeMoneyClose(41.44642857142868)
-    for (const row of result.retirementRows) {
+    for (const row of retirementRows) {
       expect(row.closingCapital).toBeMoneyClose(
         row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
     }
@@ -461,16 +519,20 @@ describe('required-capital search soundness', () => {
     const required = result.summary.requiredCapitalAtRetirement
     expect(required).toBeGreaterThan(0)
     // Depleted scenario: search over the same ledger must sit between survive/fail.
-    const surviveProbe = prepare({ ...depletedScenario(), currentCapital: required })
-    const failProbe = prepare({ ...depletedScenario(), currentCapital: Math.max(0, required - 2) })
-    expect(simulateScenario(surviveProbe).summary.survivesUntilPlanningAge).toBe(true)
-    expect(simulateScenario(failProbe).summary.survivesUntilPlanningAge).toBe(false)
+    // Probes rescale the whole detailed portfolio (values plus pooled fund cost),
+    // never currentCapital alone, so the ledger stays consistent.
+    expect(simulateScenario(withScaledCapital(input, required)).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenario(withScaledCapital(input, Math.max(0, required - 2))).summary.survivesUntilPlanningAge).toBe(false)
   })
 
   it('equals the hand-computed annuity-free sum for constant gaps at zero return and inflation', () => {
-    // 8 retirement years × 24,000 gap = 192,000.
+    // 8 retirement years × 24,000 gap = 192,000 at explicitly modeled zero
+    // returns with a full cost basis (no capital tax); the ledger search stops
+    // within €1 above the nominal sum.
     const input = prepare(depletedScenario())
-    const result = simulateScenario(input)
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(8 * 24_000)
+    const result = simulateScenarioWithReturnPath(input, [], undefined, zeroBucketPath(input, input.planningAge - input.currentAge))
+    const required = result.summary.requiredCapitalAtRetirement
+    expect(required).toBeGreaterThanOrEqual(8 * 24_000)
+    expect(required).toBeLessThanOrEqual(8 * 24_000 + 1)
   })
 })

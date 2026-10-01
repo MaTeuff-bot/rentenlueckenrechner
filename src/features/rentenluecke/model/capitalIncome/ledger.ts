@@ -1,6 +1,5 @@
 import { createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
-import { capitalMode } from './setup'
 import { calculateRetirementIncomeForYear, grvPensionGrossForYear } from '../retirementIncomeStreams'
 import { MONEY_EPSILON } from '../simulateRetirement'
 import { assessPensionYearTaxValues, resolvePensionTaxSetup } from '../tax/incomeTax'
@@ -17,9 +16,9 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   const input = scenario.sourceInput
   const buckets = input.estimatorPortfolio!
   if (path && path.length !== scenario.yearsToRetirement + scenario.retirementYears)
-    throw new Error('Automatische Kapitalbasis benötigt einen vollständigen Renditepfad für jedes Modelljahr.')
+    throw new Error('Detaillierte Kapitalbasis benötigt einen vollständigen Renditepfad für jedes Modelljahr.')
   const total = buckets.reduce((s, b) => s + b.value, 0)
-  if (total <= 0) throw new Error('Automatische Kapitalbasis benötigt eine positive Ausgangsallokation.')
+  if (total <= 0) throw new Error('Detaillierte Kapitalbasis benötigt eine positive Ausgangsallokation; Portfoliowerte angeben.')
   const weights = buckets.map(b => b.value / total)
   const setup = input.retirementInsurance!.capitalEstimator!
   const initial = createEstimatorState({ buckets: buckets.map(b => ({ id: b.id, value: b.value, eligibility: b.holding as 'accumulating-equity-fund' | 'ordinary-bank-deposit' })), fundAcquisitionCost: buckets.some(b => b.holding === 'accumulating-equity-fund') ? setup.fundAcquisitionCost! : 0,
@@ -44,8 +43,8 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const inflationFactor = factor(index)
     const phase = age < input.retirementInsurance!.pensionAge! ? 'bridge' : 'pension'
     const p = input.retirementInsurance![phase]
-    const automaticCapital = capitalMode(p) === 'automatic' && p.status !== 'kvdr'
-    const incomeFor = (assessment: number) => calculateRetirementIncomeForYear(input, age, inflationFactor, automaticCapital ? assessment : undefined)
+    const contributesCapital = p.status !== 'kvdr'
+    const incomeFor = (assessment: number) => calculateRetirementIncomeForYear(input, age, inflationFactor, contributesCapital ? assessment : undefined)
     const incomeBefore = accumulation ? null : incomeFor(0)
     const desiredSpending = accumulation ? 0 : scenario.annualDesiredSpendingToday * inflationFactor
     const contribution = accumulation ? scenario.annualContributionToday * inflationFactor : 0

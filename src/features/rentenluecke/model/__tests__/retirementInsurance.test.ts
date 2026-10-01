@@ -4,9 +4,9 @@ import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, createDefaultR
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { simulateScenario } from '../simulateScenario'
 import { simulateScenarioWithReturnPath } from '../stochasticReturns'
-import { normalizeInput } from '../normalizeInput'
-import { simulateRetirementRows } from '../simulateRetirement'
-import { automaticInsurance, insuredInput, pension } from './insuranceFixtures'
+import { automaticInsurance, insuredInput, pension, withScaledCapital, zeroBucketPath } from './insuranceFixtures'
+import { expectedBucketReturns } from '../capitalIncome/returns'
+import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 
 describe('guided insurance completeness and scope', () => {
   it('requires genuine answers; confirmed zero is complete', () => {
@@ -134,7 +134,14 @@ describe('authoritative contribution ledger', () => {
     // The pension tax is a separate ledger deduction (like capitalIncomeTax), not part
     // of retirementIncomeDeductions: gross - net - pensionIncomeTax == deductions.
     expect(row.retirementIncomeDeductions).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeNet - (row.pensionIncomeTax ?? 0))
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(row.gapWithdrawal * 3, 0)
+    // Mandatory detailed ledger: the 60/40 fund/bank portfolio earns modeled 5 %
+    // (6,000-fund/4,000-bank blended expectation: 5,000 on 100,000 with 800 bank
+    // interest, fully allowance-covered so capitalIncomeTax stays 0). Future gaps
+    // are partly return-funded, so the searched 2,447.51 sits below the nominal
+    // 3 × 898.725 = 2,696.175 sum (tier-3 pin for the taxed search).
+    expect(row.investmentReturn).toBeCloseTo(5_000)
+    expect(row.capitalIncomeTax).toBe(0)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(2447.509765625, 0)
   })
   it('turns an apparent income surplus into a funded gap after insurance', () => {
     const input = insuredInput({ monthlyDesiredSpendingToday: 1900 })
@@ -150,62 +157,107 @@ describe('authoritative contribution ledger', () => {
     expect(row.retirementIncomeNet).toBeCloseTo(1680.5 * 12)
     expect(row.surplusIncome).toBe(0)
     expect(row.gapWithdrawal).toBeCloseTo(219.5 * 12)
-    expect(row.closingCapital).toBeCloseTo(row.openingCapital - row.gapWithdrawal)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(219.5 * 12 * 3, 0)
+    // Mandatory detailed ledger: modeled 5,000 return funds the 2,634 gap, so
+    // closing = 100,000 + 5,000 − 2,634 = 102,366 (no capital tax: 800 bank
+    // interest plus small fund income stay within the allowance).
+    expect(row.investmentReturn).toBeCloseTo(5_000)
+    expect(row.capitalIncomeTax).toBe(0)
+    expect(row.closingCapital).toBeCloseTo(102_366)
+    // Required capital funds the return-reduced gaps (tier-3 pin), not the
+    // nominal 3 × 2,634 = 7,902 sum.
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(7173.15673828125, 0)
   })
   it('keeps rental cash separate from its pre-tax assessment and never adds capital basis as cash', () => {
+    // Mandatory: the capital assessment is modeled from the detailed portfolio
+    // (first-year 803.95 annual from 800 bank interest plus small fund income net
+    // of the 51 expense allowance → 66.996/mo), never from a legacy monthly
+    // estimate. Legacy capitalMonthlyToday values are tolerated on load but have
+    // no engine meaning.
     const input = insuredInput({ retirementIncomeStreams: [pension({ amountMonthlyToday: 4000 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 1000 }), pension({ id: 'rent', kind: 'rental-income', amountMonthlyToday: 600, effectiveDeductionRate: 0.25, rentalAssessmentMonthlyToday: 600 })], retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'confirmed' } }) })
     const row = simulateScenario(input).retirementRows[0]
     expect(row.retirementIncomeGross / 12).toBe(5600)
-    expect(row.portfolioContributionBase / 12).toBe(600)
-    expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5812.5, pvAssessmentMonthly: 5812.5, drvSubsidyMonthly: 350 })
-    expect(row.healthInsurance / 12).toBeCloseTo(662.3125, 8)
+    expect(row.portfolioContributionBase / 12).toBeCloseTo(66.99610591900311, 8)
+    // Shared ceiling 5,812.5: pensions 5,000 + other (600 rental + 66.996 capital)
+    // = 5,666.996 below the ceiling, so no capping. KV: 4,000×17.5 % + 1,000×17.5 %
+    // + 666.996×16.9 % (reduced) = 987.722; minus 350 DRV subsidy → own 637.722.
+    // PV: 5,666.996×3.6 % = 204.012. Assessment only, no added cashflow.
+    expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5666.996105919003, pvAssessmentMonthly: 5666.996105919003, drvSubsidyMonthly: 350 })
+    expect(row.healthInsurance / 12).toBeCloseTo(637.7223419003116, 8)
+    expect(row.careInsurance / 12).toBeCloseTo(204.0118598130841, 8)
     // Slice 2: only the GRV face gross (48,000; Betriebsrente and rental income are
     // out of scope) enters the base. Rentenbeginn 2026 → 84 %; freibetrag 7,680;
-    // taxable 40,320 (tier-3 pin); pensionIncomeTax 4,149 (345.75/mo).
+    // taxable 40,320. zvE = 40,320 − 102 − (7,652.668 + 2,448.142) own KV/PV =
+    // 30,117.19 → §32a pin 4,250 (higher than the legacy-600 zvE because the
+    // smaller modeled assessment lowers Sonderausgaben).
     expect(row.pensionTaxBase).toBeCloseTo(40_320, 8)
-    expect(row.pensionIncomeTax).toBeCloseTo(4_149, 8)
-    expect(row.retirementIncomeNet / 12).toBeCloseTo(4232.6875, 8)
+    expect(row.pensionIncomeTax).toBeCloseTo(4_250, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(4254.099131619939, 8)
   })
   it('preserves negative available cash and funds insurance once even with zero income', () => {
+    // Mandatory: the bridge-voluntary assessment is modeled (year 1: 1,556.91
+    // annual from 800 bank interest plus fund income net of allowance → 129.74/mo,
+    // still below the 1,318.33 voluntary minimum, so KV/PV stay at the minimum:
+    // 1,318.33×16.9 % = 222.798/mo, 1,318.33×3.6 % = 47.460/mo).
     const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 67, retirementIncomeStreams: [] })
     const result = simulateScenario(input)
     const row = result.retirementRows[0]
     expect(row.retirementIncomeGross).toBe(0)
+    expect(row.portfolioContributionBase / 12).toBeCloseTo(129.74227132076868, 8)
     expect(row.retirementIncomeNet / 12).toBeCloseTo(-270.25765, 8)
-    expect(row.gapWithdrawal).toBeCloseTo(24_000 + 270.25765 * 12)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(row.gapWithdrawal * 2, 0)
-    const scenario = normalizeInput(input)
-    expect(simulateRetirementRows(scenario, result.summary.requiredCapitalAtRetirement).every(r => !r.depleted)).toBe(true)
-    expect(simulateRetirementRows(scenario, result.summary.requiredCapitalAtRetirement - 2).some(r => r.depleted)).toBe(true)
+    // The gap carries the capital tax on the modeled assessment (160.34 year 1:
+    // taxable 1,607.91, allowance-covered down to the pin) on top of spending +
+    // insurance: 24,000 + 3,243.09 + 160.34 = 27,403.43.
+    expect(row.capitalIncomeTax).toBeCloseTo(160.33553873023286, 8)
+    expect(row.gapWithdrawal).toBeCloseTo(27403.427338730235, 8)
+    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(50868.988037109375, 0)
+    // Monotone search on the same detailed ledger: required survives, 2 € less fails.
+    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement)).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement - 2)).summary.survivesUntilPlanningAge).toBe(false)
   })
   it('indexes bases and thresholds with path inflation; phase and stream boundaries use row start age', () => {
+    // Mandatory: the capital assessment is modeled per bucket, never a legacy
+    // monthly estimate. Explicit zero per-bucket returns isolate the inflation
+    // mechanics: no returns → no VP/interest/sale gains → assessment 0, so both
+    // voluntary phases fall back to the inflation-indexed minimum
+    // (1,318.33×factor at 16.9 % KV and 3.6 % PV). Legacy capitalMonthlyToday
+    // values below are tolerated on load but have no engine meaning.
     const input = insuredInput({ currentAge: 64, retirementAge: 65, planningAge: 70, annualInflationRate: 0.02,
       retirementIncomeStreams: [pension({ endAge: 69 })], retirementInsurance: automaticInsurance({
         bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 },
         pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 3000, drvSubsidy: 'confirmed' },
       }) })
-    const fixed = simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02))
+    const expected = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), inflationSourceId: 'fixed-manual', simulations: 1 })
+    const expectedPath = Array.from({ length: 6 }, () => expected.map((bucket) => ({ ...bucket })))
+    const fixed = simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02), expectedPath)
     expect(fixed).toEqual(simulateScenario(input))
-    const variable = simulateScenarioWithReturnPath(input, Array(6).fill(0), [0.03, 0.04, -0.01, 0.02, 0.05, 0])
+    // Missing per-bucket returns can never fall back to an aggregate path.
+    expect(() => simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02))).toThrow(/je Anlage/)
+    const variable = simulateScenarioWithReturnPath(input, Array(6).fill(0), [0.03, 0.04, -0.01, 0.02, 0.05, 0], zeroBucketPath(input, 6))
     expect(variable.retirementRows.map(r => r.insurance?.phase)).toEqual(['bridge', 'bridge', 'pension', 'pension', 'pension'])
     for (const row of variable.retirementRows) {
       const pensionActive = row.ageStart >= 67 && row.ageStart < 69
-      const capital = row.ageStart < 67 ? 2000 : 3000
-      expect(row.portfolioContributionBase / row.inflationFactor).toBeCloseTo(capital * 12)
+      expect(row.portfolioContributionBase).toBe(0)
       expect(row.retirementIncomeGross / row.inflationFactor).toBeCloseTo(pensionActive ? 24000 : 0)
-      expect(row.healthInsurance / row.inflationFactor / 12).toBeCloseTo(capital * 0.169 + (pensionActive ? 175 : 0), 8)
-      expect(row.careInsurance / row.inflationFactor / 12).toBeCloseTo((capital + (pensionActive ? 2000 : 0)) * 0.036, 8)
+      // Zero modeled assessment: pension-active rows assess only the 2,000 GRV
+      // (KV own 2,000×17.5 % − 175 subsidy = 175; PV 2,000×3.6 %); all other rows
+      // fall back to the indexed voluntary minimum (1,318.33 at 16.9 %/3.6 %).
+      expect(row.healthInsurance / row.inflationFactor / 12).toBeCloseTo(pensionActive ? 175 : 1318.33 * 0.169, 8)
+      expect(row.careInsurance / row.inflationFactor / 12).toBeCloseTo((pensionActive ? 2000 : 1318.33) * 0.036, 8)
       expect(row.gapWithdrawalToday).toBeCloseTo(row.gapWithdrawal / row.inflationFactor)
     }
     expect(variable.accumulationRows[0]).toMatchObject({ healthInsurance: 0, careInsurance: 0 })
   })
   it('ages children out on Jan 1 of turning-25 year but preserves permanent parenthood', () => {
+    // Mandatory: the modeled bridge assessment (≈129–218/mo, below the 1,318.33
+    // voluntary minimum) keeps every row on the minimum top-up, so KV/PV follow
+    // the minimum at the child-discounted PV rate. Legacy capitalMonthlyToday is
+    // tolerated on load but has no engine meaning.
     const input = insuredInput({ currentAge: 44, retirementAge: 44, planningAge: 47, retirementIncomeStreams: [],
       retirementInsurance: automaticInsurance({ pensionAge: 67, childBirthYears: [2002, 2004], bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 } }) })
     const rows = simulateScenario(input).retirementRows
     expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([expect.closeTo(0.0335, 10), 0.036, 0.036])
-    expect(rows.map(r => r.careInsurance / 12)).toEqual([expect.closeTo(67, 10), 72, 72])
+    expect(rows.map(r => r.healthInsurance / 12)).toEqual([expect.closeTo(1318.33 * 0.169, 10), expect.closeTo(1318.33 * 0.169, 10), expect.closeTo(1318.33 * 0.169, 10)])
+    expect(rows.map(r => r.careInsurance / 12)).toEqual([expect.closeTo(1318.33 * 0.0335, 10), expect.closeTo(1318.33 * 0.036, 10), expect.closeTo(1318.33 * 0.036, 10)])
   })
   it('starts childless surcharge in turning-23 year', () => {
     const rows = simulateScenario(insuredInput({ currentAge: 22, retirementAge: 22, planningAge: 25, retirementIncomeStreams: [], retirementInsurance: automaticInsurance({ isParent: false }) })).retirementRows
@@ -216,8 +268,15 @@ describe('authoritative contribution ledger', () => {
     const row = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
     expect(row.healthInsurance / 12).toBeCloseTo(189)
     expect(row.careInsurance / 12).toBeCloseTo(80)
+    // Mandatory: the modeled voluntary assessment (74.84/mo) replaces the legacy
+    // zero estimate. KV own = 2,000×(0.16+0.029) + 74.8376×(0.15+0.029) − 189
+    // subsidy = 202.396; PV = 2,074.8376×0.04 = 82.994. Same method as KVdR, only
+    // the contribution-induced assessment differs; no double deduction.
     i.pension = { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' }
-    expect(simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0].healthInsurance).toBeCloseTo(row.healthInsurance)
+    const voluntary = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
+    expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(74.83764767443925, 8)
+    expect(voluntary.healthInsurance / 12).toBeCloseTo(202.39593893372458, 8)
+    expect(voluntary.careInsurance / 12).toBeCloseTo(82.99350590697757, 8)
     i.pension = { ...i.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 7 }
     const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 })).retirementRows[1]
     expect(manual.healthInsurance).toBe(0)

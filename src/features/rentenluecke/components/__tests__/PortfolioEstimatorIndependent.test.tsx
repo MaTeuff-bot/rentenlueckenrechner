@@ -13,11 +13,12 @@ import { DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import { DEFAULT_HISTORICAL_INFLATION_SERIES_ID } from '../../model/historicalReturns'
 import { portfolioEstimatorReadiness } from '../../model/capitalIncome/portfolioEstimator'
 
-function renderVermoegen(input: Parameters<typeof InputPanel>[0]['input'], portfolioSettings: Parameters<typeof InputPanel>[0]['portfolioEstimatorSettings']) {
+function renderVermoegen(input: Parameters<typeof InputPanel>[0]['input'], portfolioSettings: Parameters<typeof InputPanel>[0]['portfolioEstimatorSettings'], buckets?: Parameters<typeof InputPanel>[0]['portfolioBuckets']) {
   const state = createDefaultState()
+  const portfolioBuckets = buckets ?? state.portfolioBuckets
   const parsed = rentenlueckeInputSchema.safeParse(input)
   const coverage = completedCoverage()
-  const issues = scenarioIssues(input, { kind: 'none' }, state.portfolioBuckets, parsed.success ? undefined : parsed.error, insuranceSetupIssues(input), null, null, coverage)
+  const issues = scenarioIssues(input, { kind: 'none' }, portfolioBuckets, parsed.success ? undefined : parsed.error, insuranceSetupIssues(input), null, null, coverage)
   const noop = () => {}
   render(
     <InputPanel
@@ -26,7 +27,7 @@ function renderVermoegen(input: Parameters<typeof InputPanel>[0]['input'], portf
       insuranceCoverageAnswers={coverage}
       childrenAnswer={{ kind: 'none' }}
       allocation={DEFAULT_ASSET_ALLOCATION}
-      portfolioBuckets={state.portfolioBuckets}
+      portfolioBuckets={portfolioBuckets}
       retirementIncomeStreams={input.retirementIncomeStreams ?? []}
       historical={{ inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID }}
       historicalValidYears={[]}
@@ -83,15 +84,29 @@ describe('independent portfolio estimator UI (PR F)', () => {
     expect(document.getElementById('estimator-lossScopeConfirmed')).not.toBeNull()
   })
 
-  it('shows optional readiness separately from blocking errors', () => {
+  it('shows blocking readiness until the detailed setup is complete, independent of insurance', () => {
     renderVermoegen(manualInput(), undefined)
     fireEvent.click(screen.getByRole('tab', { name: /Verm\u00f6gen/ }))
-    expect(document.getElementById('estimator-readiness')).toHaveTextContent(/optional.*ungenutzt|Bereit/i)
+    // Whole-phase manual totals never satisfy the mandatory portfolio setup.
+    expect(document.getElementById('estimator-readiness')).toHaveTextContent(/Unvollst\u00e4ndig.*blockiert/i)
+    expect(document.getElementById('estimator-readiness')).not.toHaveTextContent(/optional/i)
     expect(document.getElementById('estimator-details')).not.toBeNull()
   })
 
+  it('shows detailed readiness as complete once cost and confirmations hold, still independent of insurance', () => {
+    const settings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
+    const buckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: 'synthetic-equity-assumption-v1', holding: 'accumulating-equity-fund' as const }]
+    const readiness = portfolioEstimatorReadiness(settings, buckets, 100000)
+    expect(readiness.ready).toBe(true)
+    renderVermoegen(manualInput(), settings, buckets)
+    fireEvent.click(screen.getByRole('tab', { name: /Verm\u00f6gen/ }))
+    expect(document.getElementById('estimator-readiness')).toHaveTextContent(/Bereit f\u00fcr detaillierte Sch\u00e4tzung/i)
+  })
+
   it('required incomplete setup blocks and issue link expands and focuses Verm\u00f6gen', () => {
-    const input = automaticInput()
+    const complete = automaticInput()
+    const input = { ...complete, estimatorPortfolio: (complete.estimatorPortfolio as unknown[]).map(bucket => ({ ...(bucket as object), holding: undefined })) as typeof complete.estimatorPortfolio,
+      retirementInsurance: complete.retirementInsurance && { ...complete.retirementInsurance, capitalEstimator: undefined } }
     const { issues } = renderVermoegen(input, undefined)
     const target = issues.find(i => i.fieldId.startsWith('estimator-'))
     expect(target).toBeDefined()

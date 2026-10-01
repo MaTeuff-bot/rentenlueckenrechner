@@ -77,7 +77,6 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
       path = ['retirementInsurance', phase, 'circumstances']
     }
     else if (message.includes('Versicherungsstatus')) path = ['retirementInsurance', phase, 'status']
-    else if (message.includes('Kapitalertragsbasis')) path = ['retirementInsurance', phase, 'capitalMonthlyToday']
     else if (message.includes('DRV-Zuschuss')) path = ['retirementInsurance', phase, 'drvSubsidy']
     else if (message.includes('Zusatzbeitrag')) path = ['retirementInsurance', 'insurerAdditionalRate']
     else if (/Elterneigenschaft|Kinder|Kindergeburtsjahre/.test(message)) {

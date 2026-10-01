@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { cashOnlyInput } from './insuranceFixtures'
+import { cashOnlyInput, withFullCostBasis } from './insuranceFixtures'
+import type { RentenlueckeInput } from '../types'
+import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 const DEFAULT_INPUT = cashOnlyInput()
+
+// Mandatory detailed ledger: sampled bucket paths must address the input's own
+// buckets, so bootstrap components are derived from the buckets (matching ids,
+// weights and return sources). All test holdings are accumulating funds to keep
+// the historical sampling free of the honest negative-bank rejection.
+function alignedInput(buckets: { id: string; value: number; returnSeriesId: string }[]): RentenlueckeInput {
+  return withFullCostBasis(cashOnlyInput({
+    currentCapital: buckets.reduce((sum, bucket) => sum + bucket.value, 0),
+    estimatorPortfolio: buckets.map(bucket => ({ ...bucket, name: bucket.id,
+      holding: 'accumulating-equity-fund' as const })),
+  }))
+}
 import {
   DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
   DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
@@ -258,14 +272,7 @@ describe('historical returns', () => {
       annualInflationRate: 0,
     }
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 0, bonds: 0, fixed: 1 },
-        {
-          equity: SYNTHETIC_RETURN_SERIES_IDS.equity,
-          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
-          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
-        },
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
       simulations: 1,
     }
@@ -288,14 +295,7 @@ describe('historical returns', () => {
       annualInflationRate: 0.03,
     }
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 1, bonds: 0, fixed: 0 },
-        {
-          equity: SYNTHETIC_RETURN_SERIES_IDS.equity,
-          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
-          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
-        },
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!),
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
       simulations: 1,
     }
@@ -359,46 +359,42 @@ describe('historical returns', () => {
   })
 
   it('keeps mixed historical and synthetic bootstrap summaries deterministic for identical settings', () => {
+    const mixedInput = alignedInput([
+      { id: 'equity', value: 70_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity },
+      { id: 'bonds', value: 20_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.bond },
+      { id: 'fixed', value: 10_000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+    ])
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
-        {
-          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-          bond: SYNTHETIC_RETURN_SERIES_IDS.bond,
-          cash: SYNTHETIC_RETURN_SERIES_IDS.cash,
-        },
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(mixedInput.estimatorPortfolio!),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
       simulations: 25,
     }
 
-    expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings)).toEqual(
-      simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    expect(simulateHistoricalBootstrapScenario(mixedInput, settings)).toEqual(
+      simulateHistoricalBootstrapScenario(mixedInput, settings),
     )
-    expect(runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)).toEqual(
-      runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings),
+    expect(runHistoricalBootstrapSimulation(mixedInput, settings)).toEqual(
+      runHistoricalBootstrapSimulation(mixedInput, settings),
     )
   })
 
   it('produces stable sampled scenarios and bootstrap summaries for identical inputs', () => {
+    const historicalInput = alignedInput([
+      { id: 'equity', value: 70_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity },
+      { id: 'bonds', value: 20_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
+      { id: 'fixed', value: 10_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash },
+    ])
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
-        {
-          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-          bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-          cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
-        },
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(historicalInput.estimatorPortfolio!),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
       simulations: 25,
     }
 
-    expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings)).toEqual(
-      simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    expect(simulateHistoricalBootstrapScenario(historicalInput, settings)).toEqual(
+      simulateHistoricalBootstrapScenario(historicalInput, settings),
     )
-    expect(runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)).toEqual(
-      runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings),
+    expect(runHistoricalBootstrapSimulation(historicalInput, settings)).toEqual(
+      runHistoricalBootstrapSimulation(historicalInput, settings),
     )
   })
 
@@ -435,21 +431,19 @@ describe('historical returns', () => {
   })
 
   it('uses fixed-return rows with the selected inflation source as bootstrap reference capital', () => {
+    const historicalInput = alignedInput([
+      { id: 'equity', value: 70_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity },
+      { id: 'bonds', value: 20_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
+      { id: 'fixed', value: 10_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash },
+    ])
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
-        {
-          equity: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity,
-          bond: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond,
-          cash: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash,
-        },
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(historicalInput.estimatorPortfolio!),
       inflationSourceId: FIXED_INFLATION_SOURCE_ID,
       simulations: 25,
     }
 
-    const fixedReturnSelectedInflationPlan = simulateHistoricalBootstrapReferenceScenario(DEFAULT_INPUT, settings)
-    const bootstrapSummary = runHistoricalBootstrapSimulation(DEFAULT_INPUT, settings)
+    const fixedReturnSelectedInflationPlan = simulateHistoricalBootstrapReferenceScenario(historicalInput, settings)
+    const bootstrapSummary = runHistoricalBootstrapSimulation(historicalInput, settings)
 
     expect(bootstrapSummary.rows.map((row) => row.planCapitalToday)).toEqual(
       fixedReturnSelectedInflationPlan.rows.map((row) => row.closingCapitalToday),
@@ -462,11 +456,13 @@ describe('historical returns', () => {
   })
 
   it('keeps bootstrap seeds and results stable when a component label is renamed', () => {
+    const historicalInput = alignedInput([
+      { id: 'equity', value: 70_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.equity },
+      { id: 'bonds', value: 20_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.bond },
+      { id: 'fixed', value: 10_000, returnSeriesId: DEFAULT_HISTORICAL_RETURN_SERIES_IDS.cash },
+    ])
     const settings = {
-      portfolioComponents: createPortfolioComponents(
-        { equity: 0.7, bonds: 0.2, fixed: 0.1 },
-        DEFAULT_HISTORICAL_RETURN_SERIES_IDS,
-      ),
+      portfolioComponents: createPortfolioComponentsFromBuckets(historicalInput.estimatorPortfolio!),
       inflationSourceId: DEFAULT_HISTORICAL_INFLATION_SERIES_ID,
       simulations: 25,
     }
@@ -477,11 +473,11 @@ describe('historical returns', () => {
       ),
     }
 
-    expect(createHistoricalBootstrapSeed(DEFAULT_INPUT, renamedSettings)).toBe(
-      createHistoricalBootstrapSeed(DEFAULT_INPUT, settings),
+    expect(createHistoricalBootstrapSeed(historicalInput, renamedSettings)).toBe(
+      createHistoricalBootstrapSeed(historicalInput, settings),
     )
-    expect(simulateHistoricalBootstrapScenario(DEFAULT_INPUT, renamedSettings)).toEqual(
-      simulateHistoricalBootstrapScenario(DEFAULT_INPUT, settings),
+    expect(simulateHistoricalBootstrapScenario(historicalInput, renamedSettings)).toEqual(
+      simulateHistoricalBootstrapScenario(historicalInput, settings),
     )
   })
 

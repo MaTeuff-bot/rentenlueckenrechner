@@ -36,10 +36,10 @@ describe('integrated capital assessment ledger', () => {
     expect(insuranceSetupIssues(input).join()).toContain('positive Ausgangsallokation')
     expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, path(input))).toThrow(/positive Ausgangsallokation/)
-    input.retirementInsurance!.bridge.capitalMode = 'manual'
-    input.retirementInsurance!.bridge.capitalMonthlyToday = 0
-    expect(insuranceSetupIssues(input)).toEqual([])
-    expect(simulateScenario(input).rows[0].openingCapital).toBe(0)
+    // Mandatory: legacy manual capital fields never bypass portfolio eligibility.
+    input.retirementInsurance!.bridge = { ...input.retirementInsurance!.bridge, capitalMode: 'manual' as never, capitalMonthlyToday: 0 as never }
+    expect(insuranceSetupIssues(input).join()).toContain('positive Ausgangsallokation')
+    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
   })
   it('rejects partial or ambiguous bucket paths in both full and bootstrap ledgers', () => {
     const input = estimatorInput()
@@ -100,9 +100,9 @@ describe('integrated capital assessment ledger', () => {
     expect(insuranceSetupIssues(input)).toEqual([])
     input.estimatorPortfolio![0].holding = 'unsupported'
     expect(insuranceSetupIssues(input).join()).toContain('entfernen/ersetzen')
-    input.retirementInsurance!.bridge.capitalMode = 'manual'
-    input.retirementInsurance!.bridge.capitalMonthlyToday = 10
-    expect(insuranceSetupIssues(input)).toEqual([])
+    // Mandatory: legacy manual capital fields never bypass portfolio eligibility.
+    input.retirementInsurance!.bridge = { ...input.retirementInsurance!.bridge, capitalMode: 'manual' as never, capitalMonthlyToday: 10 as never }
+    expect(insuranceSetupIssues(input).join()).toContain('entfernen/ersetzen')
     expect(input.estimatorPortfolio![0].holding).toBe('unsupported')
   })
   it('preserves returns, savings, cash conservation, VP history and KVdR boundaries', () => {
@@ -159,13 +159,20 @@ describe('integrated capital assessment ledger', () => {
     expect(inflated.rows[1].capitalAssessment!.assessment.expenseAllowance).toBeCloseTo(56.1)
     expect(zero.rows[1].capitalAssessment!.pendingVorabpauschale).not.toBe(zero.rows[0].capitalAssessment!.pendingVorabpauschale)
   })
-  it('uses manual pension assessment alongside automatic bridge without extra spendable income', () => {
+  it('uses whole-phase manual totals alongside automatic bridge without extra spendable income', () => {
     const input = estimatorInput()
-    input.retirementInsurance!.pension = { status: 'unknown', circumstances: 'standard', capitalMode: 'manual', capitalMonthlyToday: 500, drvSubsidy: 'not-received' }
+    // Whole-phase manual totals replace only insurance; portfolioBase stays 0 for manual, assessment for automatic.
+    input.retirementInsurance!.pension = { status: 'unknown', circumstances: 'standard', manual: true, kvMonthlyToday: 80, pvMonthlyToday: 20, drvSubsidy: 'not-received' } as never
     const r = simulateScenarioWithReturnPath(input, [], undefined, path(input))
-    expect(r.rows.find(r => r.ageStart === 67)!.portfolioContributionBase).toBe(6000)
+    expect(r.rows.find(r => r.ageStart === 67)!.portfolioContributionBase).toBe(0)
     expect(r.rows.find(r => r.ageStart === 67)!.retirementIncomeGross).toBe(24000)
+    expect(r.rows.find(r => r.ageStart === 67)!.healthInsurance).toBeCloseTo(80 * 12 * r.rows.find(r => r.ageStart === 67)!.inflationFactor, 8)
+    expect(r.rows.find(r => r.ageStart === 67)!.careInsurance).toBeCloseTo(20 * 12 * r.rows.find(r => r.ageStart === 67)!.inflationFactor, 8)
     expect(r.rows.find(r => r.ageStart === 65)!.portfolioContributionBase).toBe(r.rows[1].capitalAssessment!.assessment.annualAssessment)
+    // Manual totals add no cash and no double deduction: gross unchanged, insurance deducted once.
+    for (const row of r.retirementRows) {
+      expect(row.retirementIncomeNet).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0), 8)
+    }
   })
   it('shares deterministic/reference paths and returns reproducible bootstrap results', () => {
     const input = estimatorInput()

@@ -4,7 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
-import { createDefaultState } from '../../hooks/scenarioState/defaults'
+import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
+import { createDefaultState, createSyntheticHistoricalState } from '../../hooks/scenarioState/defaults'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
 
@@ -36,8 +37,13 @@ beforeEach(() => {
   const state = createDefaultState()
   state.insuranceCoverageAnswers = completedCoverage()
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
-  state.input = { ...state.input, currentAge: 65, planningAge: 70, retirementInsurance: automaticInsurance() }
+  state.input = { ...state.input, currentAge: 65, retirementAge: 65, planningAge: 68, retirementInsurance: automaticInsurance() }
   state.retirementIncomeStreams = state.retirementIncomeStreams.map((stream) => ({ ...stream, support: 'standard' }))
+  // Mandatory detailed portfolio: fund-only synthetic setup with fixed inflation
+  // keeps the forecast deterministic and free of the honest bank-path rejection.
+  state.historical = createSyntheticHistoricalState()
+  state.portfolioBuckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity, holding: 'accumulating-equity-fund' }]
+  state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
   localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
 })
 
