@@ -1,17 +1,19 @@
 import { defineConfig } from 'vitest/config'
 
-// Workers are hardcoded: this project runs its unit suite on a single
-// consistently provisioned environment (1-CPU container locally, 2-CPU CI
-// runner). A previous cgroup quota/affinity resolver (vitest.workers.ts) was
-// rejected as unneeded complexity for a fixed setup; one worker locally keeps
-// simulation-heavy tests within their 10s budgets, and CI retains Vitest's
-// default parallelism because maxWorkers: 1 only applies where this config is
-// read. testTimeout and all fixtures remain unchanged.
+// Workers are hardcoded for this project's consistent environments: the
+// execution container now provides 4 CPUs, and CI runners provide 2. Three
+// workers measured fastest and reliably green twice (57-59s); two workers run
+// 74-104s, one worker 194-195s. More workers than CPUs would oversubscribe.
+// A cgroup quota/affinity resolver was previously rejected as unneeded
+// complexity for this fixed setup. The known simulation-heavy tests carry
+// explicit 20s budgets because one full recompute costs ~2.7s of CPU-bound
+// simulation (1000-path bootstrap) and each UI edit triggers a recompute.
+// testTimeout and all fixtures remain unchanged.
 export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    maxWorkers: 1,
+    maxWorkers: 3,
     testTimeout: 10_000,
     exclude: ['node_modules', 'dist', '.git', '.cache', 'e2e/**'],
   },
