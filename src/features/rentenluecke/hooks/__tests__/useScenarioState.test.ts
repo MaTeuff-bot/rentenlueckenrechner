@@ -58,6 +58,23 @@ describe('parsePersistedScenarioState', () => {
   })
 })
 
+describe('historical simulations setting', () => {
+  it('roundtrips an explicit count and keeps the default when absent', () => {
+    const scenario = { ...createDefaultState(), historical: { inflationSourceId: 'fixed-manual', simulations: 250 } }
+    expect(parsePersistedScenarioState(serializeScenarioState(scenario)).historical).toEqual({ inflationSourceId: 'fixed-manual', simulations: 250 })
+    const legacy = { ...createDefaultState(), historical: { inflationSourceId: 'fixed-manual' } }
+    expect(parsePersistedScenarioState(serializeScenarioState(legacy)).historical).toEqual({ inflationSourceId: 'fixed-manual' })
+  })
+
+  it('updates the persisted simulations count through updateSimulations', () => {
+    localStorage.clear()
+    const { result } = renderHook(() => useScenarioState())
+    act(() => result.current.updateSimulations(250))
+    const persisted = JSON.parse(localStorage.getItem('rentenlueckenrechner.scenario.v15')!)
+    expect(persisted.historical.simulations).toBe(250)
+  })
+})
+
 describe('createDefaultState', () => {
   it('creates buckets matching the default capital and allocation', () => {
     const state = createDefaultState()

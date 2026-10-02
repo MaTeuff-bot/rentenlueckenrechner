@@ -33,9 +33,10 @@ import {
 import { type InputFieldName } from '../model/inputSchema'
 import type { LifeTableSex } from '../mortality/mortality'
 import { calculatePortfolioBucketTotal, type PortfolioBucket } from '../model/portfolioBuckets'
-import { type AssetAllocation } from '../model/stochasticReturns'
+import { type AssetAllocation, DEFAULT_STOCHASTIC_SETTINGS } from '../model/stochasticReturns'
 import { createPortfolioComponentsFromBuckets } from '../model/portfolioBuckets'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../model/types'
+import { SimulationsAssumptions } from './InputPanel/SimulationsAssumptions'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
 import { SavingsSection } from './InputPanel/BasicInputSections'
 import { RetirementIncomeStreamsSection } from './InputPanel/RetirementIncomeStreamsSection'
@@ -57,6 +58,7 @@ type InputPanelProps = {
   retirementIncomeStreams: RetirementIncomeStream[]
   historical: {
     inflationSourceId: string
+    simulations?: number
   }
   historicalValidYears: number[]
   errors: Partial<Record<InputFieldName, string>>
@@ -75,6 +77,7 @@ type InputPanelProps = {
   onRetirementIncomeStreamAdd: () => void
   onRetirementIncomeStreamRemove: (id: string) => void
   onInflationSourceChange: (sourceId: string) => void
+  onSimulationsChange: (simulations: number) => void
   onReset: () => void
   sectionRequest?: SectionRequest | null
 }
@@ -106,6 +109,7 @@ export function InputPanel({
   onRetirementIncomeStreamAdd,
   onRetirementIncomeStreamRemove,
   onInflationSourceChange,
+  onSimulationsChange,
   onReset,
   sectionRequest = null,
 }: InputPanelProps) {
@@ -275,6 +279,8 @@ export function InputPanel({
             onChange={onChange}
             onInflationSourceChange={onInflationSourceChange}
           />
+
+          <SimulationsAssumptions simulations={historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations} onChange={onSimulationsChange} />
 
           <fieldset className="wide-fieldset source-overview">
             <legend>Quellen und Details</legend>

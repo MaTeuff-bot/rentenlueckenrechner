@@ -15,7 +15,8 @@ function renderNavigation(input: RentenlueckeInput) {
   const parsed = rentenlueckeInputSchema.safeParse(input)
   const issues = scenarioIssues(input, { kind: 'none' }, state.portfolioBuckets, parsed.success ? undefined : parsed.error, insuranceSetupIssues(input), null, null, completedCoverage())
   const noop = () => {}
-  const view = render(<InputPanel input={input} issues={issues} insuranceCoverageAnswers={completedCoverage()} childrenAnswer={{ kind: 'none' }} allocation={{ equity: .7, bonds: .2, fixed: .1 }} portfolioBuckets={state.portfolioBuckets} retirementIncomeStreams={input.retirementIncomeStreams ?? []} historical={state.historical} historicalValidYears={[]} errors={{}} allocationError={null} portfolioBucketError={null} onRetirementInsuranceChange={noop} onChange={noop} onPortfolioBucketChange={noop} onPortfolioBucketAdd={noop} onPortfolioBucketRemove={noop} onRetirementIncomeStreamChange={noop} onRetirementIncomeStreamAdd={noop} onRetirementIncomeStreamRemove={noop} onInflationSourceChange={noop} onReset={noop} />)
+  const view = render(<InputPanel input={input} issues={issues} insuranceCoverageAnswers={completedCoverage()} childrenAnswer={{ kind: 'none' }} allocation={{ equity: .7, bonds: .2, fixed: .1 }} portfolioBuckets={state.portfolioBuckets} retirementIncomeStreams={input.retirementIncomeStreams ?? []} historical={state.historical} historicalValidYears={[]} errors={{}} allocationError={null} portfolioBucketError={null} onRetirementInsuranceChange={noop} onChange={noop} onPortfolioBucketChange={noop} onPortfolioBucketAdd={noop} onPortfolioBucketRemove={noop} onRetirementIncomeStreamChange={noop} onRetirementIncomeStreamAdd={noop} onRetirementIncomeStreamRemove={noop} onInflationSourceChange={noop}
+          onSimulationsChange={() => {}} onReset={noop} />)
   return { ...view, issues }
 }
 function follow(container: HTMLElement, id: string) {

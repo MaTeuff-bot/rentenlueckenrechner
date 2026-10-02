@@ -42,6 +42,7 @@ export function RentenlueckeCalculator() {
     addRetirementIncomeStream,
     removeRetirementIncomeStream,
     updateInflationSource,
+    updateSimulations,
     reset,
   } = useScenarioState()
 
@@ -92,6 +93,7 @@ export function RentenlueckeCalculator() {
           onRetirementIncomeStreamAdd={addRetirementIncomeStream}
           onRetirementIncomeStreamRemove={removeRetirementIncomeStream}
           onInflationSourceChange={updateInflationSource}
+          onSimulationsChange={updateSimulations}
           onReset={reset}
           sectionRequest={sectionRequest}
         />

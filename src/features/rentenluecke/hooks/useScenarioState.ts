@@ -87,7 +87,7 @@ export function useScenarioState() {
     () => ({
       portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets),
       inflationSourceId: historical.inflationSourceId,
-      simulations: DEFAULT_STOCHASTIC_SETTINGS.simulations,
+      simulations: historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations,
     }),
     [historical, portfolioBuckets],
   )
@@ -208,6 +208,13 @@ export function useScenarioState() {
     }))
   }
 
+  const updateSimulations = (simulations: number) => {
+    setState((current) => ({
+      ...current,
+      historical: { ...current.historical, simulations },
+    }))
+  }
+
   const reset = () => {
     const nextState = createDefaultState()
     setState(nextState)
@@ -249,6 +256,7 @@ export function useScenarioState() {
     addRetirementIncomeStream,
     removeRetirementIncomeStream,
     updateInflationSource,
+    updateSimulations,
     reset,
   }
 }
