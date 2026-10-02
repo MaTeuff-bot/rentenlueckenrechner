@@ -5,10 +5,8 @@ import { defineConfig } from 'vitest/config'
 // workers measured fastest and reliably green twice (57-59s); two workers run
 // 74-104s, one worker 194-195s. More workers than CPUs would oversubscribe.
 // A cgroup quota/affinity resolver was previously rejected as unneeded
-// complexity for this fixed setup. The known simulation-heavy tests carry
-// explicit 20s budgets because one full recompute costs ~2.7s of CPU-bound
-// simulation (1000-path bootstrap) and each UI edit triggers a recompute.
-// testTimeout and all fixtures remain unchanged.
+// complexity for this fixed setup. Synthetic UI/hook fixtures use 100 paths;
+// the suite passes with the standard 10s timeout and no per-test extensions.
 export default defineConfig({
   test: {
     environment: 'node',

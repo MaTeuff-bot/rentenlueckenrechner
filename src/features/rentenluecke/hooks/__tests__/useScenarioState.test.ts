@@ -180,5 +180,5 @@ describe('useScenarioState', () => {
     expect(added).toMatchObject({ kind: 'gesetzliche-rente', support: 'standard', name: 'Gesetzliche Rente' })
     act(() => result.current.removeRetirementIncomeStream(added.id))
     expect(result.current.retirementIncomeStreams).toHaveLength(1)
-  }, 20000)
+  })
 })

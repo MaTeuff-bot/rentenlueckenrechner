@@ -73,7 +73,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByText(/behandelt ihn als Bruttobetrag in heutiger Kaufkraft/)).not.toHaveLength(0)
     expect(screen.getByText(/Versicherungsstatus und den Einkommensarten/)).toBeInTheDocument()
     expect(screen.getByText(/Sozialversicherungsberatung und kein Beitragsbescheid/)).toBeInTheDocument()
-  }, 20000)
+  })
 
   it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
     render(<RentenlueckeCalculator />)
@@ -89,7 +89,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('columnheader', { name: 'Konsumierter Überschuss' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Entnahme für Nettolücke' })).toBeInTheDocument()
     expect(screen.getAllByRole('cell', { name: '0 €' }).length).toBeGreaterThan(0)
-  }, 20000)
+  })
 
   it('shows validation state for an invalid age and hides calculated outputs', () => {
     render(<RentenlueckeCalculator />)
@@ -143,7 +143,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })[1])
     expect(screen.getAllByLabelText('Name von Gesetzliche Rente')).toHaveLength(1)
-  }, 20000)
+  })
 })
 
 it('requires answers on clean load, announces the owned reset, and dismisses its notice persistently', () => {

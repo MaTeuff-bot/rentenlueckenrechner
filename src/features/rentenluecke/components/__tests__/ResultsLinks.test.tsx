@@ -64,7 +64,7 @@ describe('results-to-inputs linking', () => {
     expect(screen.getByRole('tab', { name: /Persönlicher Plan/ })).toHaveAttribute('aria-selected', 'true')
     expect(document.getElementById('monthlyDesiredSpendingToday')).toBeVisible()
     expect(document.activeElement).toBe(document.getElementById('monthlyDesiredSpendingToday'))
-  }, 20000)
+  })
 
   it('routes timeline and capital-trajectory results to Zeitplan and Vermögen', () => {
     render(<RentenlueckeCalculator />)
@@ -86,5 +86,5 @@ describe('results-to-inputs linking', () => {
     fireEvent.click(trajectoryLink)
     expect(screen.getByRole('tab', { name: /Vermögen/ })).toHaveAttribute('aria-selected', 'true')
     expect(document.activeElement).toBe(document.getElementById('portfolio-add'))
-  }, 20000)
+  })
 })
