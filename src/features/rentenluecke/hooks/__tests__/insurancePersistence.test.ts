@@ -98,7 +98,7 @@ describe('guided insurance persistence and app-owned reset', () => {
     act(() => reloaded.result.current.reset())
     expect(reloaded.result.current.result).toBeNull()
     expect(reloaded.result.current.input.retirementInsurance?.pension).toEqual({})
-  }, 20000)
+  })
 })
 
 describe('additive insurance estimator persistence', () => {
@@ -246,7 +246,7 @@ it('ignores legacy per-phase capital estimates, retains portfolio settings and a
   act(() => restored.result.current.updateInsuranceCoverage({ ...completedCoverage(), pension: { common: { kind: 'missing' } } }))
   expect(restored.result.current.result).toBeNull()
   expect(restored.result.current.issues.some(issue => issue.fieldPath === 'insuranceCoverageAnswers.pension.common')).toBe(true)
-}, 20_000)
+})
 
 it('updates and persists the life table sex selection', () => {
   const { result } = renderHook(useScenarioState)

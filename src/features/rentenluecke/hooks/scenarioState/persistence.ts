@@ -42,7 +42,7 @@ const input = z.object({
 const children = z.discriminatedUnion('kind', [z.object({ kind: z.literal('missing') }), z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('children'), rows: z.array(z.object({ id: z.string(), year: optionalNumber })).min(1).refine(rows => new Set(rows.map(row => row.id)).size === rows.length) })])
 const persistedScenarioSchema = z.object({ version: z.literal(15), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
-  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string() }),
+  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber }),
 })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()

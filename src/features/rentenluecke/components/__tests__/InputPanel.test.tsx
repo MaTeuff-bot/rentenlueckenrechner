@@ -63,6 +63,7 @@ function renderInputPanel(
       onRetirementIncomeStreamAdd={vi.fn()}
       onRetirementIncomeStreamRemove={vi.fn()}
       onInflationSourceChange={vi.fn<(sourceId: string) => void>()}
+          onSimulationsChange={() => {}}
       onReset={options.onReset ?? vi.fn()}
     />,
   )

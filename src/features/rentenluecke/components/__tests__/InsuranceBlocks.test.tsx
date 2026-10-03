@@ -56,6 +56,7 @@ function renderEstimatorSplit(input: RentenlueckeInput, onRetirementInsuranceCha
       onRetirementIncomeStreamAdd={noop}
       onRetirementIncomeStreamRemove={noop}
       onInflationSourceChange={noop}
+          onSimulationsChange={() => {}}
       onReset={noop}
     />,
   )
@@ -117,6 +118,7 @@ function renderVersicherungTab(input: RentenlueckeInput, coverage: InsuranceCove
       onRetirementIncomeStreamAdd={noop}
       onRetirementIncomeStreamRemove={noop}
       onInflationSourceChange={noop}
+          onSimulationsChange={() => {}}
       onReset={noop}
     />,
   )

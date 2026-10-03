@@ -12,10 +12,12 @@ export type ScenarioState = {
   portfolioEstimatorSettings?: PortfolioEstimatorSettings
   historical: {
     inflationSourceId: string
+    simulations?: number
   }
 }
 
 export type PersistedHistoricalState = {
   inflationSourceId?: string
   inflationSeriesId?: string
+  simulations?: number
 }

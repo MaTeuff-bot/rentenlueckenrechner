@@ -45,6 +45,7 @@ function renderVermoegen(input: Parameters<typeof InputPanel>[0]['input'], portf
       onRetirementIncomeStreamAdd={noop}
       onRetirementIncomeStreamRemove={noop}
       onInflationSourceChange={noop}
+          onSimulationsChange={() => {}}
       onReset={noop}
     />,
   )
@@ -156,6 +157,7 @@ describe('independent portfolio estimator UI (PR F)', () => {
         onRetirementIncomeStreamAdd={noop}
         onRetirementIncomeStreamRemove={noop}
         onInflationSourceChange={noop}
+          onSimulationsChange={() => {}}
         onReset={noop}
       />,
     )

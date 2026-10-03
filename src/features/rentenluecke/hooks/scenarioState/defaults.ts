@@ -31,9 +31,14 @@ export function createDefaultHistoricalState(): ScenarioState['historical'] {
   }
 }
 
+// Test-only fixture: deterministic synthetic sources with a reduced Monte Carlo
+// count. No test below asserts on percentile precision (P10/P50/P90 bands or
+// survival probability), so 100 paths keep the full recompute stack fast
+// without changing any test's purpose; production defaults stay at 1,000.
 export function createSyntheticHistoricalState(): ScenarioState['historical'] {
   return {
     inflationSourceId: FIXED_INFLATION_SOURCE_ID,
+    simulations: 100,
   }
 }
 
