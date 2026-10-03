@@ -109,7 +109,14 @@ export function RentenlueckeCalculator() {
         ) : (
           <>
             <SummaryCards result={result} stochasticSummary={stochasticSummary} onRequestSection={handleRequestSection} />
-            <p className="source-warning">Investmentsteuern werden nicht automatisch berechnet oder finanziert. Die Ergebnisse sind keine vollständig nach Steuern verfügbare Kaufkraft.</p>
+            <p className="source-warning">Kapitalertragsteuer und GRV-Rentensteuer werden als Planungsnäherung berechnet und bei einer Entnahmelücke aus dem Portfolio finanziert; keine individuelle Steuerberatung.</p>
+            <details className="panel"><summary>Hinweise zu Ausschlüssen und Annahmen</summary>
+              <ul>
+                <li>Nicht modelliert: Riester, private Renten, Betriebsrenten, Altversicherte, weitere Einkünfte im zvE, Kirchensteuer, Zusammenveranlagung.</li>
+                <li>Begrenzte Genauigkeit: Die zusätzliche Entnahme, die eine ungedeckte GRV-Rentensteuer finanziert, wird ohne Verkaufsgewinn modelliert (kein Veräußerungsgewinn, keine Kapitalertragsteuer, keine Freigabe von Anschaffungskosten, Vorabpauschale oder Verlusttopf); dieser Teil und spätere Steuerschätzungen können dadurch verzerrt sein.</li>
+              </ul>
+              <p>Vollständige Details stehen unter „Hinweise zur Renten- und Kapitalertragsteuer“.</p>
+            </details>
             <details className="panel"><summary>KV/PV-Abrechnung im Detail</summary><InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} /></details>
             <ScenarioOutcomePanel
               result={result}

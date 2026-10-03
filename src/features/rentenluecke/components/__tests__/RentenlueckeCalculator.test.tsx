@@ -5,7 +5,7 @@ import { createDefaultState, createSyntheticHistoricalState } from '../../hooks/
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
@@ -143,6 +143,20 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: 'Gesetzliche Rente entfernen' })[1])
     expect(screen.getAllByLabelText('Name von Gesetzliche Rente')).toHaveLength(1)
+  })
+
+  it('shows truthful tax disclosures without the stale investment-tax disclaimer', () => {
+    render(<RentenlueckeCalculator />)
+
+    expect(screen.getByText(/Kapitalertragsteuer und GRV-Rentensteuer werden als Planungsnäherung/)).toBeInTheDocument()
+    expect(screen.queryByText(/Investmentsteuern werden nicht/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Hinweise zu Ausschlüssen und Annahmen'))
+    const exclusions = screen.getByText('Hinweise zu Ausschlüssen und Annahmen').closest('details')
+    expect(exclusions).not.toBeNull()
+    const scope = within(exclusions as HTMLElement)
+    expect(scope.getByText(/Nicht modelliert: Riester/)).toBeInTheDocument()
+    expect(scope.getByText(/ohne Verkaufsgewinn modelliert/)).toBeInTheDocument()
+    expect(scope.getByText(/Hinweise zur Renten- und Kapitalertragsteuer/)).toBeInTheDocument()
   })
 })
 
