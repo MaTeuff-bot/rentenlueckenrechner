@@ -475,3 +475,12 @@ it('keeps the dismissed legacy notice hidden on remount while retaining the lega
   second.unmount()
   localStorage.clear()
 })
+
+it('states capital-income tax funding truthfully in the capital-basis details', () => {
+  const input = insuredInput()
+  const rows = simulateScenario(input).retirementRows
+  render(<InsuranceBreakdown rows={rows} streams={input.retirementIncomeStreams!} />)
+  expect(screen.getByText(/Jährliche Planungsnäherung, keine exakte Versicherungsabrechnung\./)).toBeInTheDocument()
+  expect(screen.getByText(/Kapitalertragsteuer auf die Finanzierungsverkäufe/)).toBeInTheDocument()
+  expect(screen.queryByText(/Investmentsteuern werden nicht/)).not.toBeInTheDocument()
+})

@@ -43,7 +43,7 @@ export function InsuranceBreakdown({ rows, streams }: { rows: YearlyPeriodRow[];
         <dt>Vorabpauschale für Zufluss im Folgejahr</dt><dd>{formatCurrency(row.capitalAssessment.pendingVorabpauschale)}</dd>
         <dt>Finanzierungsentnahme einschließlich KV/PV</dt><dd>{formatCurrency(row.capitalAssessment.paidWithdrawal)}</dd>
       </dl>
-      <p>Jährliche Planungsnäherung, keine exakte Versicherungsabrechnung. Investmentsteuern werden nicht automatisch berechnet; keine vollständig nach Steuern verfügbare Kaufkraft.</p>
+      <p>Jährliche Planungsnäherung, keine exakte Versicherungsabrechnung. Kapitalertragsteuer auf die Finanzierungsverkäufe ist in der Jahresrechnung enthalten und finanziert; für die zusätzliche Entnahme, die eine ungedeckte GRV-Rentensteuer trägt, ist kein Verkaufsgewinn modelliert (begrenzte Genauigkeit).</p>
     </details>}
     {row.retirementIncomeNet < 0 && <p>Die Beiträge übersteigen das Einkommen. Der negative Betrag erhöht die nötige Entnahme aus dem Vermögen.</p>}
     {c.status === 'manual' ? <p>Gesamte Phase manuell nach allen Zuschüssen. Automatische Grenzen, Freibeträge und Kinderanpassungen sind ersetzt; Bemessungsdetails liegen nicht vor.</p> : <>
