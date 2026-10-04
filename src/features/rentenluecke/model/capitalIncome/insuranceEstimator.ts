@@ -139,6 +139,15 @@ const yearSchema = z.object({
 })
 export type EstimatorYearInput = z.input<typeof yearSchema>
 export type InsuranceBurden = { kv: number; pv: number }
+export type WithdrawalTaxForTrial = { capitalIncomeTax: number } | null
+export type AdditionalRequirementForTrial = (
+  insurance: InsuranceBurden,
+  withdrawalTax: WithdrawalTaxForTrial,
+) => number
+export type EstimatorYearOptions = {
+  additionalRequirementForTrial?: AdditionalRequirementForTrial
+  fundedExcessBound?: number
+}
 
 /** Callback returns TOTAL annual own KV/PV (net of subsidy), including other income.
  * Pure/deterministic callback required; annual assessment is assessment-only EUR.
@@ -148,9 +157,14 @@ export function simulateEstimatorYear(
   state: EstimatorState,
   input: EstimatorYearInput,
   insuranceForAnnualAssessment: (annualAssessment: number) => InsuranceBurden,
+  options?: EstimatorYearOptions,
 ) {
   const opening = stateSchema.parse(state)
   const p = yearSchema.parse(input)
+  const additionalRequirementForTrial = options?.additionalRequirementForTrial
+  const fundedExcessBound = options?.fundedExcessBound ?? 0
+  if (!Number.isFinite(fundedExcessBound) || fundedExcessBound < 0 || fundedExcessBound > Number.MAX_SAFE_INTEGER)
+    throw new Error('Funded excess bound must be finite non-negative')
   if (p.buckets.length !== opening.buckets.length || new Set(p.buckets.map(b => b.id)).size !== p.buckets.length ||
       p.buckets.some(b => !opening.buckets.some(o => o.id === b.id))) throw new Error('Year must cover every bucket exactly once')
   const receivedVorabpauschale = opening.pendingVorabpauschale
@@ -251,8 +265,9 @@ export function simulateEstimatorYear(
     const assessment = assessmentForSale(sale, movement)
     const insurance = burdenSchema.parse(insuranceForAnnualAssessment(assessment.annualAssessment))
     // Abgeltungsteuer joins the same funding fixed point as insurance: the sale that
-    // funds the gap also funds its own tax, so required covers spending + insurance + tax.
-    // Pure per trial (no balance consumed); residual stays monotone (tax slope < 1).
+    // funds the gap also funds its own tax, so required covers spending + insurance + tax
+    // plus the optional additional requirement (pension tax via ledger hook).
+    // Pure per trial (no balance consumed).
     // YearSchema already validated the loss/allowance numbers; the positional pure
     // core keeps trials allocation-light (no per-trial object parsing).
     // bankInterest is the year's already-credited gross interest (computed once above
@@ -265,21 +280,29 @@ export function simulateEstimatorYear(
       p.withdrawalTax.allowanceAvailable,
       true,
       bankInterest) : null
-    const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0)))
+    const extra = additionalRequirementForTrial ? money.parse(additionalRequirementForTrial(insurance, tax)) : 0
+    const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0) + extra))
     return { sale, movement, assessment, insurance, tax, required, residual: withdrawal - required }
   }
   // Bracketed solver: no contractivity assumption. Report discontinuous or otherwise
   // unsolved callbacks instead of silently accepting an arbitrary final iteration.
+  // A small positive high-side residual within fundedExcessBound is a fully funded
+  // rounding candidate (statutory floors can prevent exact equality): commit that
+  // high-side trial once and conserve the excess via same-year repurchase below.
+  // Shortfall keeps a valid closing state; nonconverged keeps closingState null.
   let low = 0
   let high = available
   let result = trial(low)
   let lowResidual = result.residual
+  let highResult!: typeof result
+  let highResidual!: number
   let iterations = 1
   let status: 'converged' | 'shortfall' | 'nonconverged' = 'nonconverged'
   if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
   else {
     result = trial(high)
-    let highResidual = result.residual
+    highResult = result
+    highResidual = result.residual
     if (result.residual < -p.tolerance) status = 'shortfall'
     else if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
     else {
@@ -292,16 +315,57 @@ export function simulateEstimatorYear(
         result = trial(middle)
         if (Math.abs(result.residual) <= p.tolerance) { status = 'converged'; break }
         if (result.residual < 0) { low = middle; lowResidual = result.residual }
-        else { high = middle; highResidual = result.residual }
+        else { high = middle; highResidual = result.residual; highResult = result }
       }
       iterations = Math.min(iterations, p.maxIterations)
+      if (status === 'nonconverged' && highResidual >= 0 && highResidual <= fundedExcessBound + p.tolerance) {
+        result = highResult
+        status = 'converged'
+      }
     }
   }
-  const pendingVorabpauschale = result.movement.state.pendingVorabpauschale + contributionVorabpauschale
+  const excess = status === 'converged' ? Math.max(0, result.residual) : 0
+  const needsRepurchase = status === 'converged' && excess > p.tolerance
+  if (needsRepurchase && excess > fundedExcessBound + p.tolerance)
+    throw new Error('Finanzierungsüberschuss außerhalb der belegten Rundungsgrenze')
+  let repurchaseFundCost = 0
+  let repurchasePending = 0
+  let repurchaseBuckets: typeof result.movement.state.buckets | null = null
+  if (needsRepurchase) {
+    const movementTotal = result.movement.state.buckets.reduce((s, b) => s + b.value, 0)
+    const targets = p.buckets.map(b => b.targetWeight)
+    const hasTargets = targets.every(w => w !== undefined)
+      && Math.abs((targets as number[]).reduce((s, w) => s + (w ?? 0), 0) - 1) <= 1e-9
+    const weightsById = new Map<string, number>()
+    if (hasTargets) {
+      for (const m of p.buckets) weightsById.set(m.id, m.targetWeight!)
+    } else {
+      for (const b of result.movement.state.buckets)
+        weightsById.set(b.id, movementTotal > 0 ? b.value / movementTotal : 0)
+    }
+    repurchaseBuckets = result.movement.state.buckets.map(b => {
+      const share = excess * (weightsById.get(b.id) ?? 0)
+      if (b.eligibility === 'accumulating-equity-fund' && share > 0) {
+        repurchaseFundCost += share
+        const r = p.buckets.find(m => m.id === b.id)!.totalReturnRate
+        if (r === -1) throw new Error('Cannot purchase a fund at zero NAV')
+        repurchasePending += calculateVorabpauschale({
+          startValue: share / (1 + r), endValue: share,
+          projectedBasisRate: p.projectedBasisRate, acquisitionMonth: 12,
+        })
+      }
+      return { ...b, value: b.value + share }
+    })
+  }
+  const movementBuckets = repurchaseBuckets ?? result.movement.state.buckets
+  const movementFundCost = result.movement.state.fundAcquisitionCost + repurchaseFundCost
+  const movementPending = result.movement.state.pendingVorabpauschale + repurchasePending
+  const pendingVorabpauschale = money.parse(movementPending + contributionVorabpauschale)
   const closing = stateSchema.parse({ ...result.movement.state,
-    buckets: result.movement.state.buckets.map(b => ({ ...b,
+    buckets: movementBuckets.map(b => ({ ...b,
       value: b.value + p.buckets.find(m => m.id === b.id)!.contribution })),
-    fundAcquisitionCost: result.movement.state.fundAcquisitionCost + fundContribution,
+    fundAcquisitionCost: money.parse(movementFundCost + fundContribution),
+    assessedVorabpauschalen: result.movement.state.assessedVorabpauschalen,
     pendingVorabpauschale, simulatedLossCarryforward: result.assessment.closingSimulatedLoss,
   })
   return {
@@ -316,5 +380,6 @@ export function simulateEstimatorYear(
     requiredWithdrawal: result.required, paidWithdrawal: result.sale.paid,
     unfundedWithdrawal: Math.max(0, result.required - result.sale.paid),
     closingCapital: closing.buckets.reduce((sum, b) => sum + b.value, 0),
+    excessRepurchase: needsRepurchase ? excess : 0,
   }
 }

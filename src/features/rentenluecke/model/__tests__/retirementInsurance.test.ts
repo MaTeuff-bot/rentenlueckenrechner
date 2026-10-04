@@ -268,15 +268,18 @@ describe('authoritative contribution ledger', () => {
     const row = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
     expect(row.healthInsurance / 12).toBeCloseTo(189)
     expect(row.careInsurance / 12).toBeCloseTo(80)
-    // Mandatory: the modeled voluntary assessment (74.84/mo) replaces the legacy
-    // zero estimate. KV own = 2,000×(0.16+0.029) + 74.8376×(0.15+0.029) − 189
-    // subsidy = 202.396; PV = 2,074.8376×0.04 = 82.994. Same method as KVdR, only
+    // Mandatory: the modeled voluntary assessment (76.60/mo) replaces the legacy
+    // zero estimate. KV own = 2,000×(0.16+0.029) + 76.6022×(0.15+0.029) − 189
+    // subsidy = 202.712; PV = 2,076.6022×0.04 = 83.064. Same method as KVdR, only
     // the contribution-induced assessment differs; no double deduction.
+    // Tier-3 regression pins after the joint-funding fix: the assessment now
+    // includes the pension-tax share of the committed sale (was 74.84/mo
+    // pension-ignorant).
     i.pension = { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' }
     const voluntary = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
-    expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(74.83764767443925, 8)
-    expect(voluntary.healthInsurance / 12).toBeCloseTo(202.39593893372458, 8)
-    expect(voluntary.careInsurance / 12).toBeCloseTo(82.99350590697757, 8)
+    expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(76.60219084063776, 8)
+    expect(voluntary.healthInsurance / 12).toBeCloseTo(202.71179216047415, 8)
+    expect(voluntary.careInsurance / 12).toBeCloseTo(83.0640876336255, 8)
     i.pension = { ...i.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 7 }
     const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 })).retirementRows[1]
     expect(manual.healthInsurance).toBe(0)

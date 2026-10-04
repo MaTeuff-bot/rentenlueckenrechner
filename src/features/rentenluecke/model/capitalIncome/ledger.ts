@@ -1,7 +1,6 @@
 import { createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { calculateRetirementIncomeForYear, grvPensionGrossForYear } from '../retirementIncomeStreams'
-import { MONEY_EPSILON } from '../simulateRetirement'
 import { assessPensionYearTaxValues, resolvePensionTaxSetup } from '../tax/incomeTax'
 import { createInflationFactorResolver } from '../simulateAccumulation'
 import { deriveSummary } from '../deriveSummary'
@@ -59,6 +58,16 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     // carryforward, shared across accumulation and retirement years. The allowance
     // is the inflation-scaled Sparerpauschbetrag (base 1,000 EUR × factor).
     const allowanceAvailable = scaledSparerpauschbetrag(inflationFactor)
+    const grvGross = accumulation ? 0 : grvPensionGrossForYear(input, age, inflationFactor)
+    const jointOptions = !accumulation && pensionTaxSetup
+      ? {
+        additionalRequirementForTrial: (insurance: { kv: number; pv: number }) =>
+          assessPensionYearTaxValues(pensionTaxSetup, grvGross, insurance.kv, insurance.pv, inflationFactor).pensionIncomeTax,
+        // Statutory rounding bound: one 1-EUR today floor step maps to at most
+        // factor nominal (per §32a branch, verified 12355/12356 and zone tops).
+        fundedExcessBound: inflationFactor,
+      }
+      : undefined
     const result = simulateEstimatorYear(state, {
       projectedBasisRate: setup.projectedBasisRate, expenseAllowance: 51 * inflationFactor,
       spendingLessOtherIncome: desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0),
@@ -68,85 +77,28 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
         if (!r && b.value > 0) throw new Error(`Fehlender Renditepfad: ${b.name}`)
         return { id: b.id, totalReturnRate: r?.totalReturnRate ?? 0, grossBankReturnRate: b.holding === 'ordinary-bank-deposit' ? r?.grossBankReturnRate : undefined, contribution: contribution * weights[n], targetWeight: weights[n] }
       }),
-    }, assessment => accumulation ? { kv: 0, pv: 0 } : incomeFor(assessment))
+    }, assessment => accumulation ? { kv: 0, pv: 0 } : incomeFor(assessment), jointOptions)
     if (!result.closingState) throw new Error(`Kapitalbasis: numerischer Finanzierungsfehler im Alter ${age}; Restabweichung ${result.residual} €.`)
     const income = accumulation ? null : incomeFor(result.assessment.annualAssessment)
-    // Rentenbesteuerung on the final assessment's income (ordering: estimator year
-    // incl. Kapitalertragsteuer first, then GRV pension tax from the resulting
-    // KV/PV amounts, funded the same year).
+    // Display assessment for the committed trial (same KV/PV as the joint trial,
+    // so the tax matches the funded requirement; no extra sale follows).
     // Arithmetic core (no per-year validation): setup validated once at creation,
     // yearly values are engine-computed money — see assessPensionYearTaxValues.
     const pensionAssessment = !accumulation && pensionTaxSetup
-      ? assessPensionYearTaxValues(pensionTaxSetup,
-        grvPensionGrossForYear(input, age, inflationFactor),
-        income?.kv ?? 0, income?.pv ?? 0, inflationFactor)
+      ? assessPensionYearTaxValues(pensionTaxSetup, grvGross, income?.kv ?? 0, income?.pv ?? 0, inflationFactor)
       : null
     const pensionIncomeTax = pensionAssessment?.pensionIncomeTax ?? 0
     const pensionTaxBase = pensionAssessment?.pensionTaxBase ?? 0
     const retirementIncomeNet = (income?.net ?? 0) - pensionIncomeTax
-    // The pension tax joins the same funding logic as insurance (estimator line
-    // 263: required = max(0, spending + insurance + capitalTax)): the portfolio
-    // funds only what outside income cannot cover. baseNeed recomputes the
-    // estimator's pre-max required amount from final values, so the gap stays
-    // net of ALL deductions while a surplus keeps absorbing taxes outside the
-    // portfolio (no funding when the surplus covers the pension tax).
-    const capitalTax = result.withdrawalTax?.capitalIncomeTax ?? 0
-    const baseNeed = !accumulation && income
-      ? desiredSpending - (income.gross - income.otherDeductions)
-        + result.insurance.kv + result.insurance.pv + capitalTax
-      : 0
-    const gapWithdrawal = accumulation ? 0 : Math.max(0, baseNeed + pensionIncomeTax)
-    const extraFunding = accumulation ? 0 : Math.max(0, gapWithdrawal - result.requiredWithdrawal)
-    // Same-year funding of the pension-tax share from the remaining portfolio
-    // (planning approximation, mirroring fundRetirementYear in
-    // simulateRetirement.ts). Shortfalls stay visible as unfundedWithdrawal,
-    // never silently covered.
+    // Joint funding: the estimator trial already funds spending + insurance +
+    // capital tax + pension tax (required = max(0, need)), so the gap is the
+    // committed required withdrawal. A covering surplus keeps absorbing the tax
+    // outside the portfolio (required 0, no sale, no repurchase).
+    const gapWithdrawal = accumulation ? 0 : result.requiredWithdrawal
     const estimatorShortfall = result.status === 'shortfall'
-    let closingCapital = result.closingCapital
-    let paidWithdrawal = result.paidWithdrawal
-    let pensionUnfunded = 0
-    if (extraFunding > 0 && !estimatorShortfall) {
-      const rawClosingCapital = closingCapital - extraFunding
-      if (rawClosingCapital < -MONEY_EPSILON) {
-        pensionUnfunded = -rawClosingCapital
-        paidWithdrawal += closingCapital
-        closingCapital = 0
-      } else {
-        paidWithdrawal += extraFunding
-        closingCapital = rawClosingCapital < MONEY_EPSILON ? 0 : rawClosingCapital
-      }
-    } else if (extraFunding > 0) {
-      pensionUnfunded = extraFunding
-    }
-    const fundedPensionTax = extraFunding - pensionUnfunded
-    // Funded pension tax leaves the estimator's holdings as a pro-rata cash take:
-    // bucket values scale down so the chained next-year opening matches this
-    // row's closing (no double-counted tax). Cost, Vorabpauschalen and the loss
-    // carryforward stay untouched, so the estimator's book-chaining identities
-    // keep holding exactly; no gain realization is modeled on the funding take
-    // (planning approximation, disclosed in the rule snapshot — like worthless
-    // fund costs, the per-euro cost base simply survives the cash take).
-    let closingState = result.closingState
-    if (fundedPensionTax > 0 && closingState) {
-      const holdings = closingState.buckets.reduce((sum, b) => sum + b.value, 0)
-      if (holdings > 0) {
-        const keep = Math.max(0, (holdings - fundedPensionTax) / holdings)
-        closingState = {
-          ...closingState,
-          buckets: closingState.buckets.map(b => ({ ...b, value: b.value * keep })),
-        }
-      }
-    }
-    // The single portfolio sale funds the required withdrawal plus the pension
-    // tax: surface the funded/unfunded split through the assessment's paid,
-    // shortfall and chained-state totals so row conservation holds against one
-    // authoritative outflow.
-    const capitalAssessment = extraFunding === 0 ? result : {
-      ...result,
-      paidWithdrawal,
-      unfundedWithdrawal: result.unfundedWithdrawal + pensionUnfunded,
-      closingState,
-    }
+    const closingCapital = result.closingCapital
+    const paidWithdrawal = result.paidWithdrawal
+    const capitalAssessment = result
     return { capitalAssessment, insurance: income?.insurance,
       yearIndex: index, ageStart: age, ageEnd: age + 1, phase: accumulation ? 'accumulation' : 'retirement', inflationFactor,
       nominalReturnRate: result.openingCapital ? result.investmentReturn / result.openingCapital : rates.reduce((s, r) => s + r.totalReturnRate * weights[buckets.findIndex(b => b.id === r.id)], 0),
@@ -163,10 +115,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
         sparerpauschbetragApplied: result.withdrawalTax.sparerpauschbetragApplied,
         // Tax (and insurance) funded first; the gap receives the remainder.
         // In accumulation years the gap is zero, so this equals the funded remainder (usually zero).
-        netGapWithdrawal: Math.max(0, paidWithdrawal - result.insurance.kv - result.insurance.pv - result.withdrawalTax.capitalIncomeTax - fundedPensionTax),
+        netGapWithdrawal: Math.max(0, paidWithdrawal - result.insurance.kv - result.insurance.pv - result.withdrawalTax.capitalIncomeTax - pensionIncomeTax),
       } : {}),
       closingCapital, closingCapitalToday: closingCapital / factor(index + 1),
-      depleted: estimatorShortfall || pensionUnfunded > 0, unfundedWithdrawal: capitalAssessment.unfundedWithdrawal }
+      depleted: estimatorShortfall, unfundedWithdrawal: capitalAssessment.unfundedWithdrawal }
   }
   let state = initial
   const accumulationRows: YearlyPeriodRow[] = []

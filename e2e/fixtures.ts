@@ -105,9 +105,13 @@ export async function openTaxNotes(page: Page) {
 
 export async function expectPensionTaxLimitation(page: Page) {
   await openTaxNotes(page);
-  await expect(page.getByText(/Zusatzentnahme f.r die GRV-Rentensteuer bei Einkommenslücke/)).toBeVisible();
-  await expect(page.getByText(/kein Verm.gensverbrauch n.tig/)).toBeVisible();
-  await expect(page.getByText(/keine Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf/)).toBeVisible();
+  // Scope to the results tax-notes container: the same joint-funding phrase also
+  // appears in the CapitalEstimatorSetup input paragraph, so a page-wide locator
+  // is a strict-mode violation.
+  const taxNotes = page.locator('details:has(summary:text("Hinweise zur Renten- und Kapitalertragsteuer"))');
+  await expect(taxNotes.getByText(/im selben Finanzierungs-Fixpunkt/)).toBeVisible();
+  await expect(taxNotes.getByText(/zur.ckgekauft/)).toBeVisible();
+  await expect(taxNotes.getByText(/keine Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf/)).toHaveCount(0);
 }
 
 export async function setupFundOnlyBridge(page: Page) {

@@ -16,6 +16,6 @@ test('results show truthful tax copy with existing detailed notes', async ({ pag
   await openTaxNotes(page)
   const taxNotes = results.locator('details:has(summary:text("Hinweise zur Renten- und Kapitalertragsteuer"))')
   await expect(taxNotes.getByText(/Nicht modelliert: Riester/)).toBeVisible()
-  await expect(taxNotes.getByText(/kein Verkaufsgewinn/)).toBeVisible()
+  await expect(taxNotes.getByText(/im selben Finanzierungs-Fixpunkt/)).toBeVisible()
   await expectPensionTaxLimitation(page)
 })

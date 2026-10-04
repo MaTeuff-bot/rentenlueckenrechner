@@ -397,25 +397,28 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
   })
 
   it('assesses and funds Kapitalertragsteuer on withdrawal gains plus Vorabpauschale', () => {
-    // First retirement year (age 67): funding-sale gain 4,408.124 + rebalancing gain
-    // 602.234 + received VP 1,318.007 = 6,328.366; x0.7 (30% Teilfreistellung) =
-    // 4,429.856; + bank interest 839.445 (ordinary deposit, no exemption) = 5,269.301;
-    // allowance 1,000 -> base 4,269.301; tax 4,269.301 x 0.25 x 1.055 = 1,126.028.
-    // The larger interest-inclusive capital tax funds a larger sale, which slightly
-    // raises the insurance assessment (KV/PV Sonderausgaben) and lowers the pension
-    // tax to 263 (was 265 fund-only). Required withdrawal = 6,000 gap + insurance +
-    // 1,126.028 capital tax + 263 pension tax = 13,522.780 gap (tier-3 pins).
+    // First retirement year (age 67): the pension tax joins the same committed
+    // sale, so funding the ~261 pension tax realizes more gains than the
+    // pension-ignorant base (was 6,328.366 -> 4,429.856 x0.7 + 839.445 interest
+    // = 5,269.301 taxable): jointly funded taxable 5,336.048; allowance 1,000
+    // -> base 4,336.048; tax 4,336.048 x 0.25 x 1.055 = 1,143.633. The larger
+    // sale slightly raises the insurance assessment (KV/PV 5,093.173/1,054.262
+    // Sonderausgaben), lowering the pension tax to 261 (was 263 pension-ignorant).
+    // Required withdrawal = 6,000 gap + insurance + 1,143.633 capital tax + 261
+    // pension tax = 13,552.068 gap. Tier-3 regression pins after the joint-funding
+    // fix (no feasible hand calculation for the fixed point; gap/paid/closing
+    // identities are verified by the joint-funding suite).
     const result = simulateScenario(input)
     const first = result.retirementRows[0]
     expect(first.capitalAssessment!.bankInterest).toBeMoneyClose(839.4450777952111)
-    expect(first.taxableWithdrawal).toBeMoneyClose(5269.301209402183)
+    expect(first.taxableWithdrawal).toBeMoneyClose(5336.048177575691)
     expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
-    expect(first.capitalIncomeTax).toBeMoneyClose(1126.0281939798258)
+    expect(first.capitalIncomeTax).toBeMoneyClose(1143.6327068355884)
     expect(first.pensionTaxBase).toBeMoneyClose(20_280)
-    expect(first.pensionIncomeTax).toBeMoneyClose(263)
-    expect(first.retirementIncomeNet).toBeMoneyClose(17603.248252072553)
+    expect(first.pensionIncomeTax).toBeMoneyClose(261)
+    expect(first.retirementIncomeNet).toBeMoneyClose(17591.565123596985)
     expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
-    expect(first.gapWithdrawal).toBeMoneyClose(13522.779941907274)
+    expect(first.gapWithdrawal).toBeMoneyClose(13552.067583238604)
     // Every retirement year is taxed with a fresh annual allowance (scaled by inflation;
     // factor 1 here, so 1,000); accumulation Umschichtung rows carry the same fields.
     for (const row of result.retirementRows) {
@@ -430,11 +433,13 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     }
     expectLedgerConservation(result.rows)
     // Required capital funds gap + both taxes (tier-3 regression pin for the taxed search;
-    // slice 2 raises it by the funded GRV-Rentensteuer; the holdings-only funding
-    // take keeps future capital-tax estimates slightly lower than full state scaling.
-    // Both pins moved with the bank-interest-inclusive capital tax: the accumulation
-    // year now funds 69.365 tax (projected 104,930.635 instead of 105,000).
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34552.849772185415)
+    // slice 2 raises it by the jointly funded GRV-Rentensteuer: the search rebuilds
+    // rows through the taxed joint path, where each pension-tax share is funded by
+    // the gain-realizing sale itself. Both pins moved with the bank-interest-inclusive
+    // capital tax: the accumulation year now funds 69.365 tax (projected 104,930.635
+    // instead of 105,000); required capital rises to 34,707.357 with joint funding
+    // (was 34,552.850 pension-ignorant).
+    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34707.357313855726)
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(104930.63472440137)
   })
 
