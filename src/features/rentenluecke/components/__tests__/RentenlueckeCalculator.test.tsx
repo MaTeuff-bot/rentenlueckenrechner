@@ -157,8 +157,8 @@ describe('RentenlueckeCalculator', () => {
     expect(notes).not.toBeNull()
     const scope = within(notes as HTMLElement)
     expect(scope.getByText(/Nicht modelliert: Riester/)).toBeInTheDocument()
-    expect(scope.getByText(/Zusatzentnahme für die GRV-Rentensteuer bei Einkommenslücke/)).toBeInTheDocument()
-    expect(scope.getByText(/kein Verkaufsgewinn/)).toBeInTheDocument()
+    expect(scope.getByText(/im selben Finanzierungs-Fixpunkt/)).toBeInTheDocument()
+    expect(scope.queryByText(/kein Verkaufsgewinn/)).not.toBeInTheDocument()
   })
 })
 

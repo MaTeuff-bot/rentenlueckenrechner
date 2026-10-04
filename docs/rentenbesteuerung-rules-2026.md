@@ -43,15 +43,17 @@ NOT enter the zvE (Abgeltung fertig, slices 1/1b are separate).
 - Scalar ledger (`simulateRetirement.ts`): retirement income (KV/PV) →
   Rentenbesteuerung (capital-independent: sets the gap) → Abgeltungsteuer
   assessment on the resulting gap → portfolio funding (`fundRetirementYear`).
-- Estimator ledger (`capitalIncome/ledger.ts`): estimator year simulation
-  (sales, VP, Kapitalertragsteuer, funding of the pension-ignorant required
-  withdrawal) → Rentenbesteuerung from the final KV/PV amounts → the pension-tax
-  share joins the same funding logic as insurance
-  (`required = max(0, need)`, estimator line 263): only what outside income
-  cannot cover is funded from the remaining portfolio; a covering surplus keeps
-  absorbing the tax outside the portfolio. Funded amounts leave the holdings as
-  a pro-rata cash take (bucket values scale down; cost, Vorabpauschalen and loss
-  carryforward untouched, so estimator book-chaining holds exactly).
+- Estimator ledger (`capitalIncome/ledger.ts`): estimator year simulation with the
+  pension tax inside the trial fixed point (sales, VP, Kapitalertragsteuer,
+  `required = max(0, Bedarf + KV/PV + Kapitalertragsteuer + Rentensteuer)` via
+  `additionalRequirementForTrial`) → one display assessment from the committed
+  KV/PV amounts (no extra sale follows). Only what outside income cannot cover
+  is funded from the portfolio; a covering surplus keeps absorbing the tax
+  outside the portfolio (required 0, no sale, no repurchase). The committed sale
+  realizes gains normally (cost/VP release and loss/allowance consumption from
+  the selected trial, consumed once). A small rounding excess (≤ inflation
+  factor, from §32a floor steps) is repurchased the same year at target weights
+  (fund share adds cost plus December VP, no new assessment the same year).
 - Required-capital search needs no separate pension-tax loop: the scalar search
   reuses the taxed `gapWithdrawal` rows, and the estimator search rebuilds rows
   through the same taxed path. Same-year funding does not replicate
@@ -80,11 +82,11 @@ NOT enter the zvE (Abgeltung fertig, slices 1/1b are separate).
 - GRV pensions starting before the simulation use the simulation's first GRV
   year for the Rentenfreibetrag (no historical pension data in the model).
 - Pre-2023 pension starts use the linear Besteuerungsanteil extension.
-- The estimator funding take only scales holdings down proportionally: it realizes
-  no capital gains, releases no acquisition-cost or Vorabpauschalen history,
-  and leaves the loss carryforward unchanged. No error bound is established
-  by this implementation — the funded take's own capital tax is unmodeled and
-  later capital-tax estimates can be distorted.
+- The estimator funds the pension-tax share through the joint sale (gains,
+  cost/VP release and loss/allowance consumption from the committed trial,
+  consumed once). Only the small rounding excess (≤ inflation factor) is
+  repurchased the same year at target weights with cost plus December VP and no
+  new assessment the same year.
 - Quarterly prepayments, Steuerbescheid timing, or discounting of the tax to a
   different year than its assessment.
 

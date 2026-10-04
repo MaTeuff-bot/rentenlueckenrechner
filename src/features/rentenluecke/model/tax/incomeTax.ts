@@ -46,7 +46,7 @@ export const pensionTaxDisclosures = [
   'KV-/PV-Eigenbeiträge auf die Rente mindern den zvE als Sonderausgaben (Jahresbeträge der Beitragsengine).',
   'Nicht modelliert: Riester, private Renten (Ertragsanteil), Betriebsrenten, Altversicherte (vor 1948), weitere Einkünfte neben der GRV-Rente im zvE, Kirchensteuer, Zusammenveranlagung.',
   'Kein Solidaritätszuschlag auf die GRV-Rentensteuer ausgewiesen (fällt erst oberhalb der Freizone an); gleichjährige Steuerzahlung ist eine Planungsnäherung ohne Vorauszahlungs-/Bescheid-Timing.',
-  'Zusatzentnahme für die GRV-Rentensteuer bei Einkommenslücke (kein Vermögensverbrauch nötig): Das Portfolio finanziert den ungedeckten Steuerbetrag zusätzlich und die Bestände sinken nur proportional; für diese Entnahme werden kein Verkaufsgewinn, keine Kapitalertragsteuer und keine Freigabe von Anschaffungskosten, Vorabpauschalen oder Verlusttopf modelliert, sodass dieser Teil und spätere Steuerschätzungen verzerrt sein können.',
+  'Die GRV-Rentensteuer wird im selben Finanzierungs-Fixpunkt wie KV/PV und Kapitalertragsteuer aus dem Portfolio finanziert (die erforderliche Entnahme deckt Bedarf + KV/PV + Kapitalertragsteuer + Rentensteuer; ein deckender Überschuss bleibt außerhalb des Portfolios). Ein kleiner rundungsbedingter Mehrbetrag (≤ Szenario-Inflationsfaktor) wird im selben Jahr zu Zielgewichten zurückgekauft (Anschaffungskosten und Vorabpauschale fortgeführt, keine neue Bemessung im selben Jahr). Gleichjährige Steuerzahlung ist eine Planungsnäherung ohne Vorauszahlungs-/Bescheid-Timing.',
 ] as const
 
 /** EStG §32a (1) Grundtarif für den Veranlagungszeitraum 2026 (Single, Grundtabelle).
