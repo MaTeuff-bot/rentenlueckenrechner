@@ -3,7 +3,6 @@ import type { InsuranceCoverageAnswers } from './insuranceCoverage'
 import type { ZodError } from 'zod'
 import type { RentenlueckeInput } from './types'
 import type { PortfolioBucket } from './portfolioBuckets'
-import { PLANNING_RATE_SOURCE_ID } from './historicalReturns/constants'
 import { getReturnSeriesCategory } from './historicalReturns'
 import type { ChildrenAnswer } from './childrenAnswer'
 export type FlowSection = 'zeitplan' | 'ausgaben' | 'einkommen' | 'vermoegen' | 'versicherung' | 'ergebnis' | 'annahmen'
@@ -92,7 +91,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     else if (message.includes('klassifizieren')) {
       const index = Math.max(0, buckets.findIndex(b => !b.holding || b.holding === 'unsupported'))
       path = ['estimatorPortfolio', index, 'holding']; kind = buckets[index]?.holding ? 'invalid' : 'missing'
-    } else if (message.includes('Bankeinlagen')) { path = ['estimatorPortfolio', Math.max(0, buckets.findIndex(b => b.holding === 'ordinary-bank-deposit' && b.returnSeriesId !== PLANNING_RATE_SOURCE_ID)), 'returnSeriesId']; kind = 'invalid' }
+    } else if (message.includes('Bankeinlagen')) { path = ['historical', 'cashPlanningRate']; kind = 'invalid' }
     else if (/Ausgangsallokation|Portfoliowerte/.test(message)) { path = ['estimatorPortfolio', 0, 'value']; kind = 'invalid' }
     add(path, /PV-Elterneigenschaft/.test(message) ? 'Anerkannte Kinder ergänzen oder ausdrücklich „Keine anerkannten Kinder“ wählen.' : !input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? message.replaceAll('Rentenphase', 'Phase ab Versicherungsübergang') : message, kind, `setup.${path.join('.')}`)
   }

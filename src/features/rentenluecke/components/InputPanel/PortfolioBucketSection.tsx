@@ -64,16 +64,26 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                   onChange={(annualCostRate) => onUpdate(bucket.id, { annualCostRate })}
                 />
               </div>
-              <label className="field">
-                <span className="field-label">Renditequelle/Proxy</span>
-                <select id={`portfolio-source-${bucket.id}`} aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
-                  {sourceOptionGroups.map((group) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
+              {bucket.holding === 'ordinary-bank-deposit' ? (
+                <div className="field">
+                  <span className="field-label">Renditequelle/Proxy</span>
+                  <p id={`portfolio-source-common-${bucket.id}`} data-testid={`portfolio-source-common-${bucket.id}`}>
+                    Gemeinsamer Tagesgeld-Planungszins (Rechenannahmen) — Cash
+                  </p>
+                  <p className="portfolio-note">Bankeinlagen teilen sich den ausdrücklich bestätigten Satz unter Rechenannahmen; keine eigene Quellauswahl.</p>
+                </div>
+              ) : (
+                <label className="field">
+                  <span className="field-label">Renditequelle/Proxy</span>
+                  <select id={`portfolio-source-${bucket.id}`} aria-describedby={`portfolio-notes-${bucket.id}`} aria-label={`Renditequelle/Proxy von ${label}`} value={bucket.returnSeriesId} onChange={(event) => onUpdate(bucket.id, { returnSeriesId: event.target.value })}>
+                    {sourceOptionGroups.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((option) => <option key={option.id} value={option.id}>{formatDropdownLabel(option)}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="portfolio-row-notes" id={`portfolio-notes-${bucket.id}`} aria-live="polite">
                 <span className="source-category-chip">Kategorie: {formatSourceCategoryLabel(category)}</span>
                 {selectedSource?.costTreatment === 'netOfFundCosts' ? <p className="portfolio-cost-note">ETF-TER/OCF ist in dieser Renditequelle bereits berücksichtigt. Das Kostenfeld ist nur für zusätzliche Kosten gedacht; unter der aktuellen Modellierung wird es bei dieser Quelle nicht abgezogen.</p> : null}

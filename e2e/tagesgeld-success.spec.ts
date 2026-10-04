@@ -7,7 +7,7 @@ import {
 } from './fixtures';
 
 // 3A gate: mixed fund + Tagesgeld planning-rate journey with visible controls only.
-// Equity fund (synthetic equity) + Cash bucket (ordinary-bank-deposit, planning source),
+// Equity fund (synthetic equity) + Cash bucket (ordinary-bank-deposit, common rate),
 // fund cost 0 + both scopes, KVdR pension + voluntary bridge, standard coverage,
 // explicit Keine Kinder, DEFAULT simulations (1000, untouched), no seeding.
 test('mixed fund plus Tagesgeld planning rate forecasts, edits and reloads', async ({ page }) => {
@@ -17,13 +17,16 @@ test('mixed fund plus Tagesgeld planning rate forecasts, edits and reloads', asy
   await page.getByRole('tab', { name: /Pers.nlicher Plan/ }).click();
   await page.locator('#retirementAge').fill('65');
 
-  // Portfolio: keep equity + cash, remove Anleihen only.
+  // Portfolio: keep equity + cash, remove Anleihen only. Banks share the
+  // confirmed common rate: explicit holding classification only, no per-bank
+  // source pick (redundant bank source dropdown removed).
   await page.getByRole('tab', { name: /Verm.gen/ }).click();
   await page.getByRole('button', { name: 'Anleihen entfernen' }).click();
   await page.locator('#portfolio-holding-equity').selectOption('accumulating-equity-fund');
   await page.locator('#portfolio-source-equity').selectOption('synthetic-equity-assumption-v1');
   await page.locator('#portfolio-holding-fixed').selectOption('ordinary-bank-deposit');
-  await page.locator('#portfolio-source-fixed').selectOption('tagesgeld-planzins-v1');
+  await expect(page.locator('#portfolio-source-common-fixed')).toBeVisible();
+  await expect(page.locator('#portfolio-source-fixed')).toHaveCount(0);
 
   // Estimator: explicit 0 cost + both scopes.
   if (!(await page.locator('#estimator-fundAcquisitionCost').isVisible())) {

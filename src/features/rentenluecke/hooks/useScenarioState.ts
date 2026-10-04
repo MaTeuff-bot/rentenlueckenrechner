@@ -31,7 +31,7 @@ import {
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { dismissTagesgeldPlanningRateNotice, loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
-import { cashPlanningRateIssue, getConfirmedCashPlanningRate } from '../model/cashPlanningRate'
+import { adoptPlanningRateForBankBuckets, cashPlanningRateIssue, getConfirmedCashPlanningRate, isConfirmedCashPlanningRate, resolveBucketSourceForHoldingChange } from '../model/cashPlanningRate'
 import type { RetirementIncomeStream } from '../model/types'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
@@ -146,12 +146,24 @@ export function useScenarioState() {
   }
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
-    setState((current) => ({
-      ...current,
-      portfolioBuckets: current.portfolioBuckets.map((bucket) =>
-        bucket.id === id ? { ...bucket, ...patch } : bucket,
-      ),
-    }))
+    setState((current) => {
+      const confirmedRate = getConfirmedCashPlanningRate(current.historical)
+      return {
+        ...current,
+        portfolioBuckets: current.portfolioBuckets.map((bucket) => {
+          if (bucket.id !== id) return bucket
+          const nextHolding = patch.holding !== undefined ? patch.holding : bucket.holding
+          const nextSource = resolveBucketSourceForHoldingChange(
+            bucket.returnSeriesId,
+            bucket.holding,
+            patch.holding,
+            patch.returnSeriesId,
+            confirmedRate,
+          )
+          return { ...bucket, ...patch, holding: nextHolding, returnSeriesId: nextSource }
+        }),
+      }
+    })
   }
 
   const addPortfolioBucket = () => {
@@ -228,17 +240,36 @@ export function useScenarioState() {
   }
 
   const updateCashPlanningRateConfirmed = (cashPlanningRateConfirmed: boolean) => {
-    if (cashPlanningRateConfirmed) dismissTagesgeldPlanningRateNotice()
+    if (!cashPlanningRateConfirmed) {
+      setState((current) => ({
+        ...current,
+        historical: { ...current.historical, cashPlanningRateConfirmed: false },
+      }))
+      return
+    }
     // Explicit confirmation adopts the displayed proposal when the field was
     // never edited (prefill-in-progress is display-only until confirmed).
-    setState((current) => ({
-      ...current,
-      historical: { ...current.historical,
-        cashPlanningRate: cashPlanningRateConfirmed && current.historical.cashPlanningRate === undefined
-          ? CASH_PLANNING_RATE_PROPOSAL
-          : current.historical.cashPlanningRate,
-        cashPlanningRateConfirmed },
-    }))
+    // A valid explicit confirmation also establishes the common planning-rate
+    // source for all declared ordinary-bank-deposit buckets. An invalid
+    // effective rate must not persist confirmation: the user corrects the
+    // rate and confirms explicitly again. Undefined still accepts the proposal.
+    setState((current) => {
+      const effectiveRate = current.historical.cashPlanningRate ?? CASH_PLANNING_RATE_PROPOSAL
+      if (!isConfirmedCashPlanningRate(effectiveRate)) {
+        return {
+          ...current,
+          historical: { ...current.historical, cashPlanningRateConfirmed: false },
+        }
+      }
+      dismissTagesgeldPlanningRateNotice()
+      const nextHistorical = {
+        ...current.historical,
+        cashPlanningRate: effectiveRate,
+        cashPlanningRateConfirmed: true,
+      }
+      const nextBuckets = adoptPlanningRateForBankBuckets(current.portfolioBuckets, nextHistorical)
+      return { ...current, historical: nextHistorical, portfolioBuckets: nextBuckets }
+    })
   }
 
   const reset = () => {

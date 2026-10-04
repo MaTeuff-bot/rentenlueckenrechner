@@ -119,4 +119,30 @@ describe('PortfolioBucketSection', () => {
     expect(selector).toHaveAccessibleDescription(/Kategorie: Aktien.*ETF-TER\/OCF/)
     expect(screen.getByText(/ETF-TER\/OCF ist in dieser Renditequelle bereits berücksichtigt/)).toHaveTextContent(/zusätzliche Kosten.*nicht abgezogen/)
   })
+
+  it('hides the per-bank source dropdown and shows the common planning-rate note', () => {
+    const onUpdate = vi.fn()
+    render(
+      <PortfolioBucketSection
+        buckets={[
+          { id: 'bank', name: 'Notgroschen', value: 10_000, holding: 'ordinary-bank-deposit', returnSeriesId: 'tagesgeld-planzins-v1', annualCostRate: 0.005 },
+          { id: 'fund', name: 'Welt-ETF', value: 20_000, holding: 'accumulating-equity-fund', returnSeriesId: 'synthetic-equity-assumption-v1', annualCostRate: 0.001 },
+        ]}
+        total={30_000}
+        allocation={{ equity: 2 / 3, bonds: 0, fixed: 1 / 3 }}
+        error={null}
+        onUpdate={onUpdate}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    expect(screen.queryByLabelText('Renditequelle/Proxy von Notgroschen')).not.toBeInTheDocument()
+    expect(screen.getByTestId('portfolio-source-common-bank')).toBeInTheDocument()
+    expect(screen.getByTestId('portfolio-source-common-bank')).toHaveTextContent('Gemeinsamer Tagesgeld-Planungszins')
+    expect(screen.getByLabelText('Renditequelle/Proxy von Welt-ETF')).toBeInTheDocument()
+    expect(screen.getByLabelText(/TER\/Kosten p\.a\. von Notgroschen/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tatsächliche Anlageart von Welt-ETF'), { target: { value: 'ordinary-bank-deposit' } })
+    expect(onUpdate).toHaveBeenCalledWith('fund', expect.objectContaining({ holding: 'ordinary-bank-deposit' }))
+  })
+
 })

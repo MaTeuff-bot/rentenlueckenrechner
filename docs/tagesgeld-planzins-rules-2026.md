@@ -42,6 +42,16 @@ not a validated market or long-term value.
   `tagesgeld-planzins-v1`; other cash sources yield a readiness issue with
   re-decision. The negative-gross-bank guard in `insuranceEstimator` stays as
   diagnostics for unsupported sources.
+- Explicit adoption: a valid explicit confirmation of the common rate
+  establishes `tagesgeld-planzins-v1` for all declared
+  `ordinary-bank-deposit` buckets. A later explicit bank classification while
+  the common rate is already confirmed uses the common source without further
+  source action. Before explicit consent readiness stays truthfully blocked;
+  holding is never inferred from source. Bank buckets have no per-bucket
+  source dropdown (common display only); fund source controls, bank costs,
+  unsupported-holding guards and fund-only independence are preserved.
+  Bank-to-fund reclassification resets a planning-rate source to the equity
+  default instead of silently keeping a cash proxy as a fund source.
 
 ## Ordering (yearly ledger)
 
