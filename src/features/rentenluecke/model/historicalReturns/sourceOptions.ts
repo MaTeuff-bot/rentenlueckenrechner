@@ -2,9 +2,12 @@ import type { PortfolioComponent, PortfolioComponentRole } from '../stochasticRe
 import { FIXED_INFLATION_SOURCE_ID } from './constants'
 import {
   findHistoricalReturnSeries,
+  findPlanningRateReturnSeries,
   findSyntheticReturnSeries,
   HISTORICAL_RETURN_SERIES,
+  isPlanningRateReturnSeriesId,
   isSyntheticReturnSeriesId,
+  PLANNING_RATE_RETURN_SERIES,
   SYNTHETIC_RETURN_SERIES,
 } from './returnSeriesRegistry'
 import {
@@ -21,13 +24,13 @@ export type ReturnSeriesCategory = 'equity' | 'bond' | 'cash'
 const RETURN_SERIES_CATEGORIES: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
 
 export function getReturnSeriesOptions(): ReturnSeriesOption[] {
-  return [...HISTORICAL_RETURN_SERIES, ...SYNTHETIC_RETURN_SERIES].filter(
+  return [...HISTORICAL_RETURN_SERIES, ...SYNTHETIC_RETURN_SERIES, PLANNING_RATE_RETURN_SERIES].filter(
     (series) => getReturnSeriesCategory(series.id) !== undefined,
   )
 }
 
 export function getReturnSeriesCategory(id: string): ReturnSeriesCategory | undefined {
-  const series = findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id)
+  const series = findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id) ?? findPlanningRateReturnSeries(id)
   if (!series) return undefined
 
   const categories = RETURN_SERIES_CATEGORIES.filter((category) => series.suitableFor.includes(category))
@@ -52,6 +55,9 @@ export function getReturnSeriesOptionsForRole(
   if (syntheticSeries) {
     options.push(syntheticSeries)
   }
+  if (datasetRole === 'cash') {
+    options.push(PLANNING_RATE_RETURN_SERIES)
+  }
 
   return options
 }
@@ -62,7 +68,11 @@ export function getValidHistoricalYears(
 ): number[] {
   const requiredYearSets = components
     .map((component) => {
-      if (!component.returnSeriesId || isSyntheticReturnSeriesId(component.returnSeriesId)) {
+      if (
+        !component.returnSeriesId ||
+        isSyntheticReturnSeriesId(component.returnSeriesId) ||
+        isPlanningRateReturnSeriesId(component.returnSeriesId)
+      ) {
         return null
       }
 
@@ -86,6 +96,14 @@ export function getValidHistoricalYears(
 export function getHistoricalDatasetVersion(id?: string): string {
   if (!id) {
     return 'missing'
+  }
+
+  const planningSeries = findPlanningRateReturnSeries(id)
+  if (planningSeries) {
+    return stableStringify({
+      version: planningSeries.sourceDatasetVersion,
+      id: planningSeries.id,
+    })
   }
 
   const syntheticSeries = findSyntheticReturnSeries(id)

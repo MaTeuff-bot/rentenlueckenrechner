@@ -14,6 +14,9 @@ import {
   type StochasticSettings,
 } from '../stochasticReturns'
 import type { RentenlueckeInput } from '../types'
+import { sampledBucketReturns } from '../capitalIncome/returns'
+import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
+import { createFixedInflationSource } from '../historicalReturns/inflationSeriesRegistry'
 
 function input(overrides: Partial<RentenlueckeInput> = {}): RentenlueckeInput {
   return withFullCostBasis(cashOnlyInput(overrides))
@@ -72,7 +75,7 @@ describe('stochastic returns', () => {
       annualReturnBeforeRetirement: derivedReturn,
       annualReturnInRetirement: derivedReturn,
     })
-    const deterministicResult = simulateScenario(scenarioInput)
+    const deterministicResult = simulateScenario(scenarioInput, 0.02)
     const stochasticSummary = runStochasticSimulation(
       scenarioInput,
       settings({ allocation, simulations: 25 }),
@@ -160,9 +163,8 @@ describe('stochastic returns', () => {
     expect(sampledCost.rows[0].p50CapitalToday).toBeCloseTo(explicitCost.rows[0].closingCapitalToday, 8)
   })
 
-  it('keeps gross bank interest taxable while deducting costs from synthetic sampled bank returns', () => {
-    const zeroVol = ASSET_CLASS_ASSUMPTIONS.map((assumption) => ({ ...assumption, annualVolatility: 0 }))
-    const bank = { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: 'synthetic-cash-assumption-v1' }
+  it('keeps gross bank interest taxable while deducting costs from planning-rate bank returns', () => {
+    const bank = { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: 'tagesgeld-planzins-v1' }
     const base = {
       currentAge: 66, retirementAge: 67, planningAge: 68, currentCapital: 100_000,
       monthlyDesiredSpendingToday: 0, monthlyRetirementIncomeToday: 0, monthlyContributionToday: 0,
@@ -170,9 +172,28 @@ describe('stochastic returns', () => {
     }
     const noCost = cashOnlyInput({ ...base, estimatorPortfolio: [{ ...bank }] })
     const withCost = cashOnlyInput({ ...base, estimatorPortfolio: [{ ...bank, annualCostRate: 0.01 }] })
-    const sampledNoCost = runStochasticSimulation(noCost, settings({ simulations: 1, seed: 42 }), zeroVol)
-    const sampledCost = runStochasticSimulation(withCost, settings({ simulations: 1, seed: 42 }), zeroVol)
-    expect(sampledCost.rows[0].p50CapitalToday).toBeLessThan(sampledNoCost.rows[0].p50CapitalToday)
+    const inflationSource = createFixedInflationSource(0)
+    const sampledNoCostPath = sampledBucketReturns(
+      createPortfolioComponentsFromBuckets(noCost.estimatorPortfolio!),
+      inflationSource,
+      [0, 1],
+      createSeededRandom(42),
+      0.02,
+    )
+    const sampledCostPath = sampledBucketReturns(
+      createPortfolioComponentsFromBuckets(withCost.estimatorPortfolio!),
+      inflationSource,
+      [0, 1],
+      createSeededRandom(42),
+      0.02,
+    )
+    expect(sampledNoCostPath[0]?.[0]?.grossBankReturnRate).toBeCloseTo(0.02, 12)
+    expect(sampledNoCostPath[0]?.[0]?.totalReturnRate).toBeCloseTo(0.02, 12)
+    expect(sampledCostPath[0]?.[0]?.grossBankReturnRate).toBeCloseTo(0.02, 12)
+    expect(sampledCostPath[0]?.[0]?.totalReturnRate).toBeCloseTo(0.01, 12)
+    const sampledNoCost = simulateScenarioWithReturnPath(noCost, [], undefined, sampledNoCostPath)
+    const sampledCost = simulateScenarioWithReturnPath(withCost, [], undefined, sampledCostPath)
+    expect(sampledCost.rows[0].closingCapitalToday).toBeLessThan(sampledNoCost.rows[0].closingCapitalToday)
     const explicitNoCost = simulateScenarioWithReturnPath(noCost, [], undefined, [
       [{ id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02 }],
       [{ id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02 }],
@@ -181,8 +202,8 @@ describe('stochastic returns', () => {
       [{ id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.02 }],
       [{ id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.02 }],
     ])
-    expect(sampledNoCost.rows[0].p50CapitalToday).toBeCloseTo(explicitNoCost.rows[0].closingCapitalToday, 8)
-    expect(sampledCost.rows[0].p50CapitalToday).toBeCloseTo(explicitPreserved.rows[0].closingCapitalToday, 8)
+    expect(sampledNoCost.rows[0].closingCapitalToday).toBeCloseTo(explicitNoCost.rows[0].closingCapitalToday, 8)
+    expect(sampledCost.rows[0].closingCapitalToday).toBeCloseTo(explicitPreserved.rows[0].closingCapitalToday, 8)
     expect(explicitPreserved.rows[0].capitalIncomeTax).toBeCloseTo(explicitNoCost.rows[0].capitalIncomeTax ?? 0, 8)
     expect((explicitPreserved.rows[0].capitalIncomeTax ?? 0)).toBeGreaterThan(0)
   })

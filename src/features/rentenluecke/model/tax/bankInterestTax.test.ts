@@ -18,7 +18,7 @@ import {
   type EstimatorState,
 } from '../capitalIncome/insuranceEstimator'
 import { insuredInput, automaticInsurance } from '../__tests__/insuranceFixtures'
-import { SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
+import { PLANNING_RATE_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
 import { normalizeInput } from '../normalizeInput'
 import { simulateCapitalLedgerPath } from '../capitalIncome/ledger'
 import { simulateScenario } from '../simulateScenario'
@@ -266,7 +266,7 @@ function interestFixture(): RentenlueckeInput {
     monthlyContributionToday: 100, monthlyDesiredSpendingToday: 2500,
     estimatorPortfolio: [
       { id: 'fund', name: 'Fonds', value: 60000, holding: 'accumulating-equity-fund', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
-      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit', returnSeriesId: PLANNING_RATE_SOURCE_ID },
     ],
     retirementInsurance: automaticInsurance({
       bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic' },
@@ -309,24 +309,24 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
     input.currentAge = input.retirementAge = 67
     input.planningAge = 69
     input.retirementInsurance!.pension = { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' }
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const required = result.summary.requiredCapitalAtRetirement
     expect(required).toBeGreaterThan(0)
     const scaled = structuredClone(input)
     scaled.currentCapital = required
     scaled.estimatorPortfolio!.forEach(b => { b.value *= required / input.currentCapital })
     scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= required / input.currentCapital
-    expect(simulateScenario(scaled).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenario(scaled, 0.02).summary.survivesUntilPlanningAge).toBe(true)
     scaled.currentCapital = required - 2
     scaled.estimatorPortfolio!.forEach(b => { b.value *= (required - 2) / required })
     scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= (required - 2) / required
-    expect(simulateScenario(scaled).summary.survivesUntilPlanningAge).toBe(false)
+    expect(simulateScenario(scaled, 0.02).summary.survivesUntilPlanningAge).toBe(false)
   })
 
   it('keeps shortfalls visible with the interest-inclusive tax assessed', () => {
     const input = interestFixture()
     input.monthlyDesiredSpendingToday = 100000
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const first = result.retirementRows[0]
     expect(first.capitalAssessment!.status).toBe('shortfall')
     expect(first.unfundedWithdrawal).toBeGreaterThan(0)

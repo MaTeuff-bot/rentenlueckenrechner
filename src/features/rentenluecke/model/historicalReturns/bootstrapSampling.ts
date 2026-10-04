@@ -1,7 +1,16 @@
 import { createSeededRandom, sampleNormal, type PortfolioComponent } from '../stochasticReturns'
-import { findHistoricalReturnSeries, findSyntheticReturnSeries, isSyntheticReturnSeriesId } from './returnSeriesRegistry'
+import { findHistoricalReturnSeries, findSyntheticReturnSeries, isPlanningRateReturnSeriesId, isSyntheticReturnSeriesId, findPlanningRateReturnSeries } from './returnSeriesRegistry'
 import { isFixedInflationSource } from './inflationSeriesRegistry'
 import type { InflationSourceOption } from './types'
+
+export const CASH_PLANNING_RATE_ERROR = 'Tagesgeld-Planungszins fehlt oder ist ungültig; unter Rechenannahmen festlegen.'
+
+export function resolveCashPlanningRateOrThrow(cashPlanningRate?: number): number {
+  if (typeof cashPlanningRate !== 'number' || !Number.isFinite(cashPlanningRate) || cashPlanningRate < 0) {
+    throw new Error(CASH_PLANNING_RATE_ERROR)
+  }
+  return cashPlanningRate
+}
 
 export function sampleHistoricalYearsWithReplacement(years: number[], count: number, seed: number): number[] {
   if (years.length === 0 && count > 0) {
@@ -17,6 +26,7 @@ export function generateHistoricalReturnPath(
   inflationSource: InflationSourceOption,
   sampledYears: number[],
   rng: () => number = createSeededRandom(0),
+  cashPlanningRate?: number,
 ): number[] {
   return sampledYears.map((year) => {
     const inflation = resolveInflationForSampledYear(inflationSource, year)
@@ -27,7 +37,7 @@ export function generateHistoricalReturnPath(
       }
 
       const annualReturn = applySourceCostTreatment(
-        resolveComponentNominalReturn(component, year, inflation, rng),
+        resolveComponentNominalReturn(component, year, inflation, rng, cashPlanningRate),
         component.returnSeriesId,
         component.annualCostRate,
       )
@@ -71,7 +81,12 @@ export function resolveComponentExpectedNominalReturn(
   component: PortfolioComponent,
   year: number,
   inflation: number,
+  cashPlanningRate?: number,
 ): number {
+  if (component.returnSeriesId && isPlanningRateReturnSeriesId(component.returnSeriesId)) {
+    const rate = resolveCashPlanningRateOrThrow(cashPlanningRate)
+    return applyCostTreatment(rate, 'deductBucketAnnualCost', component.annualCostRate)
+  }
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
     return applyCostTreatment(syntheticSeries.expectedAnnualReturn, syntheticSeries.costTreatment, component.annualCostRate)
@@ -96,7 +111,11 @@ export function resolveComponentExpectedNominalReturn(
 
 function requiresSampledCalendarYear(components: PortfolioComponent[], inflationSource: InflationSourceOption): boolean {
   return !isFixedInflationSource(inflationSource) || components.some((component) => {
-    return Boolean(component.returnSeriesId && !isSyntheticReturnSeriesId(component.returnSeriesId))
+    return Boolean(
+      component.returnSeriesId &&
+        !isSyntheticReturnSeriesId(component.returnSeriesId) &&
+        !isPlanningRateReturnSeriesId(component.returnSeriesId),
+    )
   })
 }
 
@@ -105,7 +124,11 @@ export function resolveComponentNominalReturn(
   year: number,
   inflation: number,
   rng: () => number,
+  cashPlanningRate?: number,
 ): number {
+  if (component.returnSeriesId && isPlanningRateReturnSeriesId(component.returnSeriesId)) {
+    return resolveCashPlanningRateOrThrow(cashPlanningRate)
+  }
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
     return Math.max(-1, sampleNormal(rng, syntheticSeries.expectedAnnualReturn, syntheticSeries.annualVolatility))
@@ -134,7 +157,7 @@ function deductAnnualCosts(annualReturn: number, annualCostRate = 0): number {
 
 export function applySourceCostTreatment(annualReturn: number, returnSeriesId?: string, annualCostRate = 0): number {
   const source = returnSeriesId
-    ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId)
+    ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId) ?? findPlanningRateReturnSeries(returnSeriesId)
     : undefined
   if (!source) return deductAnnualCosts(annualReturn, annualCostRate)
   return applyCostTreatment(annualReturn, source.costTreatment, annualCostRate)

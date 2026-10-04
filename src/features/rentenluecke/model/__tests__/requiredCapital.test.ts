@@ -65,6 +65,6 @@ describe('detailed-ledger required capital', () => {
     const input = cashOnlyInput({ currentAge: 67, retirementAge: 67, planningAge: 70,
       currentCapital: 0, monthlyDesiredSpendingToday: 2_000,
       monthlyRetirementIncomeToday: 0, annualInflationRate: 0 })
-    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
+    expect(() => simulateScenario(input, 0.02)).toThrow(/positive Ausgangsallokation/)
   })
 })

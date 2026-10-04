@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { portfolioEstimatorReadiness } from '../capitalIncome/portfolioEstimator'
-import { SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
+import { PLANNING_RATE_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
 
-const bankCash = { id: 'bank', value: 50000, holding: 'ordinary-bank-deposit', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash } as never
+const bankCash = { id: 'bank', value: 50000, holding: 'ordinary-bank-deposit', returnSeriesId: PLANNING_RATE_SOURCE_ID } as never
+const bankLegacyCash = { id: 'bank', value: 50000, holding: 'ordinary-bank-deposit', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash } as never
 const bankEquityProxy = { id: 'bank', value: 50000, holding: 'ordinary-bank-deposit', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity } as never
 
 const completeSettings = { fundAcquisitionCost: 80000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
@@ -28,9 +29,13 @@ describe('portfolioEstimatorReadiness (insurance-independent)', () => {
     expect(portfolioEstimatorReadiness({ ...completeSettings, fundAcquisitionCost: NaN }, buckets, 1000).ready).toBe(false)
     expect(portfolioEstimatorReadiness({ ...completeSettings, fundAcquisitionCost: -1 }, buckets, 1000).issues.join(' ')).toContain('Anschaffungskosten')
   })
-  it('requires a gross cash proxy for bank deposits (bank proxy)', () => {
+  it('requires the Tagesgeld planning-rate source for bank deposits (bank proxy)', () => {
     const good = [bankCash] as unknown as Parameters<typeof portfolioEstimatorReadiness>[1]
     expect(portfolioEstimatorReadiness({ projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }, good, 50000).ready).toBe(true)
+    const legacyCash = [bankLegacyCash] as unknown as Parameters<typeof portfolioEstimatorReadiness>[1]
+    const legacyIssues = portfolioEstimatorReadiness({ projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }, legacyCash, 50000).issues
+    expect(portfolioEstimatorReadiness({ projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }, legacyCash, 50000).ready).toBe(false)
+    expect(legacyIssues.join(' ')).toContain('Tagesgeld-Planungszinsquelle')
     const bad = [bankEquityProxy] as unknown as Parameters<typeof portfolioEstimatorReadiness>[1]
     const issues = portfolioEstimatorReadiness({ projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }, bad, 50000).issues
     expect(issues.join(' ')).toContain('Bankeinlagen')

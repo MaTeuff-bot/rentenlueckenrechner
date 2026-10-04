@@ -11,7 +11,7 @@ import { expectedBucketReturns } from './returns'
 export type BucketReturn = { id: string; totalReturnRate: number; grossBankReturnRate?: number }
 export type BucketReturnPath = BucketReturn[][]
 
-function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver) {
+function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number) {
   const input = scenario.sourceInput
   const buckets = input.estimatorPortfolio!
   if (path && path.length !== scenario.yearsToRetirement + scenario.retirementYears)
@@ -22,7 +22,13 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   const setup = input.retirementInsurance!.capitalEstimator!
   const initial = createEstimatorState({ buckets: buckets.map(b => ({ id: b.id, value: b.value, eligibility: b.holding as 'accumulating-equity-fund' | 'ordinary-bank-deposit' })), fundAcquisitionCost: buckets.some(b => b.holding === 'accumulating-equity-fund') ? setup.fundAcquisitionCost! : 0,
     scope: 'single-person-domestic-private-post-2017-no-special-events', lossHistory: 'confirmed-none-and-no-external-offsets' })
-  const defaultReturns = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(buckets), inflationSourceId: 'fixed-manual', simulations: 1 })
+  let defaultReturns: ReturnType<typeof expectedBucketReturns> | null = null
+  const getDefaultReturns = (): ReturnType<typeof expectedBucketReturns> => {
+    if (!defaultReturns) {
+      defaultReturns = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(buckets), inflationSourceId: 'fixed-manual', simulations: 1, cashPlanningRate })
+    }
+    return defaultReturns
+  }
   const factor = createInflationFactorResolver(scenario.annualInflationRate, inflation)
   // Rentenbesteuerung setup is capital-independent (frozen Rentenfreibetrag from
   // the first retirement year with GRV receipt). Shared across year() calls and
@@ -47,7 +53,7 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const incomeBefore = accumulation ? null : incomeFor(0)
     const desiredSpending = accumulation ? 0 : scenario.annualDesiredSpendingToday * inflationFactor
     const contribution = accumulation ? scenario.annualContributionToday * inflationFactor : 0
-    const rates = path ? path[index] : defaultReturns
+    const rates = path ? path[index] : getDefaultReturns()
     if (!rates || new Set(rates.map(r => r.id)).size !== rates.length || rates.some(r => !buckets.some(b => b.id === r.id)))
       throw new Error(`Ungültiger Renditepfad im Alter ${age}: Anlagen müssen eindeutig zugeordnet sein.`)
     // Abgeltungsteuer on realized fund gains + received Vorabpauschale + gross
@@ -169,8 +175,8 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   return { rows: [...accumulationRows, ...retirementRows], accumulationRows, retirementRows, projectedCapital, requiredCapital }
 }
 
-export function simulateCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver): SimulationResult {
-  const ledger = buildCapitalLedger(scenario, path, inflation)
+export function simulateCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number): SimulationResult {
+  const ledger = buildCapitalLedger(scenario, path, inflation, cashPlanningRate)
   return { rows: ledger.rows, accumulationRows: ledger.accumulationRows, retirementRows: ledger.retirementRows,
     summary: deriveSummary(ledger.projectedCapital, ledger.requiredCapital(), ledger.retirementRows) }
 }

@@ -58,7 +58,7 @@ function allRows(result: { rows: YearlyPeriodRow[] }): YearlyPeriodRow[] {
 
 describe('estimator rollforward: acquisition cost, assessed VP, pending VP and losses', () => {
   const input = prepare(estimatorScenario())
-  const result = simulateScenario(input)
+  const result = simulateScenario(input, 0.02)
   const rows = result.rows
   const ledger = rows.map(row => row.capitalAssessment!)
 
@@ -194,7 +194,7 @@ describe('multi-decade convention drift: engine vs independent accumulator', () 
 describe('real/nominal reconciliation', () => {
   it('divides closing capital by the cumulative factor at year end (yearIndex+1)', () => {
     for (const scenario of [kvdrStandardScenario, earlyRetirementBridgeScenario, voluntaryPortfolioCapitalScenario, depletedScenario]) {
-      const result = simulateScenario(prepare(scenario()))
+      const result = simulateScenario(prepare(scenario()), 0.02)
       for (const row of allRows(result)) {
         // Engine convention: closingCapitalToday divides by the cumulative factor of
         // yearIndex+1. For a fixed 2% path: inflationFactor(yearIndex) × 1.02.
@@ -207,7 +207,7 @@ describe('real/nominal reconciliation', () => {
   })
 
   it('keeps today-views equal to nominal amounts at zero inflation', () => {
-    const result = simulateScenario(prepare(kvdrStandardScenario()))
+    const result = simulateScenario(prepare(kvdrStandardScenario()), 0.02)
     for (const row of allRows(result)) {
       expect(row.closingCapitalToday).toBeMoneyClose(row.closingCapital)
       expect(row.gapWithdrawalToday).toBeMoneyClose(row.gapWithdrawal)
@@ -216,7 +216,7 @@ describe('real/nominal reconciliation', () => {
 })
 
 describe('bootstrap accounting consistency', () => {
-  const settings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 3 } as const
+  const settings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 3, cashPlanningRate: 0.02 } as const
 
   it('every sampled bootstrap path satisfies row conservation on the detailed ledger', () => {
     // Zero-start blocks every forecast (S5) and is covered by the blocking test below.
@@ -274,7 +274,7 @@ describe('bootstrap accounting consistency', () => {
   it('stochastic summaries agree with their own deterministic plan line length and bounds', () => {
     const input = prepare(voluntaryPortfolioCapitalScenario())
     const summary = runStochasticSimulation(input, { simulations: 5, seed: 314, allocation: { equity: 0.5, bonds: 0.3, fixed: 0.2 } })
-    const deterministic = simulateScenario(input)
+    const deterministic = simulateScenario(input, 0.02)
     expect(summary.rows).toHaveLength(deterministic.rows.length)
     for (const [index, row] of summary.rows.entries()) {
       expect(row.planCapitalToday).toBeMoneyClose(deterministic.rows[index].closingCapitalToday)
@@ -291,14 +291,14 @@ describe('phase cashflow boundaries', () => {
         holding: 'accumulating-equity-fund' as const,
         returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity }],
     })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     expect(result.accumulationRows.every(row => row.contribution > 0)).toBe(true)
     expect(result.retirementRows.every(row => row.contribution === 0)).toBe(true)
     expect(result.accumulationRows.at(-1)!.ageEnd).toBe(input.retirementAge)
   })
 
   it('insurance phase switch happens exactly at the statutory boundary with no gap or overlap year', () => {
-    const result = simulateScenario(prepare(earlyRetirementBridgeScenario()))
+    const result = simulateScenario(prepare(earlyRetirementBridgeScenario()), 0.02)
     const boundary = 67
     const bridgeRows = result.retirementRows.filter(row => row.ageStart < boundary)
     const pensionRows = result.retirementRows.filter(row => row.ageStart >= boundary)
@@ -385,7 +385,7 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
   })
 
   it('funds gap, insurance and tax from the single estimator sale', () => {
-    const result = simulateScenario(prepare(estimatorScenario()))
+    const result = simulateScenario(prepare(estimatorScenario()), 0.02)
     for (const row of result.retirementRows) {
       const tax = row.capitalIncomeTax ?? 0
       // Required withdrawal = net spending gap + insurance + both taxes (single funding
@@ -515,14 +515,14 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
 describe('required-capital search soundness', () => {
   it('is monotone: any capital below the required amount depletes, any above survives', () => {
     const input = prepare(depletedScenario())
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const required = result.summary.requiredCapitalAtRetirement
     expect(required).toBeGreaterThan(0)
     // Depleted scenario: search over the same ledger must sit between survive/fail.
     // Probes rescale the whole detailed portfolio (values plus pooled fund cost),
     // never currentCapital alone, so the ledger stays consistent.
-    expect(simulateScenario(withScaledCapital(input, required)).summary.survivesUntilPlanningAge).toBe(true)
-    expect(simulateScenario(withScaledCapital(input, Math.max(0, required - 2))).summary.survivesUntilPlanningAge).toBe(false)
+    expect(simulateScenario(withScaledCapital(input, required), 0.02).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenario(withScaledCapital(input, Math.max(0, required - 2)), 0.02).summary.survivesUntilPlanningAge).toBe(false)
   })
 
   it('equals the hand-computed annuity-free sum for constant gaps at zero return and inflation', () => {

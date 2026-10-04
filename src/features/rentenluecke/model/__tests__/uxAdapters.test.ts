@@ -23,7 +23,7 @@ describe('authoritative timeline adapter', () => {
     const streams = [pension({ startAge })]
     const input = insuredInput({ currentAge: 63, retirementAge: 65, planningAge: 70, monthlyContributionToday: 100,
       retirementIncomeStreams: streams, retirementInsurance: automaticInsurance({ pensionAge: timelineBoundary(streams) }) })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     expect(result.accumulationRows).toHaveLength(2)
     expect(result.retirementRows.map(r => r.insurance?.phase)).toEqual([65,66,67,68,69].map(age => age < startAge ? 'bridge' : 'pension'))
     expect(result.accumulationRows.every(row => row.contribution === 1200)).toBe(true)
@@ -46,7 +46,7 @@ describe('canonical birth-year answers', () => {
   it('preserves twins, January ageout and lifelong parenthood', () => {
     const fields = childrenEngineFields({ kind: 'children', rows: [{ id: 'a', year: 2002 }, { id: 'b', year: 2002 }] })
     expect(fields.childBirthYears).toEqual([2002, 2002])
-    const rows = simulateScenario(insuredInput({ currentAge: 44, retirementAge: 44, planningAge: 47, retirementIncomeStreams: [], retirementInsurance: automaticInsurance(fields) })).retirementRows
+    const rows = simulateScenario(insuredInput({ currentAge: 44, retirementAge: 44, planningAge: 47, retirementIncomeStreams: [], retirementInsurance: automaticInsurance(fields) }), 0.02).retirementRows
     expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([expect.closeTo(.0335, 10), .036, .036])
   })
   it.each([1800, 1958, 2027, 2000.5])('rejects invalid child year %i for a person born in 1959', year => {

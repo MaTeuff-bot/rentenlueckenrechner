@@ -13,6 +13,8 @@ export type ScenarioState = {
   historical: {
     inflationSourceId: string
     simulations?: number
+    cashPlanningRate?: number
+    cashPlanningRateConfirmed?: boolean
   }
 }
 
@@ -20,4 +22,6 @@ export type PersistedHistoricalState = {
   inflationSourceId?: string
   inflationSeriesId?: string
   simulations?: number
+  cashPlanningRate?: number
+  cashPlanningRateConfirmed?: boolean
 }

@@ -1,9 +1,11 @@
 import {
   findHistoricalReturnSeries,
+  findPlanningRateReturnSeries,
   findSyntheticReturnSeries,
   isFixedInflationSource,
   type HistoricalReturnSeries,
   type InflationSourceOption,
+  type PlanningRateReturnSeries,
   type ReturnSeriesCategory,
   type ReturnSeriesOption,
   type SyntheticReturnSeries,
@@ -11,11 +13,15 @@ import {
 } from '../../model/historicalReturns'
 
 export function findReturnSeriesOption(id: string): ReturnSeriesOption | undefined {
-  return findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id)
+  return findHistoricalReturnSeries(id) ?? findSyntheticReturnSeries(id) ?? findPlanningRateReturnSeries(id)
+}
+
+export function isPlanningRateSource(source: ReturnSeriesOption): source is PlanningRateReturnSeries {
+  return 'kind' in source && (source as { kind?: string }).kind === 'planningRate'
 }
 
 export function isSyntheticSource(source: ReturnSeriesOption): source is SyntheticReturnSeries {
-  return 'kind' in source
+  return 'kind' in source && (source as { kind?: string }).kind === 'synthetic'
 }
 
 export function isGeneratedSyntheticSource(source: ReturnSeriesOption): source is SyntheticReturnSeries {
@@ -23,12 +29,15 @@ export function isGeneratedSyntheticSource(source: ReturnSeriesOption): source i
 }
 
 export function isHistoricalSource(source: ReturnSeriesOption): source is HistoricalReturnSeries {
-  return !isSyntheticSource(source)
+  return !('kind' in source)
 }
 
 export function formatDropdownLabel(source: ReturnSeriesOption): string {
   const category = getReturnSeriesCategory(source.id)
   const categoryLabel = formatSourceCategoryLabel(category)
+  if (isPlanningRateSource(source)) {
+    return `${categoryLabel} — ${source.label}`
+  }
   if (isGeneratedSyntheticSource(source)) {
     return `${categoryLabel} — ${source.label}`
   }
@@ -65,7 +74,8 @@ export function formatInflationDropdownLabel(source: InflationSourceOption): str
 }
 
 export function getSourceName(source: ReturnSeriesOption): string {
-  return isSyntheticSource(source) ? 'Synthetische Modellannahme' : source.source.sourceName
+  if (isPlanningRateSource(source)) return 'Rechenannahmen (Planungszins)'
+  return isSyntheticSource(source) ? 'Synthetische Modellannahme' : (source as HistoricalReturnSeries).source.sourceName
 }
 
 export function getSourceVersion(source: ReturnSeriesOption): string {
@@ -73,33 +83,45 @@ export function getSourceVersion(source: ReturnSeriesOption): string {
 }
 
 export function getCoverageLabel(source: ReturnSeriesOption): string {
+  if (isPlanningRateSource(source)) {
+    return 'Alle simulierten Jahre (konstanter Satz)'
+  }
   if (isGeneratedSyntheticSource(source)) {
     return 'Keine historische Jahresabdeckung'
   }
 
-  return `${source.startYear}-${source.endYear}, ${Object.keys(source.normalizedSeries).length} Beobachtungen`
+  const historical = source as HistoricalReturnSeries
+  return `${historical.startYear}-${historical.endYear}, ${Object.keys(historical.normalizedSeries).length} Beobachtungen`
 }
 
 export function getBasisLabel(source: ReturnSeriesOption): string {
+  if (isPlanningRateSource(source)) {
+    return 'Konstanter nominaler Planungszins, Volatilität 0 %'
+  }
   if (isGeneratedSyntheticSource(source)) {
     return `Synthetischer Renditepfad, Erwartung ${formatPercent(source.expectedAnnualReturn)}, Volatilität ${formatPercent(source.annualVolatility)}`
   }
 
+  const historical = source as HistoricalReturnSeries
   const typeLabel =
-    source.returnType === 'grossTotal'
+    historical.returnType === 'grossTotal'
       ? 'Total Return'
-      : source.returnType === 'adjustedMarketPrice'
+      : historical.returnType === 'adjustedMarketPrice'
         ? 'Yahoo Adjusted Market Price'
-        : source.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
-  return `${source.returnBasis === 'real' ? 'Real' : 'Nominal'}, ${typeLabel}, ${source.currency}`
+        : historical.returnType === 'yieldBased' ? 'Zins-/Bills-Proxy' : 'Proxy'
+  return `${historical.returnBasis === 'real' ? 'Real' : 'Nominal'}, ${typeLabel}, ${historical.currency}`
 }
 
 export function getLicenseLabel(source: ReturnSeriesOption): string {
+  if (isPlanningRateSource(source)) {
+    return 'Planungsannahme, kein externer Datensatz'
+  }
   if (isSyntheticSource(source)) {
     return 'Modellannahme, kein externer Datensatz'
   }
 
-  return source.commercialUseAllowed ? source.license : `${source.license}; nicht für kommerzielle Nutzung freigegeben`
+  const historical = source as HistoricalReturnSeries
+  return historical.commercialUseAllowed ? historical.license : `${historical.license}; nicht für kommerzielle Nutzung freigegeben`
 }
 
 export function getCostTreatmentLabel(source: ReturnSeriesOption): string {
@@ -133,6 +155,15 @@ export function formatCaveatTag(caveat: string): string {
     return 'gleichgewichtet'
   }
 
+  if (caveat.includes('Konstanter Planungszins')) {
+    return 'konstanter Planungszins'
+  }
+  if (caveat.includes('Ergebnisbänder enthalten keine Zinsunsicherheit')) {
+    return 'ohne Zinsunsicherheit'
+  }
+  if (caveat.includes('Bucket-Kosten werden separat')) {
+    return 'Kosten separat'
+  }
   if (caveat.includes('Synthetic source')) {
     return 'synthetisch'
   }

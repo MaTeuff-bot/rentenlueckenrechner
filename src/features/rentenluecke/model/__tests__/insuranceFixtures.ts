@@ -18,7 +18,7 @@ export function insuredInput(patch: Partial<RentenlueckeInput> = {}): Rentenluec
   const defaultEstimator = { fundAcquisitionCost: 60000, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true } as const
   const defaultPortfolio = [
       { id: 'fund', name: 'Fonds', value: 60000, holding: 'accumulating-equity-fund' as const, returnSeriesId: 'synthetic-equity-assumption-v1' },
-      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: 'synthetic-cash-assumption-v1' },
+      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: 'tagesgeld-planzins-v1' },
     ]
   const base: RentenlueckeInput = { ...DEFAULT_INPUT, currentAge: 67, retirementAge: 67, planningAge: 70, currentCapital: 100_000,
     annualInflationRate: 0, annualReturnBeforeRetirement: 0, annualReturnInRetirement: 0,

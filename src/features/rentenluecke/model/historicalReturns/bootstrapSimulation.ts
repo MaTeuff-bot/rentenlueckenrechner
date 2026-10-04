@@ -32,11 +32,12 @@ export function simulateHistoricalBootstrapScenario(
     inflationSource,
     sampledYears,
     createSeededRandom(seed),
+    settings.cashPlanningRate,
   )
   const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
   return {
-    ...simulateScenarioWithReturnPath(input, returnPath, inflationPath, sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(seed))),
+    ...simulateScenarioWithReturnPath(input, returnPath, inflationPath, sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(seed), settings.cashPlanningRate)),
     metadata: { validYears, sampledYears, seed },
   }
 }
@@ -92,7 +93,7 @@ export function runHistoricalBootstrapSimulation(
     const inflationPath = generateHistoricalInflationPath(inflationSource, sampledYears)
 
     return simulateCapitalLedgerPath(capitalScenario,
-      sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(returnSeed)),
+      sampledBucketReturns(settings.portfolioComponents, inflationSource, sampledYears, createSeededRandom(returnSeed), settings.cashPlanningRate),
       index => inflationPath[index] ?? input.annualInflationRate)
   })
   const successfulPaths = pathResults.filter((result) => result.summary.survivesUntilPlanningAge).length

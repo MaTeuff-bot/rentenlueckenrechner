@@ -6,7 +6,7 @@ import {
   getReturnSeriesOptions,
   type ReturnSeriesOption,
 } from '../../model/historicalReturns'
-import { findReturnSeriesOption, formatDropdownLabel, formatSourceCategoryLabel, isSyntheticSource } from './sourceDisplay'
+import { findReturnSeriesOption, formatDropdownLabel, formatSourceCategoryLabel, isPlanningRateSource, isSyntheticSource } from './sourceDisplay'
 import type { AssetAllocation } from '../../model/stochasticReturns'
 
 type Props = {
@@ -97,6 +97,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
 
 function groupReturnSourcesByType(options: ReturnSeriesOption[]): Array<{ label: string; options: ReturnSeriesOption[] }> {
   return [
+    { label: 'Tagesgeld-Planungszins', options: options.filter(isPlanningRateSource) },
     { label: 'ETF-Renditequellen', options: options.filter((option) => option.sourceKind === 'bundledEtf') },
     { label: 'Historische Anlageklassen', options: options.filter((option) => option.sourceKind === 'historicalDataset') },
     { label: 'Synthetische Annahmen', options: options.filter(isSyntheticSource) },

@@ -12,6 +12,7 @@ import {
   runHistoricalBootstrapSimulation,
   simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
+import { CASH_PLANNING_RATE_PROPOSAL } from '../model/historicalReturns/constants'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
 import type { LifeTableSex } from '../mortality/mortality'
 import {
@@ -29,7 +30,8 @@ import {
   getAllocationValidationError,
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
-import { loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
+import { dismissTagesgeldPlanningRateNotice, loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
+import { cashPlanningRateIssue, getConfirmedCashPlanningRate } from '../model/cashPlanningRate'
 import type { RetirementIncomeStream } from '../model/types'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
@@ -81,13 +83,16 @@ export function useScenarioState() {
     return parsedInput.success ? {} : getFieldErrors(parsedInput.error)
   }, [parsedInput])
   const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
-  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers])
-  const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError
+  const cashPlanningIssue = useMemo(() => cashPlanningRateIssue(portfolioBuckets, historical), [portfolioBuckets, historical])
+  const cashPlanningError = cashPlanningIssue
+  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue])
+  const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError && !cashPlanningError
   const historicalSettings = useMemo(
     () => ({
       portfolioComponents: createPortfolioComponentsFromBuckets(portfolioBuckets),
       inflationSourceId: historical.inflationSourceId,
       simulations: historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations,
+      cashPlanningRate: getConfirmedCashPlanningRate(historical),
     }),
     [historical, portfolioBuckets],
   )
@@ -215,6 +220,27 @@ export function useScenarioState() {
     }))
   }
 
+  const updateCashPlanningRate = (cashPlanningRate: number | undefined) => {
+    setState((current) => ({
+      ...current,
+      historical: { ...current.historical, cashPlanningRate },
+    }))
+  }
+
+  const updateCashPlanningRateConfirmed = (cashPlanningRateConfirmed: boolean) => {
+    if (cashPlanningRateConfirmed) dismissTagesgeldPlanningRateNotice()
+    // Explicit confirmation adopts the displayed proposal when the field was
+    // never edited (prefill-in-progress is display-only until confirmed).
+    setState((current) => ({
+      ...current,
+      historical: { ...current.historical,
+        cashPlanningRate: cashPlanningRateConfirmed && current.historical.cashPlanningRate === undefined
+          ? CASH_PLANNING_RATE_PROPOSAL
+          : current.historical.cashPlanningRate,
+        cashPlanningRateConfirmed },
+    }))
+  }
+
   const reset = () => {
     const nextState = createDefaultState()
     setState(nextState)
@@ -257,6 +283,10 @@ export function useScenarioState() {
     removeRetirementIncomeStream,
     updateInflationSource,
     updateSimulations,
+    updateCashPlanningRate,
+    updateCashPlanningRateConfirmed,
+    cashPlanningIssue,
+    cashPlanningError,
     reset,
   }
 }

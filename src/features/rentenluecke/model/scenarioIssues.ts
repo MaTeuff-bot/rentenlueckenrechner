@@ -3,6 +3,7 @@ import type { InsuranceCoverageAnswers } from './insuranceCoverage'
 import type { ZodError } from 'zod'
 import type { RentenlueckeInput } from './types'
 import type { PortfolioBucket } from './portfolioBuckets'
+import { PLANNING_RATE_SOURCE_ID } from './historicalReturns/constants'
 import { getReturnSeriesCategory } from './historicalReturns'
 import type { ChildrenAnswer } from './childrenAnswer'
 export type FlowSection = 'zeitplan' | 'ausgaben' | 'einkommen' | 'vermoegen' | 'versicherung' | 'ergebnis' | 'annahmen'
@@ -31,13 +32,14 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
     if (key === 'bridge' || key === 'pension') return [`insurance-${key}-${field}`, 'versicherung']
     return [`insurance-${key}`, 'versicherung']
   }
+  if (root === 'historical') return ['cash-planning-rate', 'annahmen']
   if (['currentAge', 'retirementAge', 'planningAge'].includes(String(root))) return [String(root), 'zeitplan']
   if (root === 'monthlyDesiredSpendingToday') return [String(root), 'ausgaben']
   if (root === 'annualInflationRate') return [String(root), 'annahmen']
   return [root === 'currentCapital' ? `portfolio-value-${buckets[0]?.id}` : String(root), 'vermoegen']
 }
 /** UI routing adapter around existing validators. Every engine issue is retained. */
-export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers): ScenarioIssue[] {
+export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers, cashPlanningIssue?: string | null): ScenarioIssue[] {
   const issues: ScenarioIssue[] = []
   const add = (path: (string | number)[], message: string, kind: ScenarioIssue['kind'], code: string) => {
     const [fieldId, section] = route(path, input, children, buckets)
@@ -90,7 +92,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     else if (message.includes('klassifizieren')) {
       const index = Math.max(0, buckets.findIndex(b => !b.holding || b.holding === 'unsupported'))
       path = ['estimatorPortfolio', index, 'holding']; kind = buckets[index]?.holding ? 'invalid' : 'missing'
-    } else if (message.includes('Bankeinlagen')) { path = ['estimatorPortfolio', Math.max(0, buckets.findIndex(b => b.holding === 'ordinary-bank-deposit' && getReturnSeriesCategory(b.returnSeriesId) !== 'cash')), 'returnSeriesId']; kind = 'invalid' }
+    } else if (message.includes('Bankeinlagen')) { path = ['estimatorPortfolio', Math.max(0, buckets.findIndex(b => b.holding === 'ordinary-bank-deposit' && b.returnSeriesId !== PLANNING_RATE_SOURCE_ID)), 'returnSeriesId']; kind = 'invalid' }
     else if (/Ausgangsallokation|Portfoliowerte/.test(message)) { path = ['estimatorPortfolio', 0, 'value']; kind = 'invalid' }
     add(path, /PV-Elterneigenschaft/.test(message) ? 'Anerkannte Kinder ergänzen oder ausdrücklich „Keine anerkannten Kinder“ wählen.' : !input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? message.replaceAll('Rentenphase', 'Phase ab Versicherungsübergang') : message, kind, `setup.${path.join('.')}`)
   }
@@ -98,6 +100,9 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     const index = Math.max(0, buckets.findIndex(b => !Number.isFinite(b.value) || b.value < 0 || !Number.isFinite(b.annualCostRate ?? 0) || (b.annualCostRate ?? 0) < 0 || (b.annualCostRate ?? 0) > 1 || !getReturnSeriesCategory(b.returnSeriesId)))
     const field = portfolioError?.includes('Kosten') ? 'annualCostRate' : portfolioError?.includes('Renditequelle') ? 'returnSeriesId' : 'value'
     add(['estimatorPortfolio', index, field], portfolioError ?? allocationError!, numericMissing(buckets[index]?.value) ? 'missing' : 'invalid', 'portfolio.validation')
+  }
+  if (cashPlanningIssue) {
+    add(['historical', 'cashPlanningRate'], cashPlanningIssue, 'missing', 'cashPlanningRate.missing')
   }
   return issues
 }
