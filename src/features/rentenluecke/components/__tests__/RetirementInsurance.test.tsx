@@ -33,7 +33,7 @@ function Harness({ initial = pension({ support: undefined }), config = createDef
       onUpdate={(id, patch) => setStreams(current => current.map(stream => stream.id === id ? { ...stream, ...patch } : stream))}
       onAdd={() => {}} onRemove={id => setStreams(current => current.filter(stream => stream.id !== id))} />
     {issues.length > 0 && <p role="status">{issues.join(' ')}</p>}
-    {valid && <InsuranceBreakdown rows={simulateScenario(input).retirementRows} streams={streams} />}
+    {valid && <InsuranceBreakdown rows={simulateScenario(input, 0.02).retirementRows} streams={streams} />}
   </>
 }
 function change(label: string | RegExp, value: string) { const field = screen.queryByLabelText(label) ?? screen.getByLabelText(typeof label === 'string' ? label.replace('Rentenphase', 'Phase ab Versicherungsübergang') : label); fireEvent.change(field, { target: { value } }) }
@@ -194,13 +194,13 @@ describe('guided insurance fields and ledger breakdown', () => {
   })
   it('displays the selected ledger funding shortfall including insurance', () => {
     const input = insuredInput({ currentCapital: 100, monthlyDesiredSpendingToday: 100000 })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     render(<InsuranceBreakdown rows={result.retirementRows} streams={input.retirementIncomeStreams!} />)
     expect(screen.getByRole('alert')).toHaveTextContent(/Vermögenslücke:.*einschließlich KV\/PV/)
   })
   it('displays separate assessment and subsidy values directly from the selected ledger row', () => {
     const input = insuredInput()
-    const rows = simulateScenario(input).retirementRows
+    const rows = simulateScenario(input, 0.02).retirementRows
     render(<InsuranceBreakdown rows={rows} streams={input.retirementIncomeStreams!} />)
     const section = screen.getByRole('region', { name: 'Monatliche KV/PV-Aufschlüsselung' })
     expect(within(section).getByText('2.000 € / 2.000 €')).toBeVisible()
@@ -478,7 +478,7 @@ it('keeps the dismissed legacy notice hidden on remount while retaining the lega
 
 it('states capital-income tax funding truthfully in the capital-basis details', () => {
   const input = insuredInput()
-  const rows = simulateScenario(input).retirementRows
+  const rows = simulateScenario(input, 0.02).retirementRows
   render(<InsuranceBreakdown rows={rows} streams={input.retirementIncomeStreams!} />)
   expect(screen.getByText(/Jährliche Planungsnäherung, keine exakte Versicherungsabrechnung\./)).toBeInTheDocument()
   expect(screen.getByText(/Kapitalertragsteuer auf die Finanzierungsverkäufe/)).toBeInTheDocument()

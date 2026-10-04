@@ -10,7 +10,7 @@ import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 
 describe('guided insurance completeness and scope', () => {
   it('requires genuine answers; confirmed zero is complete', () => {
-    expect(() => simulateScenario(DEFAULT_INPUT)).toThrow('KV/PV')
+    expect(() => simulateScenario(DEFAULT_INPUT, 0.02)).toThrow('KV/PV')
     const missing = insuredInput({ retirementInsurance: { ...createDefaultRetirementInsurance(67), insurerAdditionalRate: undefined } })
     expect(insuranceSetupIssues(missing)).toEqual(expect.arrayContaining([
       'Rentenphase: Versicherungsstatus auswählen.', 'Kassenindividuellen Zusatzbeitrag angeben.',
@@ -20,7 +20,7 @@ describe('guided insurance completeness and scope', () => {
       pension: { status: 'unknown', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'not-received' },
     }) })
     expect(insuranceSetupIssues(zero)).toEqual([])
-    expect(simulateScenario(zero).retirementRows[0].insurance).toMatchObject({ selectedStatus: 'unknown', effectiveStatus: 'voluntary' })
+    expect(simulateScenario(zero, 0.02).retirementRows[0].insurance).toMatchObject({ selectedStatus: 'unknown', effectiveStatus: 'voluntary' })
   })
   it('checks explicit commencement against the earliest statutory stream, independently of work stop', () => {
     const input = insuredInput({ retirementAge: 65, currentAge: 64 })
@@ -42,12 +42,12 @@ describe('guided insurance completeness and scope', () => {
     expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i })).join()).toContain('gesamte Phase')
     i.pension = { kvMonthlyToday: 123, pvMonthlyToday: 45 }
     expect(insuranceSetupIssues(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i }))).toEqual([])
-    const rows = simulateScenario(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i })).retirementRows
+    const rows = simulateScenario(insuredInput({ retirementIncomeStreams: streams, retirementInsurance: i }), 0.02).retirementRows
     expect(rows.every(r => r.insurance?.status === 'manual' && r.healthInsurance === 1476 && r.careInsurance === 540)).toBe(true)
   })
   it.each(['unsupported', 'kvdr'] as const)('uses whole-phase manual replacement for unsupported bridge status %s', status => {
     const i = automaticInsurance({ bridge: { status, kvMonthlyToday: 200, pvMonthlyToday: 50 } })
-    const rows = simulateScenario(insuredInput({ currentAge: 65, retirementAge: 65, retirementInsurance: i })).retirementRows
+    const rows = simulateScenario(insuredInput({ currentAge: 65, retirementAge: 65, retirementInsurance: i }), 0.02).retirementRows
     expect(rows[0].insurance).toMatchObject({ status: 'manual', ownKvMonthly: 200, ownPvMonthly: 50 })
     expect(rows[2].insurance?.status).toBe('automatic')
   })
@@ -66,7 +66,7 @@ describe('guided insurance completeness and scope', () => {
     for (const i of [automaticInsurance({ isParent: false, childBirthYears: [2010] }), automaticInsurance({ childBirthYears: [2027] }), automaticInsurance({ childrenConfirmed: false })]) {
       expect(insuranceSetupIssues(insuredInput({ retirementInsurance: i })).length).toBeGreaterThan(0)
     }
-    expect(() => simulateScenario(insuredInput({ retirementIncomeStreams: [pension(), pension()] }))).toThrow('Kennungen')
+    expect(() => simulateScenario(insuredInput({ retirementIncomeStreams: [pension(), pension()] }), 0.02)).toThrow('Kennungen')
   })
   it('clears malformed hidden values on manual transitions without losing valid overrides', () => {
     const input = insuredInput({ retirementInsurance: automaticInsurance({ insurerAdditionalRate: -1, childBirthYears: [0],
@@ -96,7 +96,7 @@ describe('guided insurance completeness and scope', () => {
         pension: { ...cleaned.retirementInsurance!.pension, manual: false },
       } }
       expect(insuranceSetupIssues(automatic)).toEqual([])
-      expect(simulateScenario(automatic).retirementRows[0].insurance?.status).toBe('automatic')
+      expect(simulateScenario(automatic, 0.02).retirementRows[0].insurance?.status).toBe('automatic')
     })
     it.each([0, 0.0099, 0.01, 0.5])('honors the rate boundary %s', rate => {
       const input = insuredInput({ retirementInsurance: automaticInsurance({ rates: { [key]: rate } }) })
@@ -119,7 +119,7 @@ describe('guided insurance completeness and scope', () => {
 
 describe('authoritative contribution ledger', () => {
   it('reconciles the independently calculated mixed KVdR fixture with one occupational allowance', () => {
-    const result = simulateScenario(insuredInput({ retirementIncomeStreams: [pension({ effectiveDeductionRate: 0.1 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 500 })] }))
+    const result = simulateScenario(insuredInput({ retirementIncomeStreams: [pension({ effectiveDeductionRate: 0.1 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 500 })] }), 0.02)
     const row = result.retirementRows[0]
     expect(row.retirementIncomeGross).toBe(30_000)
     expect(row.retirementIncomeOtherDeductions).toBe(2400)
@@ -145,7 +145,7 @@ describe('authoritative contribution ledger', () => {
   })
   it('turns an apparent income surplus into a funded gap after insurance', () => {
     const input = insuredInput({ monthlyDesiredSpendingToday: 1900 })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const row = result.retirementRows[0]
     expect(row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.desiredSpending).toBe(1200)
     expect(row.healthInsurance).toBeCloseTo(175 * 12)
@@ -174,7 +174,7 @@ describe('authoritative contribution ledger', () => {
     // estimate. Legacy capitalMonthlyToday values are tolerated on load but have
     // no engine meaning.
     const input = insuredInput({ retirementIncomeStreams: [pension({ amountMonthlyToday: 4000 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 1000 }), pension({ id: 'rent', kind: 'rental-income', amountMonthlyToday: 600, effectiveDeductionRate: 0.25, rentalAssessmentMonthlyToday: 600 })], retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'confirmed' } }) })
-    const row = simulateScenario(input).retirementRows[0]
+    const row = simulateScenario(input, 0.02).retirementRows[0]
     expect(row.retirementIncomeGross / 12).toBe(5600)
     expect(row.portfolioContributionBase / 12).toBeCloseTo(66.99610591900311, 8)
     // Shared ceiling 5,812.5: pensions 5,000 + other (600 rental + 66.996 capital)
@@ -199,7 +199,7 @@ describe('authoritative contribution ledger', () => {
     // still below the 1,318.33 voluntary minimum, so KV/PV stay at the minimum:
     // 1,318.33×16.9 % = 222.798/mo, 1,318.33×3.6 % = 47.460/mo).
     const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 67, retirementIncomeStreams: [] })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const row = result.retirementRows[0]
     expect(row.retirementIncomeGross).toBe(0)
     expect(row.portfolioContributionBase / 12).toBeCloseTo(129.74227132076868, 8)
@@ -211,8 +211,8 @@ describe('authoritative contribution ledger', () => {
     expect(row.gapWithdrawal).toBeCloseTo(27403.427338730235, 8)
     expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(50868.988037109375, 0)
     // Monotone search on the same detailed ledger: required survives, 2 € less fails.
-    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement)).summary.survivesUntilPlanningAge).toBe(true)
-    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement - 2)).summary.survivesUntilPlanningAge).toBe(false)
+    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement), 0.02).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement - 2), 0.02).summary.survivesUntilPlanningAge).toBe(false)
   })
   it('indexes bases and thresholds with path inflation; phase and stream boundaries use row start age', () => {
     // Mandatory: the capital assessment is modeled per bucket, never a legacy
@@ -226,10 +226,10 @@ describe('authoritative contribution ledger', () => {
         bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 },
         pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 3000, drvSubsidy: 'confirmed' },
       }) })
-    const expected = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), inflationSourceId: 'fixed-manual', simulations: 1 })
+    const expected = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), inflationSourceId: 'fixed-manual', simulations: 1, cashPlanningRate: 0.02 })
     const expectedPath = Array.from({ length: 6 }, () => expected.map((bucket) => ({ ...bucket })))
     const fixed = simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02), expectedPath)
-    expect(fixed).toEqual(simulateScenario(input))
+    expect(fixed).toEqual(simulateScenario(input, 0.02))
     // Missing per-bucket returns can never fall back to an aggregate path.
     expect(() => simulateScenarioWithReturnPath(input, Array(6).fill(0), Array(6).fill(0.02))).toThrow(/je Anlage/)
     const variable = simulateScenarioWithReturnPath(input, Array(6).fill(0), [0.03, 0.04, -0.01, 0.02, 0.05, 0], zeroBucketPath(input, 6))
@@ -254,18 +254,18 @@ describe('authoritative contribution ledger', () => {
     // tolerated on load but has no engine meaning.
     const input = insuredInput({ currentAge: 44, retirementAge: 44, planningAge: 47, retirementIncomeStreams: [],
       retirementInsurance: automaticInsurance({ pensionAge: 67, childBirthYears: [2002, 2004], bridge: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 2000 } }) })
-    const rows = simulateScenario(input).retirementRows
+    const rows = simulateScenario(input, 0.02).retirementRows
     expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([expect.closeTo(0.0335, 10), 0.036, 0.036])
     expect(rows.map(r => r.healthInsurance / 12)).toEqual([expect.closeTo(1318.33 * 0.169, 10), expect.closeTo(1318.33 * 0.169, 10), expect.closeTo(1318.33 * 0.169, 10)])
     expect(rows.map(r => r.careInsurance / 12)).toEqual([expect.closeTo(1318.33 * 0.0335, 10), expect.closeTo(1318.33 * 0.036, 10), expect.closeTo(1318.33 * 0.036, 10)])
   })
   it('starts childless surcharge in turning-23 year', () => {
-    const rows = simulateScenario(insuredInput({ currentAge: 22, retirementAge: 22, planningAge: 25, retirementIncomeStreams: [], retirementInsurance: automaticInsurance({ isParent: false }) })).retirementRows
+    const rows = simulateScenario(insuredInput({ currentAge: 22, retirementAge: 22, planningAge: 25, retirementIncomeStreams: [], retirementInsurance: automaticInsurance({ isParent: false }) }), 0.02).retirementRows
     expect(rows.map(r => r.insurance?.status === 'automatic' && r.insurance.pvRate)).toEqual([0.036, expect.closeTo(0.042, 10), expect.closeTo(0.042, 10)])
   })
   it('uses advanced total rates consistently for own KV and DRV subsidy; manual replaces all rules', () => {
     const i = automaticInsurance({ rates: { kvGeneralRate: 0.16, kvReducedRate: 0.15, pvBaseRate: 0.04 } })
-    const row = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
+    const row = simulateScenario(insuredInput({ retirementInsurance: i }), 0.02).retirementRows[0]
     expect(row.healthInsurance / 12).toBeCloseTo(189)
     expect(row.careInsurance / 12).toBeCloseTo(80)
     // Mandatory: the modeled voluntary assessment (76.60/mo) replaces the legacy
@@ -276,12 +276,12 @@ describe('authoritative contribution ledger', () => {
     // includes the pension-tax share of the committed sale (was 74.84/mo
     // pension-ignorant).
     i.pension = { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' }
-    const voluntary = simulateScenario(insuredInput({ retirementInsurance: i })).retirementRows[0]
+    const voluntary = simulateScenario(insuredInput({ retirementInsurance: i }), 0.02).retirementRows[0]
     expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(76.60219084063776, 8)
     expect(voluntary.healthInsurance / 12).toBeCloseTo(202.71179216047415, 8)
     expect(voluntary.careInsurance / 12).toBeCloseTo(83.0640876336255, 8)
     i.pension = { ...i.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 7 }
-    const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 })).retirementRows[1]
+    const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 }), 0.02).retirementRows[1]
     expect(manual.healthInsurance).toBe(0)
     expect(manual.careInsurance).toBeCloseTo(7 * 12 * 1.1)
     expect(manual.insurance).toMatchObject({ status: 'manual', assessment: null })

@@ -5,7 +5,7 @@ import { simulateScenarioWithReturnPath } from '../stochasticReturns'
 import { insuranceSetupIssues } from '../retirementInsurance'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 import { simulateHistoricalBootstrapScenario, simulateHistoricalBootstrapReferenceScenario, runHistoricalBootstrapSimulation } from '../historicalReturns'
-import { SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
+import { PLANNING_RATE_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns/constants'
 import { createEstimatorState, simulateEstimatorYear } from '../capitalIncome/insuranceEstimator'
 import type { RentenlueckeInput } from '../types'
 import { simulateCapitalLedgerPath } from '../capitalIncome/ledger'
@@ -17,7 +17,7 @@ export function estimatorInput(): RentenlueckeInput {
     monthlyContributionToday: 100, monthlyDesiredSpendingToday: 2500,
     estimatorPortfolio: [
       { id: 'fund', name: 'Fonds', value: 60000, holding: 'accumulating-equity-fund', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
-      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit', returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+      { id: 'bank', name: 'Bank', value: 40000, holding: 'ordinary-bank-deposit', returnSeriesId: PLANNING_RATE_SOURCE_ID },
     ],
     retirementInsurance: automaticInsurance({
       bridge: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic' },
@@ -34,12 +34,12 @@ describe('integrated capital assessment ledger', () => {
     input.currentCapital = 0
     input.estimatorPortfolio!.forEach(b => { b.value = 0 })
     expect(insuranceSetupIssues(input).join()).toContain('positive Ausgangsallokation')
-    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
+    expect(() => simulateScenario(input, 0.02)).toThrow(/positive Ausgangsallokation/)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, path(input))).toThrow(/positive Ausgangsallokation/)
     // Mandatory: legacy manual capital fields never bypass portfolio eligibility.
     input.retirementInsurance!.bridge = { ...input.retirementInsurance!.bridge, capitalMode: 'manual' as never, capitalMonthlyToday: 0 as never }
     expect(insuranceSetupIssues(input).join()).toContain('positive Ausgangsallokation')
-    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
+    expect(() => simulateScenario(input, 0.02)).toThrow(/positive Ausgangsallokation/)
   })
   it('rejects partial or ambiguous bucket paths in both full and bootstrap ledgers', () => {
     const input = estimatorInput()
@@ -87,7 +87,7 @@ describe('integrated capital assessment ledger', () => {
   it('blocks incomplete setup in reference and combined bootstrap forecasts', () => {
     const input = estimatorInput()
     input.retirementInsurance!.capitalEstimator!.fundAcquisitionCost = undefined
-    const settings = { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), inflationSourceId: 'fixed-manual', simulations: 2 }
+    const settings = { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), inflationSourceId: 'fixed-manual', simulations: 2, cashPlanningRate: 0.02 }
     expect(() => simulateHistoricalBootstrapReferenceScenario(input, settings)).toThrow(/Anschaffungskosten/)
     expect(() => runHistoricalBootstrapSimulation(input, settings)).toThrow(/Anschaffungskosten/)
   })
@@ -149,7 +149,7 @@ describe('integrated capital assessment ledger', () => {
     expect(result.rows[0].investmentReturn).toBeCloseTo(-7200)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, path(input, .1, -.01, -.01))).toThrow()
     input.estimatorPortfolio![1].returnSeriesId = SYNTHETIC_RETURN_SERIES_IDS.equity
-    expect(insuranceSetupIssues(input).join()).toContain('Brutto-Zinsquelle')
+    expect(insuranceSetupIssues(input).join()).toContain('Tagesgeld-Planungszinsquelle')
   })
   it('keeps nominal Basiszins independent of inflation and recomputes annual VP', () => {
     const input = estimatorInput()
@@ -180,7 +180,7 @@ describe('integrated capital assessment ledger', () => {
     input.estimatorPortfolio = [input.estimatorPortfolio![0]]
     input.estimatorPortfolio[0].value = input.currentCapital
     const settings = { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio), inflationSourceId: 'fixed-manual', simulations: 3 }
-    const deterministic = simulateScenario(input)
+    const deterministic = simulateScenario(input, 0.02)
     expect(simulateHistoricalBootstrapReferenceScenario(input, settings).rows).toEqual(deterministic.rows)
     expect(simulateHistoricalBootstrapScenario(input, settings)).toEqual(simulateHistoricalBootstrapScenario(input, settings))
     expect(runHistoricalBootstrapSimulation(input, settings)).toEqual(runHistoricalBootstrapSimulation(input, settings))
@@ -190,22 +190,25 @@ describe('integrated capital assessment ledger', () => {
     input.currentAge = input.retirementAge = 67
     input.planningAge = 69
     input.retirementInsurance!.pension = { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' }
-    const result = simulateScenario(input)
+    const result = simulateScenarioWithReturnPath(input, [], undefined, path(input))
     const required = result.summary.requiredCapitalAtRetirement
     const scaled = structuredClone(input)
     scaled.currentCapital = required
     scaled.estimatorPortfolio!.forEach(b => { b.value *= required / input.currentCapital })
     scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= required / input.currentCapital
-    expect(simulateScenario(scaled).summary.survivesUntilPlanningAge).toBe(true)
+    expect(simulateScenarioWithReturnPath(scaled, [], undefined, path(scaled)).summary.survivesUntilPlanningAge).toBe(true)
     scaled.currentCapital = required - 2
     scaled.estimatorPortfolio!.forEach(b => { b.value *= (required - 2) / required })
     scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= (required - 2) / required
-    expect(simulateScenario(scaled).summary.survivesUntilPlanningAge).toBe(false)
+    expect(simulateScenarioWithReturnPath(scaled, [], undefined, path(scaled)).summary.survivesUntilPlanningAge).toBe(false)
   })
   it('keeps bank-only gross interest separate from costs and ignores retained hidden fund setup', () => {
     const input = estimatorInput()
     input.estimatorPortfolio = [{ ...input.estimatorPortfolio![1], value: 100000, annualCostRate: .05 }]
-    const result = simulateScenario(input)
+    const bankPath = Array.from({ length: input.planningAge - input.currentAge }, () => [
+      { id: input.estimatorPortfolio![0].id, totalReturnRate: -0.03, grossBankReturnRate: 0.02 },
+    ])
+    const result = simulateScenarioWithReturnPath(input, [], undefined, bankPath)
     expect(result.rows[0].investmentReturn).toBeCloseTo(-3000)
     expect(result.rows[0].capitalAssessment!.bankInterest).toBeCloseTo(2000)
     expect(result.rows[0].capitalAssessment!.closingState!.fundAcquisitionCost).toBe(0)
@@ -214,12 +217,12 @@ describe('integrated capital assessment ledger', () => {
   it('rejects inconsistent opening capital rather than silently replacing it', () => {
     const input = estimatorInput()
     input.currentCapital = 200000
-    expect(() => simulateScenario(input)).toThrow(/übereinstimmen/)
+    expect(() => simulateScenario(input, 0.02)).toThrow(/übereinstimmen/)
   })
   it('reports asset shortfall including insurance-funding gains', () => {
     const input = estimatorInput()
     input.monthlyDesiredSpendingToday = 100000
-    const result = simulateScenario(input)
+    const result = simulateScenarioWithReturnPath(input, [], undefined, path(input))
     expect(result.retirementRows[0].unfundedWithdrawal).toBeGreaterThan(0)
     expect(result.retirementRows[0].capitalAssessment!.status).toBe('shortfall')
   })

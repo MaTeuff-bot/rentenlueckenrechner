@@ -26,7 +26,7 @@ import {
   zeroBucketPath,
 } from './insuranceFixtures'
 import type { RentenlueckeInput } from '../types'
-import { SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
+import { PLANNING_RATE_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
 
 const fund = (value: number, id = 'fund'): EstimatorBucket => ({ id, value, eligibility: 'accumulating-equity-fund' })
 const bank = (value: number, id = 'bank'): EstimatorBucket => ({ id, value, eligibility: 'ordinary-bank-deposit' })
@@ -91,7 +91,7 @@ function estimatorGainsInput(): RentenlueckeInput {
       { id: 'fund', name: 'Fonds', value: 60_000, holding: 'accumulating-equity-fund',
         returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
       { id: 'bank', name: 'Bank', value: 40_000, holding: 'ordinary-bank-deposit',
-        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+        returnSeriesId: PLANNING_RATE_SOURCE_ID },
     ],
     retirementInsurance: automaticInsurance({
       pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' },
@@ -291,7 +291,7 @@ describe('ledger joint pension-tax funding', () => {
     }
   })
   it('funds gap, insurance and both taxes from the single committed sale', () => {
-    const result = simulateScenario(estimatorGainsInput())
+    const result = simulateScenario(estimatorGainsInput(), 0.02)
     for (const row of result.retirementRows) {
       const assessment = row.capitalAssessment!
       const excess = assessment.excessRepurchase ?? 0
@@ -366,7 +366,7 @@ describe('ledger joint pension-tax funding', () => {
     const base = estimatorGainsInput()
     const input = prepare({ ...base, currentAge: base.retirementAge, retirementAge: base.retirementAge,
       monthlyDesiredSpendingToday: 100 })
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     for (const row of result.retirementRows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
       expect(row.gapWithdrawal).toBe(0)

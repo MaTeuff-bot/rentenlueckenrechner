@@ -1,13 +1,18 @@
 import { expect, test } from '@playwright/test';
-import { expectForecast, expectNoForecast, freshLoad, setupFundOnlyBridge } from './fixtures';
+import { expectForecast, freshLoad, setupFundOnlyBridge } from './fixtures';
 
 test('missing answers block forecast, issue links focus controls, correcting enables results', async ({
   page,
 }) => {
   await freshLoad(page);
-  await expectNoForecast(page);
+  // Default portfolio holds a cash bucket without a confirmed planning rate:
+  // no forecast, and the Tagesgeld issue routes to Rechenannahmen.
+  await expect(page.getByText('KV/PV-Abrechnung im Detail', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Dein Kapitalbedarf', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.validation-summary a[href="#cash-planning-rate"]').first()).toBeVisible();
   await page.locator('#retirementAge').fill('65');
-  await expectNoForecast(page);
+  await expect(page.getByText('KV/PV-Abrechnung im Detail', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Dein Kapitalbedarf', { exact: true })).toHaveCount(0);
   const bridgeLink = page.locator('.validation-summary a[href="#insurance-bridge-status"]').first();
   await expect(bridgeLink).toBeVisible();
   await bridgeLink.click();

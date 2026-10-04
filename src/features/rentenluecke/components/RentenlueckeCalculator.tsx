@@ -43,6 +43,10 @@ export function RentenlueckeCalculator() {
     removeRetirementIncomeStream,
     updateInflationSource,
     updateSimulations,
+    updateCashPlanningRate,
+    updateCashPlanningRateConfirmed,
+    cashPlanningIssue,
+    cashPlanningError,
     reset,
   } = useScenarioState()
 
@@ -94,6 +98,9 @@ export function RentenlueckeCalculator() {
           onRetirementIncomeStreamRemove={removeRetirementIncomeStream}
           onInflationSourceChange={updateInflationSource}
           onSimulationsChange={updateSimulations}
+          onCashPlanningRateChange={updateCashPlanningRate}
+          onCashPlanningRateConfirmedChange={updateCashPlanningRateConfirmed}
+          cashPlanningIssue={cashPlanningIssue}
           onReset={reset}
           sectionRequest={sectionRequest}
         />
@@ -102,7 +109,7 @@ export function RentenlueckeCalculator() {
         <h2 id="results-title">Ergebnis</h2>
         {!isValid || !result || !stochasticSummary ? (
           <section className="panel invalid-panel" role="status">
-            {calculationError ?? portfolioBucketError ?? allocationError ??
+            {calculationError ?? cashPlanningError ?? portfolioBucketError ?? allocationError ??
               'Deine Prognose ist noch offen. Ergänze die verlinkten Angaben; danach erscheinen Ergebnisse, Diagramm und Tabelle.'}
             <p><a href="#inputs-title">Zu den offenen Angaben</a></p>
           </section>
@@ -110,6 +117,7 @@ export function RentenlueckeCalculator() {
           <>
             <SummaryCards result={result} stochasticSummary={stochasticSummary} onRequestSection={handleRequestSection} />
             <p className="source-warning">Kapitalertragsteuer und GRV-Rentensteuer werden als Planungsnäherung berechnet und bei einer Entnahmelücke aus dem Portfolio finanziert; keine individuelle Steuerberatung.</p>
+            <p className="source-warning">Tagesgeld mit konstantem nominalem Planungszins angenommen; Ergebnisbänder enthalten keine Tagesgeld-Zinsunsicherheit.</p>
             <details className="panel"><summary>KV/PV-Abrechnung im Detail</summary><InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} /></details>
             <ScenarioOutcomePanel
               result={result}

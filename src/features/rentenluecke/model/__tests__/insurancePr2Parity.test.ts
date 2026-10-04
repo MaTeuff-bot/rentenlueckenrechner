@@ -68,7 +68,7 @@ describe('PR2 canonical answers versus equivalent legacy engine inputs', () => {
     } })
     expect(insuranceSetupIssues(legacy)).toEqual([])
     expect(insuranceSetupIssues(adapted)).toEqual([])
-    expectNumericalParity(simulateScenario(adapted), simulateScenario(legacy))
+    expectNumericalParity(simulateScenario(adapted, 0.02), simulateScenario(legacy, 0.02))
     const path = [.05, -.03, .08, .01, .04]
     const inflation = [.01, .03, .02, -.01, .04]
     const bucketPath = needsEstimator(legacy) ? path.map(totalReturnRate => [{ id: 'fund', totalReturnRate }]) : undefined
@@ -85,7 +85,7 @@ describe('PR2 canonical answers versus equivalent legacy engine inputs', () => {
       expect(runStochasticSimulation(adapted, stochastic)).toEqual(runStochasticSimulation(legacy, stochastic))
     }
     if (name === 'own-totals' || name === 'coverage-unsure') {
-      for (const row of simulateScenario(adapted).retirementRows.filter(row => row.insurance?.phase === 'pension')) {
+      for (const row of simulateScenario(adapted, 0.02).retirementRows.filter(row => row.insurance?.phase === 'pension')) {
         expect(row.healthInsurance).toBeCloseTo(80 * 12 * row.inflationFactor, 10)
         expect(row.careInsurance).toBeCloseTo(20 * 12 * row.inflationFactor, 10)
       }

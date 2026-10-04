@@ -12,3 +12,6 @@ export const SYNTHETIC_RETURN_SERIES_IDS = {
   bond: 'synthetic-bonds-assumption-v1',
   cash: 'synthetic-cash-assumption-v1',
 } as const
+export const PLANNING_RATE_SOURCE_ID = 'tagesgeld-planzins-v1'
+export const CASH_PLANNING_RATE_PROPOSAL = 0.02
+export const PLANNING_RATE_SOURCE_VERSION = 'tagesgeld-planzins-v1'

@@ -6,7 +6,7 @@ import { automaticInsurance, cashOnlyInput, insuredInput, pension, withFullCostB
 import { clearHiddenInvalidInsuranceValues } from '../retirementInsurance'
 import { simulateScenario } from '../simulateScenario'
 import { simulateScenarioWithReturnPath, runStochasticSimulation } from '../stochasticReturns'
-import { runHistoricalBootstrapSimulation, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
+import { runHistoricalBootstrapSimulation, simulateHistoricalBootstrapReferenceScenario, FIXED_INFLATION_SOURCE_ID, PLANNING_RATE_SOURCE_ID, SYNTHETIC_RETURN_SERIES_IDS } from '../historicalReturns'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 import { needsDetailedPortfolio } from '../capitalIncome/setup'
 import type { RentenlueckeInput, YearlyPeriodRow } from '../types'
@@ -92,7 +92,7 @@ function expectZeroStartNeverBorrows(rows: readonly YearlyPeriodRow[]) {
 // Scenario fixtures (Q1a: typed TS builders, reusable by later hardening PRs)
 // ---------------------------------------------------------------------------
 
-const deterministicSettings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 1 } as const
+const deterministicSettings = { inflationSourceId: FIXED_INFLATION_SOURCE_ID, simulations: 1, cashPlanningRate: 0.02 } as const
 
 /** S1: standard KVdR retirement, tiny horizon so every figure is hand-computable. */
 export function kvdrStandardScenario(): RentenlueckeInput {
@@ -162,7 +162,7 @@ export function estimatorScenario(): RentenlueckeInput {
       { id: 'fund', name: 'Fonds', value: 60_000, holding: 'accumulating-equity-fund',
         returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity },
       { id: 'bank', name: 'Bank', value: 40_000, holding: 'ordinary-bank-deposit',
-        returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.cash },
+        returnSeriesId: PLANNING_RATE_SOURCE_ID },
     ],
     retirementInsurance: automaticInsurance({
       pension: { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' },
@@ -301,7 +301,7 @@ describe('reference scenario S2: early retirement with voluntary bridge', () => 
   })
 
   it('keeps the phase boundary exactly at the statutory stream age', () => {
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     expect(result.retirementRows.find(r => r.ageStart === 66)!.healthInsurance).toBeMoneyClose(2_160)
     expect(result.retirementRows.find(r => r.ageStart === 67)!.healthInsurance).toBeMoneyClose(2_100)
   })
@@ -408,7 +408,7 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     // pension tax = 13,552.068 gap. Tier-3 regression pins after the joint-funding
     // fix (no feasible hand calculation for the fixed point; gap/paid/closing
     // identities are verified by the joint-funding suite).
-    const result = simulateScenario(input)
+    const result = simulateScenario(input, 0.02)
     const first = result.retirementRows[0]
     expect(first.capitalAssessment!.bankInterest).toBeMoneyClose(839.4450777952111)
     expect(first.taxableWithdrawal).toBeMoneyClose(5336.048177575691)
@@ -447,7 +447,7 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     const settings = { portfolioComponents: createPortfolioComponentsFromBuckets(input.estimatorPortfolio!), ...deterministicSettings }
     const direct = simulateScenarioWithReturnPath(input, [], undefined, bucketPath)
     const reference = simulateHistoricalBootstrapReferenceScenario(input, settings)
-    expect(reference.rows).toEqual(simulateScenario(input).rows)
+    expect(reference.rows).toEqual(simulateScenario(input, 0.02).rows)
     // The reference path uses expected returns of the selected sources, not our fixed path;
     // regression pin: with these sources the expected portfolio return is strictly positive.
     expect(reference.rows[0].nominalReturnRate).toBeGreaterThan(0)
@@ -468,7 +468,7 @@ describe('reference scenario S5: zero-start accumulation', () => {
     // positive-allocation diagnostic on every public route; the required-capital
     // trial endpoint at zero (candidate(0)) is unaffected — see requiredCapital.
     expect(input.currentCapital).toBe(0)
-    expect(() => simulateScenario(input)).toThrow(/positive Ausgangsallokation/)
+    expect(() => simulateScenario(input, 0.02)).toThrow(/positive Ausgangsallokation/)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, zeroBucketPath(input, input.planningAge - input.currentAge))).toThrow(/positive Ausgangsallokation/)
   })
 })
@@ -510,7 +510,7 @@ describe('cross-scenario invariants and return paths', () => {
   it('every scenario survives schema validation and full-ledger conservation', () => {
     for (const name of names) {
       const input = prepare(SCENARIOS[name]())
-      const result = simulateScenario(input)
+      const result = simulateScenario(input, 0.02)
       expect(result.rows.length, name).toBe(input.planningAge - input.currentAge)
       expectLedgerConservation(result.rows)
     }
@@ -518,7 +518,7 @@ describe('cross-scenario invariants and return paths', () => {
 
   it('monotone inflation factors and nonnegative money in every row', () => {
     for (const name of names) {
-      const result = simulateScenario(prepare(SCENARIOS[name]()))
+      const result = simulateScenario(prepare(SCENARIOS[name]()), 0.02)
       for (const row of result.rows) {
         for (const money of [row.openingCapital, row.closingCapital, row.desiredSpending, row.retirementIncomeGross]) {
           expect(Number.isFinite(money), `${name} row ${row.ageStart}`).toBe(true)
@@ -553,7 +553,7 @@ describe('cross-scenario invariants and return paths', () => {
   })
 
   it('keeps assessment-only capital out of spendable income in estimator scenarios', () => {
-    const result = simulateScenario(prepare(estimatorScenario()))
+    const result = simulateScenario(prepare(estimatorScenario()), 0.02)
     for (const row of result.retirementRows) {
       // Slice-2 net identity holds on estimator rows too (pension tax reduces the net).
       expect(row.retirementIncomeNet).toBeMoneyClose(

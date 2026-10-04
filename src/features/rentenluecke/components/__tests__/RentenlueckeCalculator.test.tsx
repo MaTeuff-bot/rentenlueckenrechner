@@ -169,7 +169,7 @@ it('requires answers on clean load, announces the owned reset, and dismisses its
   const { unmount } = render(<RentenlueckeCalculator />)
   expect(screen.getByText(/bisherigen Eingaben wurden/)).toBeVisible()
   expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
-  expect(screen.getByText(/Deine Prognose ist noch offen/)).toBeVisible()
+  expect(screen.getAllByText(/Tagesgeld-Planungszins/).length).toBeGreaterThan(0)
   fireEvent.click(screen.getByRole('button', { name: 'Hinweis schließen' }))
   expect(localStorage.getItem('unrelated')).toBe('keep')
   unmount()

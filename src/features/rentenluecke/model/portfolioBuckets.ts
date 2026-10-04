@@ -1,5 +1,5 @@
 import type { AssetAllocation, PortfolioComponent } from './stochasticReturns'
-import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS } from './historicalReturns/constants'
+import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS, PLANNING_RATE_SOURCE_ID } from './historicalReturns/constants'
 import { getReturnSeriesCategory, type ReturnSeriesCategory } from './historicalReturns/sourceOptions'
 
 export type PortfolioBucket = {
@@ -97,5 +97,6 @@ export function scalePortfolioBucketValuesToTotal(
 }
 
 export function getDefaultReturnSeriesId(category: ReturnSeriesCategory): string {
+  if (category === 'cash') return PLANNING_RATE_SOURCE_ID
   return DEFAULT_HISTORICAL_RETURN_SERIES_IDS[category]
 }

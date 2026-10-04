@@ -1,6 +1,6 @@
 import type { RentenlueckeInput } from '../types'
 import { getHistoricalDatasetVersion, getInflationSourceVersion } from './sourceOptions'
-import { findHistoricalReturnSeries, findSyntheticReturnSeries } from './returnSeriesRegistry'
+import { findHistoricalReturnSeries, findPlanningRateReturnSeries, findSyntheticReturnSeries } from './returnSeriesRegistry'
 import type { HistoricalBootstrapSettings } from './types'
 
 export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings: HistoricalBootstrapSettings): number {
@@ -17,6 +17,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
         annualCostRate: getEffectiveAnnualCostRate(component.returnSeriesId, component.annualCostRate),
         datasetVersion: getHistoricalDatasetVersion(component.returnSeriesId),
       })),
+      cashPlanningRate: settings.cashPlanningRate,
       inflationVersion: getInflationSourceVersion(settings.inflationSourceId, input.annualInflationRate),
     }),
   )
@@ -24,7 +25,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
 
 function getEffectiveAnnualCostRate(returnSeriesId?: string, annualCostRate = 0): number {
   const source = returnSeriesId
-    ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId)
+    ? findHistoricalReturnSeries(returnSeriesId) ?? findSyntheticReturnSeries(returnSeriesId) ?? findPlanningRateReturnSeries(returnSeriesId)
     : undefined
   return source?.costTreatment === 'netOfFundCosts' ? 0 : annualCostRate
 }

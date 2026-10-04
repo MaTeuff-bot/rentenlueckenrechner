@@ -2,7 +2,8 @@ import { ASSET_CLASS_ASSUMPTIONS } from './stochasticAssumptions'
 export { ASSET_CLASS_ASSUMPTIONS, DEFAULT_ASSET_ALLOCATION, DEFAULT_STOCHASTIC_SETTINGS } from './stochasticAssumptions'
 import { needsDetailedPortfolio } from './capitalIncome/setup'
 import { simulateCapitalLedger, simulateCapitalLedgerPath, type BucketReturnPath } from './capitalIncome/ledger'
-import { findSyntheticReturnSeries, isSyntheticReturnSeriesId } from './historicalReturns/returnSeriesRegistry'
+import { CASH_PLANNING_RATE_ERROR } from './historicalReturns/bootstrapSampling'
+import { findSyntheticReturnSeries, isPlanningRateReturnSeriesId, isSyntheticReturnSeriesId } from './historicalReturns/returnSeriesRegistry'
 import { applySourceCostTreatment } from './historicalReturns/bootstrapSampling'
 import { deriveSummary } from './deriveSummary'
 import { rentenlueckeInputSchema } from './inputSchema'
@@ -262,6 +263,9 @@ function generateSyntheticBucketReturnPath(
 }
 
 function sampleSyntheticBucketReturn(returnSeriesId: string, rng: () => number, assumptions: AssetClassAssumption[]): number {
+  if (isPlanningRateReturnSeriesId(returnSeriesId)) {
+    throw new Error(CASH_PLANNING_RATE_ERROR)
+  }
   if (!isSyntheticReturnSeriesId(returnSeriesId)) {
     throw new Error('Synthetische stochastische Simulation benötigt synthetische Renditequellen je Anlage; historische Anlagen über den Bootstrap abdecken.')
   }

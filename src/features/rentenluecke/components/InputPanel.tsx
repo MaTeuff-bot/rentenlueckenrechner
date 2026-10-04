@@ -37,6 +37,7 @@ import { type AssetAllocation, DEFAULT_STOCHASTIC_SETTINGS } from '../model/stoc
 import { createPortfolioComponentsFromBuckets } from '../model/portfolioBuckets'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../model/types'
 import { SimulationsAssumptions } from './InputPanel/SimulationsAssumptions'
+import { CashPlanningRateAssumptions } from './InputPanel/CashPlanningRateAssumptions'
 import { InflationSourceSection } from './InputPanel/InflationSourceSection'
 import { SavingsSection } from './InputPanel/BasicInputSections'
 import { RetirementIncomeStreamsSection } from './InputPanel/RetirementIncomeStreamsSection'
@@ -59,6 +60,8 @@ type InputPanelProps = {
   historical: {
     inflationSourceId: string
     simulations?: number
+    cashPlanningRate?: number
+    cashPlanningRateConfirmed?: boolean
   }
   historicalValidYears: number[]
   errors: Partial<Record<InputFieldName, string>>
@@ -78,6 +81,9 @@ type InputPanelProps = {
   onRetirementIncomeStreamRemove: (id: string) => void
   onInflationSourceChange: (sourceId: string) => void
   onSimulationsChange: (simulations: number) => void
+  onCashPlanningRateChange?: (value: number | undefined) => void
+  onCashPlanningRateConfirmedChange?: (confirmed: boolean) => void
+  cashPlanningIssue?: string | null
   onReset: () => void
   sectionRequest?: SectionRequest | null
 }
@@ -110,6 +116,9 @@ export function InputPanel({
   onRetirementIncomeStreamRemove,
   onInflationSourceChange,
   onSimulationsChange,
+  onCashPlanningRateChange,
+  onCashPlanningRateConfirmedChange,
+  cashPlanningIssue,
   onReset,
   sectionRequest = null,
 }: InputPanelProps) {
@@ -281,6 +290,14 @@ export function InputPanel({
           />
 
           <SimulationsAssumptions simulations={historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations} onChange={onSimulationsChange} />
+
+          <CashPlanningRateAssumptions
+            cashPlanningRate={historical.cashPlanningRate}
+            cashPlanningRateConfirmed={historical.cashPlanningRateConfirmed}
+            issue={cashPlanningIssue ?? null}
+            onRateChange={onCashPlanningRateChange ?? (() => {})}
+            onConfirmedChange={onCashPlanningRateConfirmedChange ?? (() => {})}
+          />
 
           <fieldset className="wide-fieldset source-overview">
             <legend>Quellen und Details</legend>

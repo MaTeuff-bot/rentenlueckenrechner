@@ -13,6 +13,7 @@ import type { ScenarioState } from './types'
 export const STORAGE_KEY = 'rentenlueckenrechner.scenario.v15'
 export const RESET_NOTICE_KEY = 'rentenlueckenrechner.ux-pr2-reset-notice'
 export const MANDATORY_CAPITAL_NOTICE_KEY = 'rentenlueckenrechner.mandatory-detailed-capital-notice.v1'
+export const TAGESGELD_PLANNING_RATE_NOTICE_KEY = 'rentenlueckenrechner.tagesgeld-planning-rate-notice.v1'
 // Draft validation checks shape/types, deliberately not calculation validity.
 // Nonfinite input is encoded as a tagged draft value, never a financial answer.
 const draftNumber = z.custom<number>(value => typeof value === 'number')
@@ -42,7 +43,7 @@ const input = z.object({
 const children = z.discriminatedUnion('kind', [z.object({ kind: z.literal('missing') }), z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('children'), rows: z.array(z.object({ id: z.string(), year: optionalNumber })).min(1).refine(rows => new Set(rows.map(row => row.id)).size === rows.length) })])
 const persistedScenarioSchema = z.object({ version: z.literal(15), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
-  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber }),
+  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber, cashPlanningRate: optionalNumber, cashPlanningRateConfirmed: z.boolean().optional() }),
 })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
@@ -88,6 +89,42 @@ function ensureMandatoryCapitalNoticeForLegacy(stored: unknown): void {
   }
 }
 
+export function readTagesgeldPlanningRateNotice(): string | null {
+  if (typeof localStorage === 'undefined') return null
+  return localStorage.getItem(TAGESGELD_PLANNING_RATE_NOTICE_KEY)
+}
+
+export function dismissTagesgeldPlanningRateNotice(): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(TAGESGELD_PLANNING_RATE_NOTICE_KEY, 'dismissed')
+}
+
+function hasCashCategoryBucketWithoutConfirmedRate(stored: unknown): boolean {
+  if (!stored || typeof stored !== 'object') return false
+  const record = stored as { portfolioBuckets?: unknown; historical?: unknown }
+  const buckets = Array.isArray(record.portfolioBuckets) ? record.portfolioBuckets : []
+  const historical = (record.historical ?? {}) as { cashPlanningRate?: unknown; cashPlanningRateConfirmed?: unknown }
+  const hasCashBucket = buckets.some((bucket) => {
+    if (!bucket || typeof bucket !== 'object') return false
+    const id = (bucket as { returnSeriesId?: unknown }).returnSeriesId
+    if (typeof id !== 'string') return false
+    if (id === 'tagesgeld-planzins-v1') return true
+    if (id === 'synthetic-cash-assumption-v1') return true
+    if (id === 'jst-r6-developed-equal-weight-bills-real-post1950') return true
+    return false
+  })
+  if (!hasCashBucket) return false
+  return !(historical.cashPlanningRateConfirmed === true && typeof historical.cashPlanningRate === 'number' && Number.isFinite(historical.cashPlanningRate) && historical.cashPlanningRate >= 0)
+}
+
+function ensureTagesgeldPlanningRateNotice(stored: unknown): void {
+  if (typeof localStorage === 'undefined') return
+  if (!hasCashCategoryBucketWithoutConfirmedRate(stored)) return
+  if (localStorage.getItem(TAGESGELD_PLANNING_RATE_NOTICE_KEY) === null) {
+    localStorage.setItem(TAGESGELD_PLANNING_RATE_NOTICE_KEY, 'pending')
+  }
+}
+
 export function serializeScenarioState(state: ScenarioState): string {
   const { portfolioEstimatorSettings, ...rest } = state
   const legacySettings = portfolioEstimatorSettings ?? state.input.retirementInsurance?.capitalEstimator
@@ -121,6 +158,7 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     const persisted = persistedScenarioSchema.safeParse(parsed)
     if (!persisted.success) return createDefaultState()
     ensureMandatoryCapitalNoticeForLegacy(parsed)
+    ensureTagesgeldPlanningRateNotice(parsed)
     const state = persisted.data
     const allocation = calculateAllocationFromBuckets(state.portfolioBuckets)
     const storedInsurance = state.input.retirementInsurance

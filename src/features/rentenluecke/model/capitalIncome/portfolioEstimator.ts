@@ -1,5 +1,5 @@
 import { DEFAULT_PROJECTED_BASIS_RATE } from './schema'
-import { getReturnSeriesCategory, getReturnSeriesOptions } from '../historicalReturns/sourceOptions'
+import { PLANNING_RATE_SOURCE_ID } from '../historicalReturns/constants'
 
 export type PortfolioEstimatorSettings = {
   fundAcquisitionCost?: number
@@ -45,7 +45,7 @@ export function portfolioEstimatorReadiness(
   if (!list.length || list.some(b => !b.holding || b.holding === 'unsupported')) issues.push('Detaillierte Kapitalbasis: alle tatsächlichen Anlagen klassifizieren; nicht unterstützte Anlagen entfernen/ersetzen.')
   const needsFundCost = list.some(b => b.holding === 'accumulating-equity-fund')
   if (needsFundCost && !isValidFundCost(settings?.fundAcquisitionCost)) issues.push('Anschaffungskosten des gesamten Fondspools in Euro angeben (auch 0 ausdrücklich).')
-  if (list.some(b => b.holding === 'ordinary-bank-deposit' && (getReturnSeriesCategory(b.returnSeriesId) !== 'cash' || getReturnSeriesOptions().find(s => s.id === b.returnSeriesId)?.costTreatment === 'netOfFundCosts'))) issues.push('Bankeinlagen benötigen eine Brutto-Zinsquelle (Cash-Proxy), keine Fonds- oder Kursrendite. Quelle ersetzen.')
+  if (list.some(b => b.holding === 'ordinary-bank-deposit' && b.returnSeriesId !== PLANNING_RATE_SOURCE_ID)) issues.push('Bankeinlagen benötigen die Tagesgeld-Planungszinsquelle (tagesgeld-planzins-v1) mit bestätigtem Satz unter Rechenannahmen; bisherige Cash-Quellen erneut entscheiden und Holding erneut festlegen.')
   if (!settings?.scopeConfirmed) issues.push('Detaillierte Kapitalbasis: unterstützten persönlichen Anlageumfang bestätigen.')
   if (!settings?.lossScopeConfirmed) issues.push('Detaillierte Kapitalbasis: keine bisherigen Kapitalverluste oder externen Verlustverrechnungen bestätigen.')
   if (settings !== undefined && settings.projectedBasisRate !== undefined && !isValidBasisRate(settings.projectedBasisRate)) issues.push('Detaillierte Kapitalbasis: projizierten Basiszins prüfen (nominal, konstant); ungültigen Wert korrigieren.')

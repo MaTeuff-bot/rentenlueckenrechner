@@ -6,7 +6,7 @@ export type DatasetGeography = 'DE' | 'EU' | 'Global'
 export type DatasetCurrency = 'EUR'
 export type ReturnBasis = 'nominal' | 'real'
 export type ReturnType = 'price' | 'adjustedMarketPrice' | 'grossTotal' | 'netTotal' | 'yieldBased' | 'unknown'
-export type ReturnSourceKind = 'historicalDataset' | 'synthetic' | 'bundledEtf'
+export type ReturnSourceKind = 'historicalDataset' | 'synthetic' | 'bundledEtf' | 'planningRate'
 export type CostTreatment = 'deductBucketAnnualCost' | 'netOfFundCosts'
 export type DatasetConfidence = 'high' | 'medium' | 'low'
 
@@ -82,7 +82,21 @@ export type SyntheticReturnSeries = {
   caveats: string[]
 }
 
-export type ReturnSeriesOption = HistoricalReturnSeries | SyntheticReturnSeries
+export type PlanningRateReturnSeries = {
+  id: string
+  kind: 'planningRate'
+  sourceKind: 'planningRate'
+  costTreatment: 'deductBucketAnnualCost'
+  label: string
+  description: string
+  suitableFor: DatasetRole[]
+  returnBasis: 'nominal'
+  annualVolatility: 0
+  sourceDatasetVersion: string
+  caveats: string[]
+}
+
+export type ReturnSeriesOption = HistoricalReturnSeries | SyntheticReturnSeries | PlanningRateReturnSeries
 
 export type InflationSeries = {
   id: string
@@ -123,6 +137,7 @@ export type HistoricalBootstrapSettings = {
   portfolioComponents: PortfolioComponent[]
   inflationSourceId: string
   simulations: number
+  cashPlanningRate?: number
 }
 
 export type HistoricalBootstrapMetadata = {

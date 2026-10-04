@@ -49,7 +49,9 @@ export default defineConfig({
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173/rentenlueckenrechner/',
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a stale preview server: it silently serves an old dist
+    // build and makes both patched and HEAD E2E runs fail spuriously.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

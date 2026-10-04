@@ -185,6 +185,7 @@ describe('Rentenluecke model', () => {
         planningAge: 68,
         currentCapital: 123_456,
       }),
+      0.02,
     )
 
     expect(result.accumulationRows).toHaveLength(0)
@@ -210,7 +211,7 @@ describe('Rentenluecke model', () => {
   })
 
   it('creates retirement intervals through the planning age', () => {
-    const result = simulateScenario(input({ retirementAge: 67, planningAge: 90 }))
+    const result = simulateScenario(input({ retirementAge: 67, planningAge: 90 }), 0.02)
 
     expect(result.retirementRows).toHaveLength(23)
     expect(result.retirementRows.at(-1)?.ageStart).toBe(89)

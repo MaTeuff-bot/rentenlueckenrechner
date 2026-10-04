@@ -80,7 +80,7 @@ describe('phase applicability and whole-phase routing', () => {
     const streams = phaseStreams(input.retirementIncomeStreams!, i, 'pension', 67, 70)
     expect(phaseManualReasons(i, 'pension', streams).join()).toContain('Später')
     i.pension = { ...i.pension, kvMonthlyToday: 0, pvMonthlyToday: 0 }
-    expect(simulateScenario(input).retirementRows[0].healthInsurance).toBe(0)
+    expect(simulateScenario(input, 0.02).retirementRows[0].healthInsurance).toBe(0)
     expect(phaseStreams([pension({ startAge: 70 })], i, 'pension', 67, 70)).toEqual([])
   })
   it('routes the earliest statutory date and malformed controlling date, not array order', () => {
@@ -95,7 +95,7 @@ describe('phase applicability and whole-phase routing', () => {
 it('completed coverage preserves full ledger, required capital and fixed-seed stochastic results', () => {
   const input = insuredInput({ currentAge: 65, retirementAge: 65, annualInflationRate: .02 })
   const adapted = { ...input, retirementInsurance: applyCoverage(input.retirementInsurance!, completedCoverage()) }
-  expect(simulateScenario(adapted)).toEqual(simulateScenario(input))
+  expect(simulateScenario(adapted, 0.02)).toEqual(simulateScenario(input, 0.02))
   // Stochastic parity on a fund-only portfolio: sampled bank legs honestly
   // reject negative gross paths (no clamp/resample/drop), so the fixed-seed
   // comparison uses fund holdings only; fund legs model negative years directly.
@@ -104,7 +104,7 @@ it('completed coverage preserves full ledger, required capital and fixed-seed st
     retirementInsurance: { ...input.retirementInsurance!,
       capitalEstimator: { ...input.retirementInsurance!.capitalEstimator!, fundAcquisitionCost: fundBucket.value } } }
   const fundOnlyAdapted = { ...fundOnlyBase, retirementInsurance: applyCoverage(fundOnlyBase.retirementInsurance!, completedCoverage()) }
-  expect(simulateScenario(fundOnlyAdapted)).toEqual(simulateScenario(fundOnlyBase))
+  expect(simulateScenario(fundOnlyAdapted, 0.02)).toEqual(simulateScenario(fundOnlyBase, 0.02))
   const settings = { simulations: 8, seed: 8123, allocation: { equity: .6, bonds: .3, fixed: .1 } }
   expect(runStochasticSimulation(fundOnlyAdapted, settings)).toEqual(runStochasticSimulation(fundOnlyBase, settings))
 })
