@@ -206,3 +206,146 @@ describe('cash mode confirmation and recompute', () => {
     expect(getEffectiveCashMode({})).toBe(CASH_MODE_CONSTANT)
   })
 })
+
+describe('bank-source selected-mode mismatch blocks calculation', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('blocks constant-confirmed historical bank source, preserves on load and adopts on re-confirmation', () => {
+    const mismatched = createDefaultState()
+    mismatched.portfolioBuckets = [
+      { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID },
+    ]
+    mismatched.historical = {
+      inflationSourceId: FIXED_INFLATION_SOURCE_ID,
+      simulations: 3,
+      cashMode: CASH_MODE_CONSTANT,
+      cashPlanningRate: 0.02,
+      cashPlanningRateConfirmed: true,
+    }
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(mismatched))
+    const loaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(loaded.portfolioBuckets[0]!.returnSeriesId).toBe(HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID)
+    const loadedIssue = cashPlanningRateIssue(loaded.portfolioBuckets, loaded.historical)
+    expect(loadedIssue).not.toBeNull()
+    expect(loadedIssue).toMatch(/erneut ausdrücklich bestätigen/)
+
+    const { result } = renderHook(() => useScenarioState())
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID,
+    )
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+    expect(result.current.isValid).toBe(false)
+    expect(result.current.result).toBeNull()
+
+    act(() => {
+      result.current.updatePortfolioBucket('bank', { value: 90000 })
+    })
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID,
+    )
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+
+    act(() => {
+      result.current.updateCashPlanningRateConfirmed(true)
+    })
+    expect(result.current.cashPlanningIssue).toBeNull()
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      PLANNING_RATE_SOURCE_ID,
+    )
+
+    const reloaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(reloaded.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      PLANNING_RATE_SOURCE_ID,
+    )
+    expect(cashPlanningRateIssue(reloaded.portfolioBuckets, reloaded.historical)).toBeNull()
+  })
+
+  it('blocks historical-confirmed constant bank source, preserves on load and adopts on re-confirmation', () => {
+    const mismatched = createDefaultState()
+    mismatched.portfolioBuckets = [
+      { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: PLANNING_RATE_SOURCE_ID },
+    ]
+    mismatched.historical = {
+      inflationSourceId: FIXED_INFLATION_SOURCE_ID,
+      simulations: 3,
+      cashMode: CASH_MODE_HISTORICAL,
+      cashPlanningRateConfirmed: true,
+    }
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(mismatched))
+    const loaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(loaded.portfolioBuckets[0]!.returnSeriesId).toBe(PLANNING_RATE_SOURCE_ID)
+    expect(cashPlanningRateIssue(loaded.portfolioBuckets, loaded.historical)).not.toBeNull()
+
+    const { result } = renderHook(() => useScenarioState())
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+    expect(result.current.isValid).toBe(false)
+    expect(result.current.result).toBeNull()
+
+    act(() => {
+      result.current.updatePortfolioBucket('bank', { value: 90000 })
+    })
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      PLANNING_RATE_SOURCE_ID,
+    )
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+
+    act(() => {
+      result.current.updateCashPlanningRateConfirmed(true)
+    })
+    expect(result.current.cashPlanningIssue).toBeNull()
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID,
+    )
+
+    const reloaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(reloaded.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID,
+    )
+    expect(cashPlanningRateIssue(reloaded.portfolioBuckets, reloaded.historical)).toBeNull()
+  })
+
+  it('blocks real-confirmed constant bank source, preserves on load and adopts on re-confirmation', () => {
+    const mismatched = createDefaultState()
+    mismatched.portfolioBuckets = [
+      { id: 'bank', name: 'Bank', value: 100_000, holding: 'ordinary-bank-deposit' as const, returnSeriesId: PLANNING_RATE_SOURCE_ID },
+    ]
+    mismatched.historical = {
+      inflationSourceId: FIXED_INFLATION_SOURCE_ID,
+      simulations: 3,
+      cashMode: CASH_MODE_REAL,
+      cashRealRate: -0.0028,
+      cashPlanningRateConfirmed: true,
+    }
+    localStorage.setItem(STORAGE_KEY, serializeScenarioState(mismatched))
+    const loaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(loaded.portfolioBuckets[0]!.returnSeriesId).toBe(PLANNING_RATE_SOURCE_ID)
+    expect(cashPlanningRateIssue(loaded.portfolioBuckets, loaded.historical)).not.toBeNull()
+
+    const { result } = renderHook(() => useScenarioState())
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+    expect(result.current.isValid).toBe(false)
+    expect(result.current.result).toBeNull()
+
+    act(() => {
+      result.current.updatePortfolioBucket('bank', { value: 90000 })
+    })
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      PLANNING_RATE_SOURCE_ID,
+    )
+    expect(result.current.cashPlanningIssue).not.toBeNull()
+
+    act(() => {
+      result.current.updateCashPlanningRateConfirmed(true)
+    })
+    expect(result.current.cashPlanningIssue).toBeNull()
+    expect(result.current.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      REAL_ASSUMPTION_SOURCE_ID,
+    )
+
+    const reloaded = parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)!)
+    expect(reloaded.portfolioBuckets.find((b) => b.id === 'bank')?.returnSeriesId).toBe(
+      REAL_ASSUMPTION_SOURCE_ID,
+    )
+    expect(cashPlanningRateIssue(reloaded.portfolioBuckets, reloaded.historical)).toBeNull()
+  })
+})

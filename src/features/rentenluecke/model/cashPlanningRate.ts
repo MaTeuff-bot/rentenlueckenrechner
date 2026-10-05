@@ -78,9 +78,48 @@ export function getConfirmedCashRealRate(state: CashPlanningRateState | undefine
   return state.cashRealRate
 }
 
+export type CashBucketView = {
+  holding?: string
+  returnSeriesId: string
+}
+
 export function hasCashCategoryBucket(buckets: readonly { returnSeriesId: string }[] | undefined): boolean {
   if (!buckets || buckets.length === 0) return false
   return buckets.some((bucket) => getReturnSeriesCategory(bucket.returnSeriesId) === 'cash')
+}
+
+export function hasBankHolding(buckets: readonly { holding?: string }[] | undefined): boolean {
+  if (!buckets || buckets.length === 0) return false
+  return buckets.some((bucket) => bucket.holding === 'ordinary-bank-deposit')
+}
+
+function needsCashValidation(buckets: readonly CashBucketView[] | undefined): boolean {
+  return hasCashCategoryBucket(buckets) || hasBankHolding(buckets)
+}
+
+export function bankSourceMismatch(
+  buckets: readonly CashBucketView[] | undefined,
+  mode: CashMode,
+): boolean {
+  if (!buckets || buckets.length === 0) return false
+  const expected = sourceIdForCashMode(mode)
+  return buckets.some(
+    (bucket) => bucket.holding === 'ordinary-bank-deposit' && bucket.returnSeriesId !== expected,
+  )
+}
+
+export function cashPlanningFieldIdForMode(mode: CashMode | undefined): string {
+  if (mode === CASH_MODE_HISTORICAL) return 'cash-planning-rate-confirmed'
+  if (mode === CASH_MODE_REAL) return 'cash-real-rate'
+  if (mode === CASH_MODE_CONSTANT) return 'cash-planning-rate'
+  return 'cash-mode-constant'
+}
+
+export function cashPlanningPathForMode(mode: CashMode | undefined): (string | number)[] {
+  if (mode === CASH_MODE_HISTORICAL) return ['historical', 'cashPlanningRateConfirmed']
+  if (mode === CASH_MODE_REAL) return ['historical', 'cashRealRate']
+  if (mode === CASH_MODE_CONSTANT) return ['historical', 'cashPlanningRate']
+  return ['historical', 'cashMode']
 }
 
 function modeRateValid(mode: CashMode, state: CashPlanningRateState): boolean {
@@ -90,10 +129,10 @@ function modeRateValid(mode: CashMode, state: CashPlanningRateState): boolean {
 }
 
 export function cashPlanningRateIssue(
-  buckets: readonly { returnSeriesId: string }[] | undefined,
+  buckets: readonly CashBucketView[] | undefined,
   state: CashPlanningRateState | undefined,
 ): string | null {
-  if (!hasCashCategoryBucket(buckets)) return null
+  if (!needsCashValidation(buckets)) return null
   const mode = getEffectiveCashMode(state)
   if (mode === undefined) {
     return 'Unbekannte Tagesgeld-Annahme unter Rechenannahmen erneut wählen und ausdrücklich bestätigen (gespeicherter Modus wird nicht stillschweigend umgedeutet).'
@@ -109,6 +148,14 @@ export function cashPlanningRateIssue(
     return mode === CASH_MODE_REAL
       ? 'Realzins-Annahme fehlt oder ist ungültig (finite Zahl > -100 %); unter Rechenannahmen korrigieren und erneut bestätigen.'
       : 'Tagesgeld-Planungszins fehlt oder ist ungültig; unter Rechenannahmen festlegen und erneut bestätigen.'
+  }
+  if (bankSourceMismatch(buckets, mode)) {
+    const expected = sourceIdForCashMode(mode)
+    return mode === CASH_MODE_CONSTANT
+      ? `Bankeinlagen-Quelle stimmt nicht mit der bestätigten konstanten Tagesgeld-Annahme überein (erwartet ${expected}); unter Rechenannahmen erneut ausdrücklich bestätigen, um die passende Quelle zu übernehmen.`
+      : mode === CASH_MODE_HISTORICAL
+        ? `Bankeinlagen-Quelle stimmt nicht mit der bestätigten historischen Tagesgeld-Strategie überein (erwartet ${expected}); unter Rechenannahmen erneut ausdrücklich bestätigen, um die passende Quelle zu übernehmen.`
+        : `Bankeinlagen-Quelle stimmt nicht mit der bestätigten Realzins-Annahme überein (erwartet ${expected}); unter Rechenannahmen erneut ausdrücklich bestätigen, um die passende Quelle zu übernehmen.`
   }
   return null
 }
@@ -144,8 +191,12 @@ export function resolveBucketSourceForHoldingChange(
 ): string {
   const targetHolding = nextHolding !== undefined ? nextHolding : currentHolding
   if (targetHolding === 'ordinary-bank-deposit') {
-    if (confirmedRate !== undefined && confirmedMode !== undefined) return sourceIdForCashMode(confirmedMode)
-    if (confirmedRate !== undefined) return PLANNING_RATE_SOURCE_ID
+    const isExplicitTransitionIntoBank =
+      nextHolding === 'ordinary-bank-deposit' && currentHolding !== 'ordinary-bank-deposit'
+    if (isExplicitTransitionIntoBank) {
+      if (confirmedRate !== undefined && confirmedMode !== undefined) return sourceIdForCashMode(confirmedMode)
+      if (confirmedRate !== undefined) return PLANNING_RATE_SOURCE_ID
+    }
     return currentSource
   }
   if (

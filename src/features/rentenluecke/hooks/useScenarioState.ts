@@ -85,7 +85,7 @@ export function useScenarioState() {
   const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
   const cashPlanningIssue = useMemo(() => cashPlanningRateIssue(portfolioBuckets, historical), [portfolioBuckets, historical])
   const cashPlanningError = cashPlanningIssue
-  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue])
+  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue, historical.cashMode), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue, historical.cashMode])
   const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError && !cashPlanningError
   const historicalSettings = useMemo(
     () => ({
