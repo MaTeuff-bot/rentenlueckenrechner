@@ -136,7 +136,7 @@ historical/real bands reflect sampled year/inflation variability.
 
 - Bundesbank MFI statistics SU0022/SUD101 endpoints (see
   `HISTORICAL_DEPOSIT_SOURCE_METADATA.sourceUrls`), reuse terms
-  https://www.bundesbank.de/en/service/terms-of-use with attribution
+  https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188 with attribution
   `Quelle: Deutsche Bundesbank, MFI-Zinsstatistik SU0022/SUD101; eigene
   Annualisierung als eigene Berechnung (own calculation)`.
 - Compact checked-in monthly snapshots `scripts/data/su0022-monthly.csv`

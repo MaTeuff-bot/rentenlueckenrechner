@@ -48,7 +48,7 @@ Bundled annual nominal observations for the German savings/deposit proxy combine
 - Source endpoints:
   - https://api.statistiken.bundesbank.de/rest/data/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A?format=csv&lang=en
   - https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en
-- Reuse terms: https://www.bundesbank.de/en/service/terms-of-use (Bundesbank/ESCB statistics reuse terms). Attribution: `Quelle: Deutsche Bundesbank, MFI-Zinsstatistik SU0022/SUD101; eigene Annualisierung als eigene Berechnung (own calculation)`.
+- Reuse terms: https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188 (Bundesbank/ESCB statistics reuse terms). Attribution: `Quelle: Deutsche Bundesbank, MFI-Zinsstatistik SU0022/SUD101; eigene Annualisierung als eigene Berechnung (own calculation)`.
 - Compact checked-in monthly snapshots (official raw percent values, own calculation from them):
   - `scripts/data/su0022-monthly.csv` (`sha256:a3b1e4676cea324fc1d5f77df1b4760fa3b125113c67406fccb4ff5c2273f57e`)
   - `scripts/data/sud101-monthly.csv` (`sha256:b745fa2aff9fcc9d6db08e3b8665957434b6e1be8ddeba4122921d110b1c2172`)

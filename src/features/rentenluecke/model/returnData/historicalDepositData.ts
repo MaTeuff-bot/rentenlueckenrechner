@@ -11,7 +11,7 @@ export const HISTORICAL_DEPOSIT_SOURCE_METADATA = {
     'https://api.statistiken.bundesbank.de/rest/data/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A?format=csv&lang=en',
     'https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en',
   ],
-  reuseTermsUrl: 'https://www.bundesbank.de/en/service/terms-of-use',
+  reuseTermsUrl: 'https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188',
   attribution: 'Quelle: Deutsche Bundesbank, MFI-Zinsstatistik SU0022/SUD101; eigene Annualisierung als eigene Berechnung (own calculation)',
   coverage: '1968-2025, 58 Jahresbeobachtungen (roh, nominal)',
   january1975Estimate: 0.05296666666666667,
@@ -25,7 +25,7 @@ export const HISTORICAL_DEPOSIT_SOURCE_METADATA = {
     researchSu0022Sha256: 'sha256:0bcb3e368150ce5603f4cad3815da0cdb94e94378eba4e4ae8beb7d821df2b56',
     researchSud101Sha256: 'sha256:73e27339ee8ac436fc92b8d7cda2745b276bf99356502e6d528a6f421c1ee359',
   },
-  license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/service/terms-of-use); eigene Annualisierung als eigene Berechnung (own calculation)',
+  license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188); eigene Annualisierung als eigene Berechnung (own calculation)',
 } as const
 
 export const HISTORICAL_DEPOSIT_JANUARY_1975_ESTIMATE = 0.05296666666666667
@@ -108,9 +108,9 @@ export const HISTORICAL_DEPOSIT_RETURN_SERIES: HistoricalReturnSeries = {
     path: 'src/features/rentenluecke/model/returnData/historicalDepositData.ts',
     sourceName: 'Deutsche Bundesbank MFI-Zinsstatistik (Spareinlagen/Tagesgeld-Proxy)',
     sourceUrl: 'https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en',
-    license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/service/terms-of-use); eigene Annualisierung als eigene Berechnung (own calculation)',
+    license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188); eigene Annualisierung als eigene Berechnung (own calculation)',
   },
-  license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/service/terms-of-use); eigene Annualisierung als eigene Berechnung (own calculation)',
+  license: 'Bundesbank/ESCB statistics reuse terms (https://www.bundesbank.de/en/homepage/user-information/terms-of-use-regarding-the-reuse-of-escb-statistics-621188); eigene Annualisierung als eigene Berechnung (own calculation)',
   licenseAllowsBundling: true,
   commercialUseAllowed: true,
   derivedData: true,
