@@ -2,9 +2,12 @@ import { ASSET_CLASS_ASSUMPTIONS } from '../stochasticAssumptions'
 import type { AssetClassAssumption } from '../stochasticReturns'
 import { HISTORICAL_PRODUCTION_RETURN_SERIES } from '../returnData/historicalProductionData'
 import { BUNDLED_ETF_HISTORICAL_RETURN_SERIES } from '../returnData/bundledEtfHistoricalReturnData'
+import { HISTORICAL_DEPOSIT_RETURN_SERIES } from '../returnData/historicalDepositData'
 import {
   PLANNING_RATE_SOURCE_ID,
   PLANNING_RATE_SOURCE_VERSION,
+  REAL_ASSUMPTION_SOURCE_ID,
+  REAL_ASSUMPTION_SOURCE_VERSION,
   SYNTHETIC_RETURN_ASSUMPTIONS_VERSION,
   SYNTHETIC_RETURN_SERIES_IDS,
 } from './constants'
@@ -13,6 +16,7 @@ import type { HistoricalReturnSeries, PlanningRateReturnSeries, SyntheticReturnS
 export const HISTORICAL_RETURN_SERIES: HistoricalReturnSeries[] = [
   ...HISTORICAL_PRODUCTION_RETURN_SERIES,
   ...BUNDLED_ETF_HISTORICAL_RETURN_SERIES,
+  HISTORICAL_DEPOSIT_RETURN_SERIES,
 ]
 
 export const SYNTHETIC_RETURN_SERIES: SyntheticReturnSeries[] = ASSET_CLASS_ASSUMPTIONS.map((assumption) =>
@@ -49,12 +53,40 @@ export const PLANNING_RATE_RETURN_SERIES: PlanningRateReturnSeries = {
   ],
 }
 
+export const REAL_ASSUMPTION_RETURN_SERIES: PlanningRateReturnSeries = {
+  id: REAL_ASSUMPTION_SOURCE_ID,
+  kind: 'planningRate',
+  sourceKind: 'planningRate',
+  costTreatment: 'deductBucketAnnualCost',
+  label: 'Realzins-Annahme mit nominaler 0%-Untergrenze',
+  description:
+    'Editierbare reale Zielrendite aus den Rechenannahmen; nominaler Satz je Stichprobenjahr aus (1+Realziel)*(1+Inflation)-1 mit 0 %-Untergrenze (Kontowechsel-Strategie). Reale Folgen aus dem angewandten Nominalzins.',
+  suitableFor: ['cash'],
+  returnBasis: 'nominal',
+  annualVolatility: 0,
+  sourceDatasetVersion: REAL_ASSUMPTION_SOURCE_VERSION,
+  caveats: [
+    'Reale Zielrendite als Annahme; wo die 0 %-Untergrenze greift, wird das Ziel nicht erreicht.',
+    'Brutto nominal nach Floor; Bucket-Kosten werden separat abgezogen.',
+  ],
+}
+
 export function findPlanningRateReturnSeries(id: string): PlanningRateReturnSeries | undefined {
-  return id === PLANNING_RATE_SOURCE_ID ? PLANNING_RATE_RETURN_SERIES : undefined
+  if (id === PLANNING_RATE_SOURCE_ID) return PLANNING_RATE_RETURN_SERIES
+  if (id === REAL_ASSUMPTION_SOURCE_ID) return REAL_ASSUMPTION_RETURN_SERIES
+  return undefined
 }
 
 export function isPlanningRateReturnSeriesId(id: string): boolean {
+  return id === PLANNING_RATE_SOURCE_ID || id === REAL_ASSUMPTION_SOURCE_ID
+}
+
+export function isConstantPlanningRateReturnSeriesId(id: string): boolean {
   return id === PLANNING_RATE_SOURCE_ID
+}
+
+export function isRealAssumptionReturnSeriesId(id: string): boolean {
+  return id === REAL_ASSUMPTION_SOURCE_ID
 }
 
 function createSyntheticReturnSeries(assumption: AssetClassAssumption): SyntheticReturnSeries {

@@ -84,6 +84,9 @@ export function getSourceVersion(source: ReturnSeriesOption): string {
 
 export function getCoverageLabel(source: ReturnSeriesOption): string {
   if (isPlanningRateSource(source)) {
+    if (source.id === 'tagesgeld-realannahme-v1') {
+      return 'Alle simulierten Jahre (Realziel mit 0 %-Floor)'
+    }
     return 'Alle simulierten Jahre (konstanter Satz)'
   }
   if (isGeneratedSyntheticSource(source)) {
@@ -96,6 +99,9 @@ export function getCoverageLabel(source: ReturnSeriesOption): string {
 
 export function getBasisLabel(source: ReturnSeriesOption): string {
   if (isPlanningRateSource(source)) {
+    if (source.id === 'tagesgeld-realannahme-v1') {
+      return 'Realziel nominalisiert mit 0 %-Untergrenze, Volatilität 0 % (Zielbindung entfällt am Floor)'
+    }
     return 'Konstanter nominaler Planungszins, Volatilität 0 %'
   }
   if (isGeneratedSyntheticSource(source)) {

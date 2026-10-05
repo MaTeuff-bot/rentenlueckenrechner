@@ -40,3 +40,14 @@ The two bundled ETF series are static annual normalized returns derived from Yah
 - Market-price, currency, and adjustment effects can differ from official fund reporting.
 - The ETF TER is considered already reflected in the ETF price/NAV. Simulations therefore do not deduct a bucket's annual cost rate again when either ETF source is selected.
 - Yahoo's terms and any applicable third-party market-data rights apply to the source observations; the bundled records retain source URLs, transformation notes, and checksums.
+
+## Bundesbank German Savings/Deposit Rate Proxy (Annualized Snapshot)
+
+Bundled annual nominal observations for the German savings/deposit proxy combine two Bundesbank MFI interest-rate statistics: `SU0022` (savings deposits, through 2002) and `SUD101` (households' overnight deposits, from 2003).
+
+- Source endpoints:
+  - https://api.statistiken.bundesbank.de/rest/data/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A?format=csv&lang=en
+  - https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en
+- Transformation (own calculation, reproducible via `node scripts/generateHistoricalDepositData.mjs`): annual arithmetic means of annualized quotes — 1968 quarterly representatives (Mar/Jun/Sep/Nov), 1969–1974 (Feb/May/Aug/Nov), 1975 eleven observed Feb–Dec months plus an estimated January (linear time-in-month interpolation Nov 1974 → Feb 1975, January at 2/3, marked as an estimate, no invented raw observation), from 1976 the mean of 12 monthly quotes.
+- Raw annual values are preserved including the observed 2021 negative; the account-switching strategy applies `max(0, raw)` at simulation time.
+- This is a German savings/overnight proxy with a 2003 product/methodology break, not best available Tagesgeld. Bundesbank/ESCB statistics reuse terms apply; cite the Bundesbank and mark transformed calculations as own calculations.

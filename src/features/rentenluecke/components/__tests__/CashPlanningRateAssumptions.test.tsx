@@ -14,11 +14,13 @@ describe('CashPlanningRateAssumptions', () => {
         cashPlanningRate={0.02}
         cashPlanningRateConfirmed={false}
         issue={null}
+        onModeChange={() => {}}
         onRateChange={() => {}}
+        onRealRateChange={() => {}}
         onConfirmedChange={() => {}}
       />,
     )
-    expect(screen.getByText('Tagesgeld (Planungszins)')).toBeInTheDocument()
+    expect(screen.getByText('Tagesgeld (Bankeinlagen)')).toBeInTheDocument()
     expect(screen.getByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).toHaveAttribute('id', 'cash-planning-rate')
     const box = screen.getByRole('checkbox') as HTMLInputElement
     expect(box).toHaveAttribute('id', 'cash-planning-rate-confirmed')
@@ -35,7 +37,9 @@ describe('CashPlanningRateAssumptions', () => {
         cashPlanningRate={0.02}
         cashPlanningRateConfirmed={false}
         issue="Tagesgeld-Planungszins unter Rechenannahmen festlegen und ausdrücklich bestätigen (konstanter nominaler Satz für alle Jahre/Pfade/Bankeinlagen)."
+        onModeChange={() => {}}
         onRateChange={onRate}
+        onRealRateChange={() => {}}
         onConfirmedChange={onConfirmed}
       />,
     )
@@ -93,5 +97,66 @@ describe('CashPlanningRateAssumptions', () => {
     expect(cash).toBeDefined()
     expect(cash.fieldId).toBe('cash-planning-rate')
     expect(cash.section).toBe('annahmen')
+  })
+})
+
+describe('CashPlanningRateAssumptions bank modes', () => {
+  it('renders all three modes with the constant default selected', () => {
+    render(
+      <CashPlanningRateAssumptions
+        cashPlanningRate={0.02}
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByLabelText(/Konstanter nominaler Planungszins/)).toHaveAttribute('id', 'cash-mode-constant')
+    expect(screen.getByLabelText(/Historischer Spar-\/Einlagen-Proxy/)).toHaveAttribute('id', 'cash-mode-historical')
+    expect(screen.getByLabelText(/Realzins-Annahme mit nominaler 0%-Untergrenze/)).toHaveAttribute('id', 'cash-mode-real')
+    expect((screen.getByLabelText(/Konstanter nominaler Planungszins/) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).toHaveAttribute('id', 'cash-planning-rate')
+  })
+
+  it('shows the account-switching disclosure for the historical mode', () => {
+    const onMode = vi.fn()
+    render(
+      <CashPlanningRateAssumptions
+        cashMode="historical-zero-floor"
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={onMode}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('cash-historical-disclosure')).toHaveTextContent(/geeigneten Konto/)
+    expect(screen.queryByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/Konstanter nominaler Planungszins/))
+    expect(onMode).toHaveBeenCalledWith('constant-nominal')
+  })
+
+  it('edits and validates the real-rate target for the real mode', () => {
+    const onReal = vi.fn()
+    render(
+      <CashPlanningRateAssumptions
+        cashMode="real-assumption-zero-floor"
+        cashRealRate={-0.0028}
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={onReal}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('cash-real-disclosure')).toHaveTextContent(/max\(0, Nominalzins\)/)
+    const input = screen.getByLabelText(/Realzins-Annahme p.a./) as HTMLInputElement
+    expect(input).toHaveAttribute('id', 'cash-real-rate')
+    fireEvent.change(input, { target: { value: '-0.28' } })
+    expect(onReal).toHaveBeenCalled()
   })
 })

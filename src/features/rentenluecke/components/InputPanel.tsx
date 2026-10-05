@@ -60,7 +60,9 @@ type InputPanelProps = {
   historical: {
     inflationSourceId: string
     simulations?: number
+    cashMode?: string
     cashPlanningRate?: number
+    cashRealRate?: number
     cashPlanningRateConfirmed?: boolean
   }
   historicalValidYears: number[]
@@ -82,6 +84,8 @@ type InputPanelProps = {
   onInflationSourceChange: (sourceId: string) => void
   onSimulationsChange: (simulations: number) => void
   onCashPlanningRateChange?: (value: number | undefined) => void
+  onCashRealRateChange?: (value: number | undefined) => void
+  onCashModeChange?: (mode: string) => void
   onCashPlanningRateConfirmedChange?: (confirmed: boolean) => void
   cashPlanningIssue?: string | null
   onReset: () => void
@@ -117,6 +121,8 @@ export function InputPanel({
   onInflationSourceChange,
   onSimulationsChange,
   onCashPlanningRateChange,
+  onCashRealRateChange,
+  onCashModeChange,
   onCashPlanningRateConfirmedChange,
   cashPlanningIssue,
   onReset,
@@ -292,10 +298,14 @@ export function InputPanel({
           <SimulationsAssumptions simulations={historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations} onChange={onSimulationsChange} />
 
           <CashPlanningRateAssumptions
+            cashMode={historical.cashMode}
             cashPlanningRate={historical.cashPlanningRate}
+            cashRealRate={historical.cashRealRate}
             cashPlanningRateConfirmed={historical.cashPlanningRateConfirmed}
             issue={cashPlanningIssue ?? null}
+            onModeChange={onCashModeChange ?? (() => {})}
             onRateChange={onCashPlanningRateChange ?? (() => {})}
+            onRealRateChange={onCashRealRateChange ?? (() => {})}
             onConfirmedChange={onCashPlanningRateConfirmedChange ?? (() => {})}
           />
 

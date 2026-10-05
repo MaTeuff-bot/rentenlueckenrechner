@@ -68,7 +68,7 @@ export function PortfolioBucketSection({ buckets, total, allocation, error, onUp
                 <div className="field">
                   <span className="field-label">Renditequelle/Proxy</span>
                   <p id={`portfolio-source-common-${bucket.id}`} data-testid={`portfolio-source-common-${bucket.id}`}>
-                    Gemeinsamer Tagesgeld-Planungszins (Rechenannahmen) — Cash
+                    Gemeinsame Tagesgeld-Annahme (Rechenannahmen) — Cash
                   </p>
                   <p className="portfolio-note">Bankeinlagen teilen sich den ausdrücklich bestätigten Satz unter Rechenannahmen; keine eigene Quellauswahl.</p>
                 </div>

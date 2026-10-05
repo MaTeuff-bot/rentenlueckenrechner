@@ -1,15 +1,32 @@
 import { createSeededRandom, sampleNormal, type PortfolioComponent } from '../stochasticReturns'
-import { findHistoricalReturnSeries, findSyntheticReturnSeries, isPlanningRateReturnSeriesId, isSyntheticReturnSeriesId, findPlanningRateReturnSeries } from './returnSeriesRegistry'
+import { HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID } from './constants'
+import { findHistoricalReturnSeries, findSyntheticReturnSeries, isConstantPlanningRateReturnSeriesId, isPlanningRateReturnSeriesId, isRealAssumptionReturnSeriesId, isSyntheticReturnSeriesId, findPlanningRateReturnSeries } from './returnSeriesRegistry'
 import { isFixedInflationSource } from './inflationSeriesRegistry'
 import type { InflationSourceOption } from './types'
 
 export const CASH_PLANNING_RATE_ERROR = 'Tagesgeld-Planungszins fehlt oder ist ungültig; unter Rechenannahmen festlegen.'
+export const CASH_REAL_RATE_ERROR = 'Realzins-Annahme fehlt oder ist ungültig; unter Rechenannahmen festlegen.'
 
 export function resolveCashPlanningRateOrThrow(cashPlanningRate?: number): number {
   if (typeof cashPlanningRate !== 'number' || !Number.isFinite(cashPlanningRate) || cashPlanningRate < 0) {
     throw new Error(CASH_PLANNING_RATE_ERROR)
   }
   return cashPlanningRate
+}
+
+export function resolveCashRealRateOrThrow(cashRealRate?: number): number {
+  if (typeof cashRealRate !== 'number' || !Number.isFinite(cashRealRate) || cashRealRate <= -1) {
+    throw new Error(CASH_REAL_RATE_ERROR)
+  }
+  return cashRealRate
+}
+
+export function applyDepositZeroFloor(rawAnnualNominal: number): number {
+  return Math.max(0, rawAnnualNominal)
+}
+
+export function realTargetToNominalWithFloor(realTarget: number, sampledInflation: number): number {
+  return Math.max(0, (1 + realTarget) * (1 + sampledInflation) - 1)
 }
 
 export function sampleHistoricalYearsWithReplacement(years: number[], count: number, seed: number): number[] {
@@ -27,6 +44,7 @@ export function generateHistoricalReturnPath(
   sampledYears: number[],
   rng: () => number = createSeededRandom(0),
   cashPlanningRate?: number,
+  cashRealRate?: number,
 ): number[] {
   return sampledYears.map((year) => {
     const inflation = resolveInflationForSampledYear(inflationSource, year)
@@ -37,7 +55,7 @@ export function generateHistoricalReturnPath(
       }
 
       const annualReturn = applySourceCostTreatment(
-        resolveComponentNominalReturn(component, year, inflation, rng, cashPlanningRate),
+        resolveComponentNominalReturn(component, year, inflation, rng, cashPlanningRate, cashRealRate),
         component.returnSeriesId,
         component.annualCostRate,
       )
@@ -82,10 +100,15 @@ export function resolveComponentExpectedNominalReturn(
   year: number,
   inflation: number,
   cashPlanningRate?: number,
+  cashRealRate?: number,
 ): number {
-  if (component.returnSeriesId && isPlanningRateReturnSeriesId(component.returnSeriesId)) {
+  if (component.returnSeriesId && isConstantPlanningRateReturnSeriesId(component.returnSeriesId)) {
     const rate = resolveCashPlanningRateOrThrow(cashPlanningRate)
     return applyCostTreatment(rate, 'deductBucketAnnualCost', component.annualCostRate)
+  }
+  if (component.returnSeriesId && isRealAssumptionReturnSeriesId(component.returnSeriesId)) {
+    const realTarget = resolveCashRealRateOrThrow(cashRealRate)
+    return applyCostTreatment(realTargetToNominalWithFloor(realTarget, inflation), 'deductBucketAnnualCost', component.annualCostRate)
   }
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
@@ -100,6 +123,10 @@ export function resolveComponentExpectedNominalReturn(
   const annualReturn = series.normalizedSeries[year]
   if (!Number.isFinite(annualReturn)) {
     throw new Error(`Missing ${series.label} return for ${year}`)
+  }
+
+  if (component.returnSeriesId === HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID) {
+    return applyCostTreatment(applyDepositZeroFloor(annualReturn), series.costTreatment, component.annualCostRate)
   }
 
   return applyCostTreatment(
@@ -125,9 +152,14 @@ export function resolveComponentNominalReturn(
   inflation: number,
   rng: () => number,
   cashPlanningRate?: number,
+  cashRealRate?: number,
 ): number {
-  if (component.returnSeriesId && isPlanningRateReturnSeriesId(component.returnSeriesId)) {
+  if (component.returnSeriesId && isConstantPlanningRateReturnSeriesId(component.returnSeriesId)) {
     return resolveCashPlanningRateOrThrow(cashPlanningRate)
+  }
+  if (component.returnSeriesId && isRealAssumptionReturnSeriesId(component.returnSeriesId)) {
+    const realTarget = resolveCashRealRateOrThrow(cashRealRate)
+    return realTargetToNominalWithFloor(realTarget, inflation)
   }
   const syntheticSeries = component.returnSeriesId ? findSyntheticReturnSeries(component.returnSeriesId) : undefined
   if (syntheticSeries) {
@@ -142,6 +174,10 @@ export function resolveComponentNominalReturn(
   const annualReturn = series.normalizedSeries[year]
   if (!Number.isFinite(annualReturn)) {
     throw new Error(`Missing ${series.label} return for ${year}`)
+  }
+
+  if (component.returnSeriesId === HISTORICAL_DEPOSIT_STRATEGY_SOURCE_ID) {
+    return applyDepositZeroFloor(annualReturn)
   }
 
   return series.returnBasis === 'real' ? realToNominalReturn(annualReturn, inflation) : annualReturn

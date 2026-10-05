@@ -18,6 +18,7 @@ export function createHistoricalBootstrapSeed(input: RentenlueckeInput, settings
         datasetVersion: getHistoricalDatasetVersion(component.returnSeriesId),
       })),
       cashPlanningRate: settings.cashPlanningRate,
+      cashRealRate: settings.cashRealRate,
       inflationVersion: getInflationSourceVersion(settings.inflationSourceId, input.annualInflationRate),
     }),
   )
