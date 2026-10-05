@@ -61,17 +61,18 @@ Playwright browsers are test-only and not part of the production bundle.
 ## Local execution
 
 ```sh
-npm run build
 npm run test:e2e
 ```
 
-This builds the app, serves `dist/` with `vite preview` on
-`http://127.0.0.1:4173/rentenlueckenrechner/` (see `playwright.config.ts`
-`webServer`), and runs Chromium plus the narrow smoke. Retries are `0`;
-screenshots and traces are kept on failure (`test-results/`,
+Every invocation (including direct `npx playwright test`) builds fresh assets
+before its owned preview server: `playwright.config.ts` `webServer` runs
+`npm run build && npm run preview` on
+`http://127.0.0.1:4173/rentenlueckenrechner/`, then runs Chromium plus the
+narrow smoke. An explicit `npm run build` beforehand is optional. Retries are
+`0`; screenshots and traces are kept on failure (`test-results/`,
 `playwright-report/`).
 
-Single-file or single-project runs:
+Single-file or single-project runs (each also builds fresh first):
 
 ```sh
 npx playwright test --project=chromium e2e/fund-bridge.spec.ts
@@ -85,13 +86,23 @@ In pid- and shm-constrained containers the suite passes
 This is an infra accommodation and does not change
 product behavior or assertions.
 
-Local runs may reuse an already-serving static `dist/` server on port 4173
-(`reuseExistingServer`); CI always starts a fresh `vite preview`.
+`reuseExistingServer` stays `false`: Playwright never reuses a stale preview
+server and never kills a foreign server on port 4173. A port conflict fails
+fast via `--strictPort`; stop the foreign server manually.
 
 ## CI
 
 `.github/workflows/pr.yml` (`validate` job, exact PR head) runs
 `npm ci`, `npm run lint`, `npm test -- --run`, `npm run build`, installs
-Chromium with system dependencies, then `npx playwright test`. Browser
-failure fails the same job (no separate required check to miss), with
-screenshot/trace artifacts uploaded on failure.
+Chromium with system dependencies, then `npx playwright test`. The prior
+`npm run build` is the single build: `webServer` skips its local auto-build
+when `CI` is set. Browser failure fails the same job (no separate required
+check to miss), with screenshot/trace artifacts uploaded on failure.
+
+## Review contract
+
+Authoritative reviews follow [docs/review-contract.md](review-contract.md):
+commit/push repair before review, exact-head CI, dirty reviews advisory,
+flake claims need >=3 reruns plus a server/build environment check,
+read-only reviews never stash or change files, piped output keeps the true
+exit code.
