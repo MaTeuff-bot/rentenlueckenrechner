@@ -43,7 +43,7 @@ const input = z.object({
 const children = z.discriminatedUnion('kind', [z.object({ kind: z.literal('missing') }), z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('children'), rows: z.array(z.object({ id: z.string(), year: optionalNumber })).min(1).refine(rows => new Set(rows.map(row => row.id)).size === rows.length) })])
 const persistedScenarioSchema = z.object({ version: z.literal(15), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
-  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber, cashPlanningRate: optionalNumber, cashPlanningRateConfirmed: z.boolean().optional() }),
+  insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber, cashMode: z.string().optional(), cashPlanningRate: optionalNumber, cashRealRate: optionalNumber, cashPlanningRateConfirmed: z.boolean().optional() }),
 })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
@@ -103,18 +103,26 @@ function hasCashCategoryBucketWithoutConfirmedRate(stored: unknown): boolean {
   if (!stored || typeof stored !== 'object') return false
   const record = stored as { portfolioBuckets?: unknown; historical?: unknown }
   const buckets = Array.isArray(record.portfolioBuckets) ? record.portfolioBuckets : []
-  const historical = (record.historical ?? {}) as { cashPlanningRate?: unknown; cashPlanningRateConfirmed?: unknown }
+  const historical = (record.historical ?? {}) as { cashMode?: unknown; cashPlanningRate?: unknown; cashRealRate?: unknown; cashPlanningRateConfirmed?: unknown }
   const hasCashBucket = buckets.some((bucket) => {
     if (!bucket || typeof bucket !== 'object') return false
     const id = (bucket as { returnSeriesId?: unknown }).returnSeriesId
     if (typeof id !== 'string') return false
     if (id === 'tagesgeld-planzins-v1') return true
+    if (id === 'tagesgeld-historisch-strategie-v1') return true
+    if (id === 'tagesgeld-realannahme-v1') return true
     if (id === 'synthetic-cash-assumption-v1') return true
     if (id === 'jst-r6-developed-equal-weight-bills-real-post1950') return true
     return false
   })
   if (!hasCashBucket) return false
-  return !(historical.cashPlanningRateConfirmed === true && typeof historical.cashPlanningRate === 'number' && Number.isFinite(historical.cashPlanningRate) && historical.cashPlanningRate >= 0)
+  if (historical.cashPlanningRateConfirmed !== true) return true
+  const mode = historical.cashMode
+  if (mode === undefined) return !(typeof historical.cashPlanningRate === 'number' && Number.isFinite(historical.cashPlanningRate) && historical.cashPlanningRate >= 0)
+  if (mode === 'real-assumption-zero-floor') return !(typeof historical.cashRealRate === 'number' && Number.isFinite(historical.cashRealRate) && historical.cashRealRate > -1)
+  if (mode === 'historical-zero-floor') return false
+  if (mode === 'constant-nominal') return !(typeof historical.cashPlanningRate === 'number' && Number.isFinite(historical.cashPlanningRate) && historical.cashPlanningRate >= 0)
+  return true
 }
 
 function ensureTagesgeldPlanningRateNotice(stored: unknown): void {

@@ -8,6 +8,20 @@ import { ScenarioOutcomePanel } from './ScenarioOutcomePanel'
 import { SummaryCards } from './SummaryCards'
 import { YearlyTable } from './YearlyTable'
 import { useScenarioState } from '../hooks/useScenarioState'
+import { getEffectiveCashMode } from '../model/cashPlanningRate'
+import { CASH_MODE_HISTORICAL, CASH_MODE_REAL } from '../model/historicalReturns/constants'
+
+function cashModeResultNote(cashMode?: string): string {
+  const mode = getEffectiveCashMode({ cashMode })
+  if (mode === CASH_MODE_HISTORICAL) {
+    return 'Tagesgeld mit historischer Kontowechsel-Strategie angenommen (nominaler 0 %-Floor je Stichprobenjahr; Rohwerte erhalten, Jahr-Paarung bleibt); separater Hinweis unter Rechenannahmen.'
+  }
+  if (mode === CASH_MODE_REAL) {
+    return 'Tagesgeld mit Realzins-Annahme und nominaler 0 %-Untergrenze angenommen (Ziel wird bei greifender Untergrenze nicht erreicht); separater Hinweis unter Rechenannahmen.'
+  }
+  return 'Tagesgeld mit konstantem nominalem Planungszins angenommen; Ergebnisbänder enthalten keine Tagesgeld-Zinsunsicherheit.'
+}
+
 
 export function RentenlueckeCalculator() {
   const {
@@ -44,6 +58,8 @@ export function RentenlueckeCalculator() {
     updateInflationSource,
     updateSimulations,
     updateCashPlanningRate,
+    updateCashRealRate,
+    updateCashMode,
     updateCashPlanningRateConfirmed,
     cashPlanningIssue,
     cashPlanningError,
@@ -99,6 +115,8 @@ export function RentenlueckeCalculator() {
           onInflationSourceChange={updateInflationSource}
           onSimulationsChange={updateSimulations}
           onCashPlanningRateChange={updateCashPlanningRate}
+          onCashRealRateChange={updateCashRealRate}
+          onCashModeChange={updateCashMode}
           onCashPlanningRateConfirmedChange={updateCashPlanningRateConfirmed}
           cashPlanningIssue={cashPlanningIssue}
           onReset={reset}
@@ -117,7 +135,7 @@ export function RentenlueckeCalculator() {
           <>
             <SummaryCards result={result} stochasticSummary={stochasticSummary} onRequestSection={handleRequestSection} />
             <p className="source-warning">Kapitalertragsteuer und GRV-Rentensteuer werden als Planungsnäherung berechnet und bei einer Entnahmelücke aus dem Portfolio finanziert; keine individuelle Steuerberatung.</p>
-            <p className="source-warning">Tagesgeld mit konstantem nominalem Planungszins angenommen; Ergebnisbänder enthalten keine Tagesgeld-Zinsunsicherheit.</p>
+            <p className="source-warning">{cashModeResultNote(historical.cashMode)}</p>
             <details className="panel"><summary>KV/PV-Abrechnung im Detail</summary><InsuranceBreakdown rows={result.retirementRows} streams={retirementIncomeStreams} /></details>
             <ScenarioOutcomePanel
               result={result}

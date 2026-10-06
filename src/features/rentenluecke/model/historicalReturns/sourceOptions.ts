@@ -8,6 +8,7 @@ import {
   isPlanningRateReturnSeriesId,
   isSyntheticReturnSeriesId,
   PLANNING_RATE_RETURN_SERIES,
+  REAL_ASSUMPTION_RETURN_SERIES,
   SYNTHETIC_RETURN_SERIES,
 } from './returnSeriesRegistry'
 import {
@@ -24,7 +25,7 @@ export type ReturnSeriesCategory = 'equity' | 'bond' | 'cash'
 const RETURN_SERIES_CATEGORIES: ReturnSeriesCategory[] = ['equity', 'bond', 'cash']
 
 export function getReturnSeriesOptions(): ReturnSeriesOption[] {
-  return [...HISTORICAL_RETURN_SERIES, ...SYNTHETIC_RETURN_SERIES, PLANNING_RATE_RETURN_SERIES].filter(
+  return [...HISTORICAL_RETURN_SERIES, ...SYNTHETIC_RETURN_SERIES, PLANNING_RATE_RETURN_SERIES, REAL_ASSUMPTION_RETURN_SERIES].filter(
     (series) => getReturnSeriesCategory(series.id) !== undefined,
   )
 }
@@ -57,6 +58,7 @@ export function getReturnSeriesOptionsForRole(
   }
   if (datasetRole === 'cash') {
     options.push(PLANNING_RATE_RETURN_SERIES)
+    options.push(REAL_ASSUMPTION_RETURN_SERIES)
   }
 
   return options

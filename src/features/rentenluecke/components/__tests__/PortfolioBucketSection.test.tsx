@@ -138,7 +138,7 @@ describe('PortfolioBucketSection', () => {
     )
     expect(screen.queryByLabelText('Renditequelle/Proxy von Notgroschen')).not.toBeInTheDocument()
     expect(screen.getByTestId('portfolio-source-common-bank')).toBeInTheDocument()
-    expect(screen.getByTestId('portfolio-source-common-bank')).toHaveTextContent('Gemeinsamer Tagesgeld-Planungszins')
+    expect(screen.getByTestId('portfolio-source-common-bank')).toHaveTextContent('Gemeinsame Tagesgeld-Annahme')
     expect(screen.getByLabelText('Renditequelle/Proxy von Welt-ETF')).toBeInTheDocument()
     expect(screen.getByLabelText(/TER\/Kosten p\.a\. von Notgroschen/)).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Tatsächliche Anlageart von Welt-ETF'), { target: { value: 'ordinary-bank-deposit' } })

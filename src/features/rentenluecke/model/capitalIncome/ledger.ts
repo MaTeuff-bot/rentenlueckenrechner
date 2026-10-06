@@ -11,7 +11,7 @@ import { expectedBucketReturns } from './returns'
 export type BucketReturn = { id: string; totalReturnRate: number; grossBankReturnRate?: number }
 export type BucketReturnPath = BucketReturn[][]
 
-function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number) {
+function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number, cashRealRate?: number) {
   const input = scenario.sourceInput
   const buckets = input.estimatorPortfolio!
   if (path && path.length !== scenario.yearsToRetirement + scenario.retirementYears)
@@ -25,7 +25,7 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   let defaultReturns: ReturnType<typeof expectedBucketReturns> | null = null
   const getDefaultReturns = (): ReturnType<typeof expectedBucketReturns> => {
     if (!defaultReturns) {
-      defaultReturns = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(buckets), inflationSourceId: 'fixed-manual', simulations: 1, cashPlanningRate })
+      defaultReturns = expectedBucketReturns(input, { portfolioComponents: createPortfolioComponentsFromBuckets(buckets), inflationSourceId: 'fixed-manual', simulations: 1, cashPlanningRate, cashRealRate })
     }
     return defaultReturns
   }
@@ -175,8 +175,8 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   return { rows: [...accumulationRows, ...retirementRows], accumulationRows, retirementRows, projectedCapital, requiredCapital }
 }
 
-export function simulateCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number): SimulationResult {
-  const ledger = buildCapitalLedger(scenario, path, inflation, cashPlanningRate)
+export function simulateCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number, cashRealRate?: number): SimulationResult {
+  const ledger = buildCapitalLedger(scenario, path, inflation, cashPlanningRate, cashRealRate)
   return { rows: ledger.rows, accumulationRows: ledger.accumulationRows, retirementRows: ledger.retirementRows,
     summary: deriveSummary(ledger.projectedCapital, ledger.requiredCapital(), ledger.retirementRows) }
 }

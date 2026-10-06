@@ -14,11 +14,13 @@ describe('CashPlanningRateAssumptions', () => {
         cashPlanningRate={0.02}
         cashPlanningRateConfirmed={false}
         issue={null}
+        onModeChange={() => {}}
         onRateChange={() => {}}
+        onRealRateChange={() => {}}
         onConfirmedChange={() => {}}
       />,
     )
-    expect(screen.getByText('Tagesgeld (Planungszins)')).toBeInTheDocument()
+    expect(screen.getByText('Tagesgeld (Bankeinlagen)')).toBeInTheDocument()
     expect(screen.getByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).toHaveAttribute('id', 'cash-planning-rate')
     const box = screen.getByRole('checkbox') as HTMLInputElement
     expect(box).toHaveAttribute('id', 'cash-planning-rate-confirmed')
@@ -35,7 +37,9 @@ describe('CashPlanningRateAssumptions', () => {
         cashPlanningRate={0.02}
         cashPlanningRateConfirmed={false}
         issue="Tagesgeld-Planungszins unter Rechenannahmen festlegen und ausdrücklich bestätigen (konstanter nominaler Satz für alle Jahre/Pfade/Bankeinlagen)."
+        onModeChange={() => {}}
         onRateChange={onRate}
+        onRealRateChange={() => {}}
         onConfirmedChange={onConfirmed}
       />,
     )
@@ -93,5 +97,258 @@ describe('CashPlanningRateAssumptions', () => {
     expect(cash).toBeDefined()
     expect(cash.fieldId).toBe('cash-planning-rate')
     expect(cash.section).toBe('annahmen')
+  })
+})
+
+describe('CashPlanningRateAssumptions bank modes', () => {
+  it('renders all three modes with the constant default selected', () => {
+    render(
+      <CashPlanningRateAssumptions
+        cashPlanningRate={0.02}
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByLabelText(/Konstanter nominaler Planungszins/)).toHaveAttribute('id', 'cash-mode-constant')
+    expect(screen.getByLabelText(/Historischer Spar-\/Einlagen-Proxy/)).toHaveAttribute('id', 'cash-mode-historical')
+    expect(screen.getByLabelText(/Realzins-Annahme mit nominaler 0%-Untergrenze/)).toHaveAttribute('id', 'cash-mode-real')
+    expect((screen.getByLabelText(/Konstanter nominaler Planungszins/) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).toHaveAttribute('id', 'cash-planning-rate')
+  })
+
+  it('shows the account-switching disclosure for the historical mode', () => {
+    const onMode = vi.fn()
+    render(
+      <CashPlanningRateAssumptions
+        cashMode="historical-zero-floor"
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={onMode}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('cash-historical-disclosure')).toHaveTextContent(/geeigneten Konto/)
+    expect(screen.queryByLabelText(/Nominaler Tagesgeld-Planungszins p.a./)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/Konstanter nominaler Planungszins/))
+    expect(onMode).toHaveBeenCalledWith('constant-nominal')
+  })
+
+  it('edits and validates the real-rate target for the real mode', () => {
+    const onReal = vi.fn()
+    render(
+      <CashPlanningRateAssumptions
+        cashMode="real-assumption-zero-floor"
+        cashRealRate={-0.0028}
+        cashPlanningRateConfirmed={false}
+        issue={null}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={onReal}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('cash-real-disclosure')).toHaveTextContent(/max\(0, Nominalzins\)/)
+    const input = screen.getByLabelText(/Realzins-Annahme p.a./) as HTMLInputElement
+    expect(input).toHaveAttribute('id', 'cash-real-rate')
+    fireEvent.change(input, { target: { value: '-0.28' } })
+    expect(onReal).toHaveBeenCalled()
+  })
+})
+
+describe('CashPlanningRateAssumptions cash-mode routing targets visible controls', () => {
+  it('routes constant issues to the constant rate input', () => {
+    const input = {
+      currentAge: 67,
+      retirementAge: 67,
+      planningAge: 68,
+      currentCapital: 10_000,
+      monthlyContributionToday: 0,
+      monthlyDesiredSpendingToday: 0,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0,
+      annualReturnBeforeRetirement: 0,
+      annualReturnInRetirement: 0,
+    } as never
+    const buckets = [
+      { id: 'bank', name: 'Bank', value: 10_000, holding: 'ordinary-bank-deposit', returnSeriesId: PLANNING_RATE_SOURCE_ID },
+    ] as never
+    const issues = scenarioIssues(
+      input,
+      { kind: 'missing' } as never,
+      buckets,
+      undefined,
+      [],
+      null,
+      null,
+      undefined,
+      'Tagesgeld-Planungszins unter Rechenannahmen festlegen und ausdrücklich bestätigen (konstanter nominaler Satz für alle Jahre/Pfade/Bankeinlagen).',
+      'constant-nominal',
+    )
+    const cash = issues.find((i) => i.code === 'cashPlanningRate.missing')!
+    expect(cash.fieldId).toBe('cash-planning-rate')
+    const { unmount } = render(
+      <CashPlanningRateAssumptions
+        cashMode="constant-nominal"
+        cashPlanningRate={0.02}
+        cashPlanningRateConfirmed={false}
+        issue={cash.message}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(document.getElementById(cash.fieldId)).not.toBeNull()
+    document.getElementById(cash.fieldId)!.focus()
+    expect(document.activeElement?.id).toBe(cash.fieldId)
+    unmount()
+  })
+
+  it('routes historical issues to the visible confirmation control', () => {
+    const input = {
+      currentAge: 67,
+      retirementAge: 67,
+      planningAge: 68,
+      currentCapital: 10_000,
+      monthlyContributionToday: 0,
+      monthlyDesiredSpendingToday: 0,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0,
+      annualReturnBeforeRetirement: 0,
+      annualReturnInRetirement: 0,
+    } as never
+    const buckets = [
+      { id: 'bank', name: 'Bank', value: 10_000, holding: 'ordinary-bank-deposit', returnSeriesId: 'tagesgeld-historisch-strategie-v1' },
+    ] as never
+    const issues = scenarioIssues(
+      input,
+      { kind: 'missing' } as never,
+      buckets,
+      undefined,
+      [],
+      null,
+      null,
+      undefined,
+      'Historische Tagesgeld-Strategie unter Rechenannahmen ausdrücklich bestätigen (Kontowechsel mit nominaler 0%-Untergrenze; Rohwerte erhalten, Jahr-Paarung bleibt).',
+      'historical-zero-floor',
+    )
+    const cash = issues.find((i) => i.code === 'cashPlanningRate.missing')!
+    expect(cash.fieldId).toBe('cash-planning-rate-confirmed')
+    const { unmount } = render(
+      <CashPlanningRateAssumptions
+        cashMode="historical-zero-floor"
+        cashPlanningRateConfirmed={false}
+        issue={cash.message}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(document.getElementById('cash-planning-rate')).toBeNull()
+    expect(document.getElementById(cash.fieldId)).not.toBeNull()
+    document.getElementById(cash.fieldId)!.focus()
+    expect(document.activeElement?.id).toBe(cash.fieldId)
+    unmount()
+  })
+
+  it('routes real issues to the visible real-rate input', () => {
+    const input = {
+      currentAge: 67,
+      retirementAge: 67,
+      planningAge: 68,
+      currentCapital: 10_000,
+      monthlyContributionToday: 0,
+      monthlyDesiredSpendingToday: 0,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0,
+      annualReturnBeforeRetirement: 0,
+      annualReturnInRetirement: 0,
+    } as never
+    const buckets = [
+      { id: 'bank', name: 'Bank', value: 10_000, holding: 'ordinary-bank-deposit', returnSeriesId: 'tagesgeld-realannahme-v1' },
+    ] as never
+    const issues = scenarioIssues(
+      input,
+      { kind: 'missing' } as never,
+      buckets,
+      undefined,
+      [],
+      null,
+      null,
+      undefined,
+      'Realzins-Annahme mit nominaler 0%-Untergrenze unter Rechenannahmen festlegen und ausdrücklich bestätigen.',
+      'real-assumption-zero-floor',
+    )
+    const cash = issues.find((i) => i.code === 'cashPlanningRate.missing')!
+    expect(cash.fieldId).toBe('cash-real-rate')
+    const { unmount } = render(
+      <CashPlanningRateAssumptions
+        cashMode="real-assumption-zero-floor"
+        cashRealRate={-0.0028}
+        cashPlanningRateConfirmed={false}
+        issue={cash.message}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(document.getElementById('cash-planning-rate')).toBeNull()
+    expect(document.getElementById(cash.fieldId)).not.toBeNull()
+    document.getElementById(cash.fieldId)!.focus()
+    expect(document.activeElement?.id).toBe(cash.fieldId)
+    unmount()
+  })
+
+  it('routes unknown stored modes to the visible mode selection', () => {
+    const input = {
+      currentAge: 67,
+      retirementAge: 67,
+      planningAge: 68,
+      currentCapital: 10_000,
+      monthlyContributionToday: 0,
+      monthlyDesiredSpendingToday: 0,
+      monthlyRetirementIncomeToday: 0,
+      annualInflationRate: 0,
+      annualReturnBeforeRetirement: 0,
+      annualReturnInRetirement: 0,
+    } as never
+    const buckets = [
+      { id: 'bank', name: 'Bank', value: 10_000, holding: 'ordinary-bank-deposit', returnSeriesId: PLANNING_RATE_SOURCE_ID },
+    ] as never
+    const issues = scenarioIssues(
+      input,
+      { kind: 'missing' } as never,
+      buckets,
+      undefined,
+      [],
+      null,
+      null,
+      undefined,
+      'Unbekannte Tagesgeld-Annahme unter Rechenannahmen erneut wählen und ausdrücklich bestätigen (gespeicherter Modus wird nicht stillschweigend umgedeutet).',
+      'tagesgeld-turbomodus',
+    )
+    const cash = issues.find((i) => i.code === 'cashPlanningRate.missing')!
+    expect(cash.fieldId).toBe('cash-mode-constant')
+    const { unmount } = render(
+      <CashPlanningRateAssumptions
+        cashMode="tagesgeld-turbomodus"
+        cashPlanningRateConfirmed={false}
+        issue={cash.message}
+        onModeChange={() => {}}
+        onRateChange={() => {}}
+        onRealRateChange={() => {}}
+        onConfirmedChange={() => {}}
+      />,
+    )
+    expect(document.getElementById(cash.fieldId)).not.toBeNull()
+    unmount()
   })
 })

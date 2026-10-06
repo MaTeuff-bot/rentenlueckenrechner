@@ -31,14 +31,26 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
     if (key === 'bridge' || key === 'pension') return [`insurance-${key}-${field}`, 'versicherung']
     return [`insurance-${key}`, 'versicherung']
   }
-  if (root === 'historical') return ['cash-planning-rate', 'annahmen']
+  if (root === 'historical') {
+    if (key === 'cashRealRate') return ['cash-real-rate', 'annahmen']
+    if (key === 'cashPlanningRateConfirmed') return ['cash-planning-rate-confirmed', 'annahmen']
+    if (key === 'cashMode') return ['cash-mode-constant', 'annahmen']
+    return ['cash-planning-rate', 'annahmen']
+  }
   if (['currentAge', 'retirementAge', 'planningAge'].includes(String(root))) return [String(root), 'zeitplan']
   if (root === 'monthlyDesiredSpendingToday') return [String(root), 'ausgaben']
   if (root === 'annualInflationRate') return [String(root), 'annahmen']
   return [root === 'currentCapital' ? `portfolio-value-${buckets[0]?.id}` : String(root), 'vermoegen']
 }
 /** UI routing adapter around existing validators. Every engine issue is retained. */
-export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers, cashPlanningIssue?: string | null): ScenarioIssue[] {
+export function cashPlanningPathForRawMode(cashMode: string | undefined): (string | number)[] {
+  if (cashMode === 'historical-zero-floor') return ['historical', 'cashPlanningRateConfirmed']
+  if (cashMode === 'real-assumption-zero-floor') return ['historical', 'cashRealRate']
+  if (cashMode === 'constant-nominal' || cashMode === undefined) return ['historical', 'cashPlanningRate']
+  return ['historical', 'cashMode']
+}
+
+export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers, cashPlanningIssue?: string | null, cashMode?: string): ScenarioIssue[] {
   const issues: ScenarioIssue[] = []
   const add = (path: (string | number)[], message: string, kind: ScenarioIssue['kind'], code: string) => {
     const [fieldId, section] = route(path, input, children, buckets)
@@ -91,7 +103,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     else if (message.includes('klassifizieren')) {
       const index = Math.max(0, buckets.findIndex(b => !b.holding || b.holding === 'unsupported'))
       path = ['estimatorPortfolio', index, 'holding']; kind = buckets[index]?.holding ? 'invalid' : 'missing'
-    } else if (message.includes('Bankeinlagen')) { path = ['historical', 'cashPlanningRate']; kind = 'invalid' }
+    } else if (message.includes('Bankeinlagen')) { path = cashPlanningPathForRawMode(cashMode); kind = 'invalid' }
     else if (/Ausgangsallokation|Portfoliowerte/.test(message)) { path = ['estimatorPortfolio', 0, 'value']; kind = 'invalid' }
     add(path, /PV-Elterneigenschaft/.test(message) ? 'Anerkannte Kinder ergänzen oder ausdrücklich „Keine anerkannten Kinder“ wählen.' : !input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? message.replaceAll('Rentenphase', 'Phase ab Versicherungsübergang') : message, kind, `setup.${path.join('.')}`)
   }
@@ -101,7 +113,7 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
     add(['estimatorPortfolio', index, field], portfolioError ?? allocationError!, numericMissing(buckets[index]?.value) ? 'missing' : 'invalid', 'portfolio.validation')
   }
   if (cashPlanningIssue) {
-    add(['historical', 'cashPlanningRate'], cashPlanningIssue, 'missing', 'cashPlanningRate.missing')
+    add(cashPlanningPathForRawMode(cashMode), cashPlanningIssue, 'missing', 'cashPlanningRate.missing')
   }
   return issues
 }

@@ -138,6 +138,7 @@ export type HistoricalBootstrapSettings = {
   inflationSourceId: string
   simulations: number
   cashPlanningRate?: number
+  cashRealRate?: number
 }
 
 export type HistoricalBootstrapMetadata = {

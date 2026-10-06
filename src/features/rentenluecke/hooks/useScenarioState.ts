@@ -12,7 +12,7 @@ import {
   runHistoricalBootstrapSimulation,
   simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
-import { CASH_PLANNING_RATE_PROPOSAL } from '../model/historicalReturns/constants'
+import { CASH_PLANNING_RATE_PROPOSAL, CASH_REAL_RATE_PROPOSAL } from '../model/historicalReturns/constants'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
 import type { LifeTableSex } from '../mortality/mortality'
 import {
@@ -31,7 +31,7 @@ import {
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { dismissTagesgeldPlanningRateNotice, loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
-import { adoptPlanningRateForBankBuckets, cashPlanningRateIssue, getConfirmedCashPlanningRate, isConfirmedCashPlanningRate, resolveBucketSourceForHoldingChange } from '../model/cashPlanningRate'
+import { adoptPlanningRateForBankBuckets, cashPlanningRateIssue, getConfirmedCashMode, getConfirmedCashPlanningRate, getConfirmedCashRealRate, getEffectiveCashMode, isConfirmedCashPlanningRate, isConfirmedCashRealRate, resolveBucketSourceForHoldingChange } from '../model/cashPlanningRate'
 import type { RetirementIncomeStream } from '../model/types'
 
 export { parsePersistedScenarioState } from './scenarioState/persistence'
@@ -85,7 +85,7 @@ export function useScenarioState() {
   const insuranceIssues = useMemo(() => insuranceSetupIssues(input), [input])
   const cashPlanningIssue = useMemo(() => cashPlanningRateIssue(portfolioBuckets, historical), [portfolioBuckets, historical])
   const cashPlanningError = cashPlanningIssue
-  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue])
+  const issues = useMemo(() => scenarioIssues(input, state.childrenAnswer ?? { kind: 'missing' }, portfolioBuckets, parsedInput.success ? undefined : parsedInput.error, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue, historical.cashMode), [input, state.childrenAnswer, portfolioBuckets, parsedInput, insuranceIssues, portfolioBucketError, allocationError, state.insuranceCoverageAnswers, cashPlanningIssue, historical.cashMode])
   const isValid = !insuranceIssues.length && parsedInput.success && !portfolioBucketError && !allocationError && !cashPlanningError
   const historicalSettings = useMemo(
     () => ({
@@ -93,6 +93,7 @@ export function useScenarioState() {
       inflationSourceId: historical.inflationSourceId,
       simulations: historical.simulations ?? DEFAULT_STOCHASTIC_SETTINGS.simulations,
       cashPlanningRate: getConfirmedCashPlanningRate(historical),
+      cashRealRate: getConfirmedCashRealRate(historical),
     }),
     [historical, portfolioBuckets],
   )
@@ -147,7 +148,8 @@ export function useScenarioState() {
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
     setState((current) => {
-      const confirmedRate = getConfirmedCashPlanningRate(current.historical)
+      const confirmedMode = getConfirmedCashMode(current.historical)
+      const confirmedRate = getConfirmedCashPlanningRate(current.historical) ?? getConfirmedCashRealRate(current.historical)
       return {
         ...current,
         portfolioBuckets: current.portfolioBuckets.map((bucket) => {
@@ -158,7 +160,8 @@ export function useScenarioState() {
             bucket.holding,
             patch.holding,
             patch.returnSeriesId,
-            confirmedRate,
+            confirmedMode !== undefined ? (confirmedRate ?? 0) : undefined,
+            confirmedMode,
           )
           return { ...bucket, ...patch, holding: nextHolding, returnSeriesId: nextSource }
         }),
@@ -239,6 +242,23 @@ export function useScenarioState() {
     }))
   }
 
+  const updateCashRealRate = (cashRealRate: number | undefined) => {
+    setState((current) => ({
+      ...current,
+      historical: { ...current.historical, cashRealRate },
+    }))
+  }
+
+  const updateCashMode = (cashMode: string) => {
+    setState((current) => {
+      if (current.historical.cashMode === cashMode) return current
+      return {
+        ...current,
+        historical: { ...current.historical, cashMode, cashPlanningRateConfirmed: false },
+      }
+    })
+  }
+
   const updateCashPlanningRateConfirmed = (cashPlanningRateConfirmed: boolean) => {
     if (!cashPlanningRateConfirmed) {
       setState((current) => ({
@@ -249,11 +269,41 @@ export function useScenarioState() {
     }
     // Explicit confirmation adopts the displayed proposal when the field was
     // never edited (prefill-in-progress is display-only until confirmed).
-    // A valid explicit confirmation also establishes the common planning-rate
-    // source for all declared ordinary-bank-deposit buckets. An invalid
-    // effective rate must not persist confirmation: the user corrects the
-    // rate and confirms explicitly again. Undefined still accepts the proposal.
+    // A valid explicit confirmation also establishes the common bank source
+    // for all declared ordinary-bank-deposit buckets. An invalid effective
+    // rate must not persist confirmation: the user corrects the rate and
+    // confirms explicitly again. Undefined still accepts the proposal.
     setState((current) => {
+      const mode = getEffectiveCashMode(current.historical)
+      if (mode === undefined) {
+        return {
+          ...current,
+          historical: { ...current.historical, cashPlanningRateConfirmed: false },
+        }
+      }
+      if (mode === 'real-assumption-zero-floor') {
+        const effectiveRealRate = current.historical.cashRealRate ?? CASH_REAL_RATE_PROPOSAL
+        if (!isConfirmedCashRealRate(effectiveRealRate)) {
+          return {
+            ...current,
+            historical: { ...current.historical, cashPlanningRateConfirmed: false },
+          }
+        }
+        dismissTagesgeldPlanningRateNotice()
+        const nextHistorical = {
+          ...current.historical,
+          cashRealRate: effectiveRealRate,
+          cashPlanningRateConfirmed: true,
+        }
+        const nextBuckets = adoptPlanningRateForBankBuckets(current.portfolioBuckets, nextHistorical)
+        return { ...current, historical: nextHistorical, portfolioBuckets: nextBuckets }
+      }
+      if (mode === 'historical-zero-floor') {
+        dismissTagesgeldPlanningRateNotice()
+        const nextHistorical = { ...current.historical, cashPlanningRateConfirmed: true }
+        const nextBuckets = adoptPlanningRateForBankBuckets(current.portfolioBuckets, nextHistorical)
+        return { ...current, historical: nextHistorical, portfolioBuckets: nextBuckets }
+      }
       const effectiveRate = current.historical.cashPlanningRate ?? CASH_PLANNING_RATE_PROPOSAL
       if (!isConfirmedCashPlanningRate(effectiveRate)) {
         return {
@@ -315,6 +365,8 @@ export function useScenarioState() {
     updateInflationSource,
     updateSimulations,
     updateCashPlanningRate,
+    updateCashRealRate,
+    updateCashMode,
     updateCashPlanningRateConfirmed,
     cashPlanningIssue,
     cashPlanningError,
