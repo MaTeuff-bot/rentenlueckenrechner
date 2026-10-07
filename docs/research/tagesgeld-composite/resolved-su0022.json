@@ -1,0 +1,9 @@
+{
+  "id": "BBIB1.M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+  "flowRef": "BBIB1",
+  "key": "M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+  "title": "Deposit rates of banks / Savings deposits with minimum rates of return, with agreed notice of 3 months / Average interest rate / SU0022",
+  "type": "BBK_ITS",
+  "url": "/statistiken-en/timeseries/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+  "__typename": "SolrTimeSeries"
+}

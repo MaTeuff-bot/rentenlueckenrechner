@@ -1,0 +1,30 @@
+{
+  "official-su0022-search.html": {
+    "url": "https://statistiken.bundesbank.de/statistiken-en/search?query=SU0022",
+    "downloaded_at_utc": "2026-10-05T11:58:41.701474+00:00",
+    "sha256": "5642bc03e4de47442273ef35565c9081fbfab18322744614ed633616ef1969c2"
+  },
+  "official-methodology.pdf": {
+    "url": "https://www.bundesbank.de/resource/blob/621888/2f270cd1c18f9da4aa5e1b41a36b3f40/mL/comparison-of-the-bundesbanks-former-survey-of-lending-data.pdf",
+    "downloaded_at_utc": "2026-10-05T11:58:41.789500+00:00",
+    "sha256": "3ac0f791f3b81f68bf15bcbe6cca166a589c577b4261784b957b13944414542e"
+  },
+  "su0022-official.csv": {
+    "url": "https://api.statistiken.bundesbank.de/rest/data/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A?format=csv&lang=en",
+    "downloaded_at_utc": "2026-10-05T11:58:41.873428+00:00",
+    "sha256": "0bcb3e368150ce5603f4cad3815da0cdb94e94378eba4e4ae8beb7d821df2b56"
+  },
+  "sud101-official.csv": {
+    "url": "https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en",
+    "downloaded_at_utc": "2026-10-05T11:58:41.994849+00:00",
+    "sha256": "73e27339ee8ac436fc92b8d7cda2745b276bf99356502e6d528a6f421c1ee359"
+  },
+  "app_snapshot": {
+    "path": "src/features/rentenluecke/model/returnData/historicalProductionData.ts",
+    "sha256": "358cc24aa6802b71fa392fcc1b01ebddfc26324bfb26f8d098857b6e075194b0",
+    "generated_at": "2026-08-15T00:00:00.000Z",
+    "cpi_id": "bundesbank-destatis-germany-cpi-yoy-annual-mean-post1950",
+    "equity_id": "jst-r6-developed-equal-weight-equity-real-post1950",
+    "etf_file_sha256": "4dd10eb60232fa05b2809de77bce198539c60ac63944d19dc60202425fa50e11"
+  }
+}

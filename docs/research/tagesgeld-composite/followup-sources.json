@@ -1,0 +1,77 @@
+{
+  "su0022-official.csv": {
+    "url": "https://api.statistiken.bundesbank.de/rest/data/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A?format=csv&lang=en",
+    "downloaded_at_utc": "2026-10-05T11:58:41.873428+00:00",
+    "sha256": "0bcb3e368150ce5603f4cad3815da0cdb94e94378eba4e4ae8beb7d821df2b56"
+  },
+  "sud101-official.csv": {
+    "url": "https://api.statistiken.bundesbank.de/rest/data/BBIM1/M.DE.B.L21.A.R.A.2250.EUR.N?format=csv&lang=en",
+    "downloaded_at_utc": "2026-10-05T11:58:41.994849+00:00",
+    "sha256": "73e27339ee8ac436fc92b8d7cda2745b276bf99356502e6d528a6f421c1ee359"
+  },
+  "official-methodology.pdf": {
+    "url": "https://www.bundesbank.de/resource/blob/621888/2f270cd1c18f9da4aa5e1b41a36b3f40/mL/comparison-of-the-bundesbanks-former-survey-of-lending-data.pdf",
+    "downloaded_at_utc": "2026-10-05T11:58:41.789500+00:00",
+    "sha256": "3ac0f791f3b81f68bf15bcbe6cca166a589c577b4261784b957b13944414542e"
+  },
+  "official-su0022-search.html": {
+    "url": "https://statistiken.bundesbank.de/statistiken-en/search?query=SU0022",
+    "downloaded_at_utc": "2026-10-05T11:58:41.701474+00:00",
+    "sha256": "5642bc03e4de47442273ef35565c9081fbfab18322744614ed633616ef1969c2"
+  },
+  "REPORT.md": {
+    "sha256": "86d17153940096aed9cfbe31ad7b51625bddc3569082b48700c486b254524d57",
+    "role": "immutable first-stage evidence"
+  },
+  "research.py": {
+    "sha256": "feca1d2d57cb52646d79ed45f98ad4c7c0fb4f2989b6e5e38e3240d86b0e483c",
+    "role": "immutable first-stage evidence"
+  },
+  "bundled-app-inputs.json": {
+    "sha256": "cc048da140f678d0d7f5fd83b3f3b3233b7a79992dcfd6e0c6be81e19ce1c7bc",
+    "role": "immutable first-stage evidence"
+  },
+  "followup-cpi-official.csv": {
+    "url": "https://api.statistiken.bundesbank.de/rest/data/BBDP1/M.DE.N.VPI.C.A00000.VGJ.LV?format=csv&lang=en",
+    "downloaded_at_utc": "2026-10-05T13:42:12.080788+00:00",
+    "sha256": "8fc07d01f3be4f61770955ab71ed6925df9a1bd1089abf28e14d4ed81548cd21",
+    "response_headers": {
+      "date": "Mon, 05 Oct 2026 13:42:12 GMT",
+      "content-type": "application/vnd.bbk.data+csv;version=1.0.0;charset=UTF-8",
+      "vary": "accept,accept-language,accept-encoding,origin",
+      "cache-control": "max-age=180",
+      "content-disposition": "attachment; filename=\"=?UTF-8?Q?BBDP1.M.DE.N.VPI.C.A00000.VGJ.LV.csv?=\"; filename*=UTF-8''BBDP1.M.DE.N.VPI.C.A00000.VGJ.LV.csv",
+      "content-security-policy": "default-src 'self' 'unsafe-inline'; img-src 'self' https://validator.swagger.io data:;",
+      "referrer-policy": "same-origin",
+      "age": "0",
+      "accept-ranges": "bytes",
+      "transfer-encoding": "chunked",
+      "x-frame-options": "SAMEORIGIN",
+      "x-xss-protection": "1; mode=block",
+      "x-content-type-options": "nosniff",
+      "x-permitted-cross-domain-policies": "none",
+      "strict-transport-security": "max-age=31536000",
+      "connection": "close"
+    }
+  },
+  "followup.py": {
+    "sha256": "c9b3dc6485fae439132e512212f3570b24b2cdf700936ece72d8430a15040b1a",
+    "role": "stdlib own-calculation executable harness"
+  },
+  "output_hashes": {
+    "followup-analysis-inputs.csv": "98346c3b73173ecc94bacbbd9bcd0ad0ae308970298ac2bf4abc170e17d2892d",
+    "followup-bootstrap-paths.csv": "247634a0cbab336777806accbace52c2b251400c7ad691c337235fd9e9e512b1",
+    "followup-carry-segments.csv": "0141533dd4264ddda043fbe71480671c7ed38f2cde88b0b0bc4a27505b55a57c",
+    "followup-cpi-annual.csv": "a18b61b2d39eeeed5d1f6ea84347ae49e501fda32876fd365f39117f8c78541d",
+    "followup-cpi-coverage.csv": "f001c1d28b43f1d685cbed6354b1f0a792690c2b91e350b99a1d0a05b28bbe11",
+    "followup-cpi-monthly.csv": "c40cb7b6ec62573d57520b58b6de00008426110caa4d5321985f9c80024fbd24",
+    "followup-cpi-official.csv": "8fc07d01f3be4f61770955ab71ed6925df9a1bd1089abf28e14d4ed81548cd21",
+    "followup-cpi-revisions.csv": "1eaffbb45bbd28ead5573de6dedb5c0d7f1bfaa1c36dbd9d8058352bf6059a72",
+    "followup-early-sensitivity.csv": "69525ccb18ff90c2078cb58ceaca1b41b29e2e642ebfb6b5bea20fcee6df2cb2",
+    "followup-negative-renominalized-years.csv": "e4bfafc4559b7eeb063f00ecda9d0fa404998882884431ec4cc7d4781c88efc9",
+    "followup-rate-annualization.csv": "795bba8847e4e7ae761fe979fb0828c2318f89e460086155910ba88cb2bb9a5a",
+    "followup-rolling.csv": "999a6cf6b960fb2b39f6f0ecb6423e5235a015215a183c5cbf93b4d749a94806",
+    "followup-statistics.csv": "9544b75b0df7df430947c4813b1f072307f6d5f6914a5fee2c41c6bb27d842f1",
+    "followup-results.json": "28a757459e031c9bc50c213d7d34d26cde6c89aa77e3095fbfb27134836b6d15"
+  }
+}

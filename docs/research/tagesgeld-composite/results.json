@@ -1,0 +1,494 @@
+{
+  "resolved_su0022": {
+    "id": "BBIB1.M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+    "flowRef": "BBIB1",
+    "key": "M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+    "title": "Deposit rates of banks / Savings deposits with minimum rates of return, with agreed notice of 3 months / Average interest rate / SU0022",
+    "type": "BBK_ITS",
+    "url": "/statistiken-en/timeseries/BBIB1/M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+    "__typename": "SolrTimeSeries"
+  },
+  "metadata": {
+    "SU0022": [
+      [
+        "",
+        "BBIB1.M.DE.B.H.DNB.SPM.K3M.A.N1.11A",
+        "BBIB1.M.DE.B.H.DNB.SPM.K3M.A.N1.11A_FLAGS"
+      ],
+      [
+        "",
+        "Deposit rates of banks / Savings deposits with minimum rates of return, with agreed notice of 3 months / Average interest rate / SU0022",
+        ""
+      ],
+      [
+        "Comment (in english)",
+        "Most frequently occuring interest rate for new business within the reporting period (the two middle weeks of a given month). Since January 1991 the rates of banks in the new L\u00e4nder have been included in the interest rate survey. The average rates are calculated as unweighted arithmetic means from the interest rates reported to be within the spread. The spread is ascertained by eliminating the reports in the top 5% and the bottom 5% of the interest rate range. Only a minimum rate of return is granted, but not a premium or bonus. Until June 1993 savings deposits at statutory notice.",
+        ""
+      ],
+      [
+        "Decimals",
+        "2",
+        ""
+      ],
+      [
+        "Time format code",
+        "P1M",
+        ""
+      ],
+      [
+        "category",
+        "ZREK",
+        ""
+      ],
+      [
+        "unit",
+        "% p.a.",
+        ""
+      ],
+      [
+        "unit multiplier",
+        "One",
+        ""
+      ],
+      [
+        "last update",
+        "2026-01-14 10:04:19",
+        ""
+      ]
+    ],
+    "SUD101": [
+      [
+        "",
+        "BBIM1.M.DE.B.L21.A.R.A.2250.EUR.N",
+        "BBIM1.M.DE.B.L21.A.R.A.2250.EUR.N_FLAGS"
+      ],
+      [
+        "",
+        "Effective interest rates of German banks / New business / Households' deposits, overnight / SUD101",
+        ""
+      ],
+      [
+        "Comment (in english)",
+        "The MFI interest rate statistics gathered on a harmonised basis in the euro area are collected in Germany on a sample basis (stratified sample). New business is collected in the same way as outstanding amounts for the sake of simplicity. This means that all outstanding deposit business at the end of the month has to be incorporated in the calculation of average rates of interest. Volume-weighted average interest rates on outstanding amounts as end-of-period. (Up to May 2010 the aggregated interest rate was calculated by weighting the reported interest rates with the corresponding outstanding amounts from balance sheet statistics reports. From June 2010 interest rates per stratum are calculated by weighting the reported interest rates with the corresponding outstanding amounts. Then the interest rate for Germany is aggregated by weighting the interest rates of each stratum with the total outstanding amounts of the same stratum.) The effective interest rates are calculated either as annualised agreed interest rates or as narrowly defined effective rates. Both calculation methods cover all interest payments on deposits and loans but not any other related charges which may occur for enquiries, administration, preparation of the documents, guarantees and credit insurance. Disagios are regarded as interest payments and included in the interest rate calculation. The annualised agreed interest rate and the narrowly defined effective rate differ in the underlying method of annualising interest rate payments.",
+        ""
+      ],
+      [
+        "Decimals",
+        "2",
+        ""
+      ],
+      [
+        "Time format code",
+        "P1M",
+        ""
+      ],
+      [
+        "category",
+        "ZREK",
+        ""
+      ],
+      [
+        "unit",
+        "% p.a.",
+        ""
+      ],
+      [
+        "unit multiplier",
+        "One",
+        ""
+      ],
+      [
+        "last update",
+        "2026-10-01 15:04:44",
+        ""
+      ],
+      [
+        "",
+        "Comment on 2010-06: Change of the grossing-up procedure according to the ECB (Guideline ECB/2014/15)",
+        ""
+      ]
+    ]
+  },
+  "monthly": {
+    "SU0022": {
+      "rows": 433,
+      "first": "1967-06",
+      "last": "2003-06",
+      "valid": 374,
+      "missing_values": 59,
+      "nonempty_flags": {
+        "1967-07": "No value available",
+        "1967-08": "No value available",
+        "1967-10": "No value available",
+        "1967-11": "No value available",
+        "1968-01": "No value available",
+        "1968-02": "No value available",
+        "1968-04": "No value available",
+        "1968-05": "No value available",
+        "1968-07": "No value available",
+        "1968-08": "No value available",
+        "1968-10": "No value available",
+        "1968-12": "No value available",
+        "1969-01": "No value available",
+        "1969-03": "No value available",
+        "1969-04": "No value available",
+        "1969-06": "No value available",
+        "1969-07": "No value available",
+        "1969-09": "No value available",
+        "1969-10": "No value available",
+        "1969-12": "No value available",
+        "1970-01": "No value available",
+        "1970-03": "No value available",
+        "1970-04": "No value available",
+        "1970-06": "No value available",
+        "1970-07": "No value available",
+        "1970-09": "No value available",
+        "1970-10": "No value available",
+        "1970-12": "No value available",
+        "1971-03": "No value available",
+        "1971-04": "No value available",
+        "1971-06": "No value available",
+        "1971-07": "No value available",
+        "1971-09": "No value available",
+        "1971-10": "No value available",
+        "1971-12": "No value available",
+        "1972-01": "No value available",
+        "1972-03": "No value available",
+        "1972-04": "No value available",
+        "1972-06": "No value available",
+        "1972-07": "No value available",
+        "1972-09": "No value available",
+        "1972-10": "No value available",
+        "1972-12": "No value available",
+        "1973-01": "No value available",
+        "1973-03": "No value available",
+        "1973-04": "No value available",
+        "1973-06": "No value available",
+        "1973-09": "No value available",
+        "1973-10": "No value available",
+        "1973-12": "No value available",
+        "1974-01": "No value available",
+        "1974-03": "No value available",
+        "1974-04": "No value available",
+        "1974-06": "No value available",
+        "1974-07": "No value available",
+        "1974-09": "No value available",
+        "1974-10": "No value available",
+        "1974-12": "No value available",
+        "1975-01": "No value available"
+      },
+      "complete_annual_years": [
+        1976,
+        1977,
+        1978,
+        1979,
+        1980,
+        1981,
+        1982,
+        1983,
+        1984,
+        1985,
+        1986,
+        1987,
+        1988,
+        1989,
+        1990,
+        1991,
+        1992,
+        1993,
+        1994,
+        1995,
+        1996,
+        1997,
+        1998,
+        1999,
+        2000,
+        2001,
+        2002
+      ]
+    },
+    "SUD101": {
+      "rows": 284,
+      "first": "2003-01",
+      "last": "2026-08",
+      "valid": 284,
+      "missing_values": 0,
+      "nonempty_flags": {
+        "2010-06": "comment",
+        "2026-08": "Provisional value"
+      },
+      "complete_annual_years": [
+        2003,
+        2004,
+        2005,
+        2006,
+        2007,
+        2008,
+        2009,
+        2010,
+        2011,
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    }
+  },
+  "cpi": {
+    "n": 71,
+    "first": 1950,
+    "last": 2020
+  },
+  "baseline": {
+    "sample": "baseline_complete_years",
+    "n": 45,
+    "first_year": 1976,
+    "last_year": 2020,
+    "nominal_inflation_correlation": 0.8065409077487135,
+    "nominal_arithmetic_mean": 0.018431666666666666,
+    "nominal_geometric_mean": 0.018351379201088418,
+    "nominal_sample_sd": 0.01295979878199106,
+    "nominal_negative_share": 0.0,
+    "nominal_q0": 8.333333333333334e-06,
+    "nominal_q0.05": 0.00023833333333333337,
+    "nominal_q0.25": 0.010233333333333334,
+    "nominal_q0.5": 0.017433333333333335,
+    "nominal_q0.75": 0.028091666666666668,
+    "nominal_q0.95": 0.04441499999999997,
+    "nominal_q1": 0.04916666666666667,
+    "real_arithmetic_mean": -0.0029517033825642576,
+    "real_geometric_mean": -0.0029871265364770855,
+    "real_sample_sd": 0.008526744502690144,
+    "real_negative_share": 0.7333333333333333,
+    "real_q0": -0.017413016782676594,
+    "real_q0.05": -0.013583971081470737,
+    "real_q0.25": -0.00803923144944152,
+    "real_q0.5": -0.004123880719658191,
+    "real_q0.75": 0.0009005354534803445,
+    "real_q0.95": 0.007980168249939544,
+    "real_q1": 0.02648752399232568
+  },
+  "exclude_2003": {
+    "sample": "exclude_transition_2003",
+    "n": 44,
+    "first_year": 1976,
+    "last_year": 2020,
+    "nominal_inflation_correlation": 0.8051550537209508,
+    "nominal_arithmetic_mean": 0.018592234848484848,
+    "nominal_geometric_mean": 0.018510682026969268,
+    "nominal_sample_sd": 0.013064270712263473,
+    "nominal_negative_share": 0.0,
+    "nominal_q0": 8.333333333333334e-06,
+    "nominal_q0.05": 0.00022666666666666666,
+    "nominal_q0.25": 0.009616666666666667,
+    "nominal_q0.5": 0.018445833333333335,
+    "nominal_q0.75": 0.0281,
+    "nominal_q0.95": 0.04492166666666668,
+    "nominal_q1": 0.04916666666666667,
+    "real_arithmetic_mean": -0.003047663055671905,
+    "real_geometric_mean": -0.0030836805796645257,
+    "real_sample_sd": 0.008600708471729598,
+    "real_negative_share": 0.75,
+    "real_q0": -0.017413016782676594,
+    "real_q0.05": -0.013590624813946689,
+    "real_q0.25": -0.008051152062828526,
+    "real_q0.5": -0.00423316646396571,
+    "real_q0.75": -0.0004219391893633684,
+    "real_q0.95": 0.00802048467185772,
+    "real_q1": 0.02648752399232568
+  },
+  "sparse_sensitivity": {
+    "sample": "NOT_BASELINE_available_month_mean",
+    "n": 53,
+    "first_year": 1968,
+    "last_year": 2020,
+    "nominal_inflation_correlation": 0.8305447196284103,
+    "nominal_arithmetic_mean": 0.022433713550600344,
+    "nominal_geometric_mean": 0.02231883232725574,
+    "nominal_sample_sd": 0.01550106461800973,
+    "nominal_negative_share": 0.0,
+    "nominal_q0": 8.333333333333334e-06,
+    "nominal_q0.05": 0.0003316666666666667,
+    "nominal_q0.25": 0.011366666666666667,
+    "nominal_q0.5": 0.020408333333333334,
+    "nominal_q0.75": 0.03145,
+    "nominal_q0.95": 0.04891666666666667,
+    "nominal_q1": 0.055099999999999996,
+    "real_arithmetic_mean": -0.002746815819979024,
+    "real_geometric_mean": -0.0027938598427366657,
+    "real_sample_sd": 0.009809014748418535,
+    "real_negative_share": 0.7169811320754716,
+    "real_q0": -0.01764485981308417,
+    "real_q0.05": -0.014647090844675682,
+    "real_q0.25": -0.008380067296939298,
+    "real_q0.5": -0.004342452208273229,
+    "real_q0.75": 0.0012705222341722333,
+    "real_q0.95": 0.017837375367745965,
+    "real_q1": 0.02648752399232568
+  },
+  "overlap": {
+    "n": 6,
+    "mean_difference": 0.00375
+  },
+  "rolling": {
+    "nominal_mean": {
+      "n": 36,
+      "min": 0.0024475,
+      "max": 0.03602416666666666,
+      "range": 0.033576666666666664,
+      "minimum_window": {
+        "start_year": 2011,
+        "end_year": 2020,
+        "nominal_mean": 0.0024475,
+        "real_mean": -0.010149133407029077
+      },
+      "maximum_window": {
+        "start_year": 1976,
+        "end_year": 1985,
+        "nominal_mean": 0.03602416666666666,
+        "real_mean": -0.0033071067638280717
+      }
+    },
+    "real_mean": {
+      "n": 36,
+      "min": -0.010149133407029077,
+      "max": 0.005146023945576406,
+      "range": 0.015295157352605483,
+      "minimum_window": {
+        "start_year": 2011,
+        "end_year": 2020,
+        "nominal_mean": 0.0024475,
+        "real_mean": -0.010149133407029077
+      },
+      "maximum_window": {
+        "start_year": 1982,
+        "end_year": 1991,
+        "nominal_mean": 0.028689166666666665,
+        "real_mean": 0.005146023945576406
+      }
+    }
+  },
+  "joint_common": {
+    "n": 45,
+    "first": 1976,
+    "last": 2020
+  },
+  "etf_common": {
+    "etf-ie00b6r52259-iusq": {
+      "n": 9,
+      "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ]
+    },
+    "etf-ie00b4l5yc18-eunm": {
+      "n": 11,
+      "years": [
+        2010,
+        2011,
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ]
+    }
+  },
+  "bootstrap": {
+    "replicates": 2000,
+    "seed": 20261005,
+    "intervals": {
+      "nominal_mean": {
+        "p025": 0.014884699074074073,
+        "p975": 0.022160046296296296
+      },
+      "real_mean": {
+        "p025": -0.005284583260057381,
+        "p975": -0.0004643918026824441
+      },
+      "inflation_mean": {
+        "p025": 0.01753046296296266,
+        "p975": 0.02572226851852142
+      },
+      "equity_real_mean": {
+        "p025": 0.0354853746787574,
+        "p975": 0.14313408284644963
+      }
+    }
+  },
+  "constant_real_re_nominalization": {
+    "real_arithmetic_mean": {
+      "constant": -0.0029517033825642576,
+      "negative_years": [
+        {
+          "year": 1950,
+          "nominal": -0.06593192078559884
+        },
+        {
+          "year": 1953,
+          "nominal": -0.020566223289505525
+        },
+        {
+          "year": 1954,
+          "nominal": -0.0006252573571269293
+        },
+        {
+          "year": 1986,
+          "nominal": -0.004364188469442198
+        },
+        {
+          "year": 1987,
+          "nominal": -0.00029290792491443174
+        }
+      ],
+      "minimum": -0.06593192078559884
+    },
+    "real_geometric_mean": {
+      "constant": -0.0029871265364770855,
+      "negative_years": [
+        {
+          "year": 1950,
+          "nominal": -0.06596510637695618
+        },
+        {
+          "year": 1953,
+          "nominal": -0.020601020634365863
+        },
+        {
+          "year": 1954,
+          "nominal": -0.00066076316506547
+        },
+        {
+          "year": 1986,
+          "nominal": -0.004399561440553645
+        },
+        {
+          "year": 1987,
+          "nominal": -0.00032842554057110895
+        }
+      ],
+      "minimum": -0.06596510637695618
+    }
+  }
+}
