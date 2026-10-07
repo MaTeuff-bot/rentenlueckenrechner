@@ -300,11 +300,13 @@ describe('ledger joint pension-tax funding', () => {
       expect(row.gapWithdrawal).toBeCloseTo(assessment.requiredWithdrawal, 8)
       expect(assessment.paidWithdrawal).toBeCloseTo(assessment.requiredWithdrawal + excess, 6)
       expect(row.closingCapital).toBeCloseTo(
-        row.openingCapital + row.investmentReturn + row.contribution - assessment.paidWithdrawal + excess, 5)
+        row.openingCapital + row.investmentReturn + row.contribution - assessment.paidWithdrawal + excess + (row.surplusReinvested ?? 0), 5)
       expect(row.unfundedWithdrawal).toBeCloseTo(Math.max(0, assessment.requiredWithdrawal - assessment.paidWithdrawal), 8)
       expect(row.retirementIncomeNet).toBeCloseTo(
         row.retirementIncomeGross - row.retirementIncomeOtherDeductions - row.healthInsurance - row.careInsurance - (row.pensionIncomeTax ?? 0), 8)
-      expect(row.surplusIncome).toBeCloseTo(Math.max(0, row.retirementIncomeNet - row.desiredSpending), 8)
+      expect(row.surplusIncome).toBeCloseTo(Math.max(0, row.retirementIncomeNet - row.desiredSpending - (row.capitalIncomeTax ?? 0)), 8)
+      expect(row.surplusReinvested ?? 0).toBeCloseTo(row.surplusIncome, 8)
+      if ((assessment.requiredWithdrawal ?? 0) > 0) expect(row.surplusIncome).toBe(0)
       const insurance = assessment.insurance.kv + assessment.insurance.pv
       if (assessment.paidWithdrawal > 0)
         expect((row.netGapWithdrawal ?? 0) + insurance + (row.capitalIncomeTax ?? 0) + (row.pensionIncomeTax ?? 0))
@@ -362,16 +364,19 @@ describe('ledger joint pension-tax funding', () => {
       expect(row.gapWithdrawal).toBeCloseTo(row.capitalAssessment!.requiredWithdrawal, 8)
     }
   })
-  it('keeps surplus outside the portfolio (no sale for a covered pension tax)', () => {
+  it('reinvests surplus year-end (no sale for a covered pension tax)', () => {
     const base = estimatorGainsInput()
     const input = prepare({ ...base, currentAge: base.retirementAge, retirementAge: base.retirementAge,
       monthlyDesiredSpendingToday: 100 })
     const result = simulateScenario(input, 0.02)
     for (const row of result.retirementRows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
+      expect(row.surplusReinvested).toBeCloseTo(row.surplusIncome, 8)
+      expect(row.surplusIncome).toBeCloseTo(Math.max(0, row.retirementIncomeNet - row.desiredSpending - (row.capitalIncomeTax ?? 0)), 8)
       expect(row.gapWithdrawal).toBe(0)
       expect(row.capitalAssessment!.paidWithdrawal).toBe(0)
       expect(row.capitalAssessment!.excessRepurchase ?? 0).toBe(0)
+      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + (row.surplusReinvested ?? 0), 6)
     }
   })
   it('reports depletion as shortfall with a valid closing state', () => {

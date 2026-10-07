@@ -126,12 +126,33 @@ Rate products are validated before statutory caps can hide out-of-range intermed
    funding itself; Kapitalertragsteuer funding is handled by the ledger's separate
    tax assessment on the same annual income (see
    `docs/kapitalertragsteuer-rules-2026.md`).
-4. Add explicitly allocated end-year contributions. Fund purchases increase pooled
-   acquisition costs; bank contributions increase deposit principal. They earn no
-   return this year and are not available for the earlier funding step. This matches
-   the existing accumulation ledger's return-before-contribution convention. A year
-   can therefore show a funding shortfall and a positive subsequent contribution.
-   Retirement income surplus remains outside the portfolio, matching current behaviour.
+4. The estimator completes explicitly allocated end-year contributions and pending
+   VP accounting; accumulation contributions earn returns only next year. Retirement
+   contributions are zero. The detailed ledger then reinvests any retirement surplus
+   into this committed closing state. The surplus is the signed funding need before
+   clamp: rawNeed = spendingLessOtherIncome + ownKV + ownPV + committed
+   capitalIncomeTax + pensionIncomeTax extra; required = max(0, rawNeed);
+   surplus = max(0, -rawNeed), equivalently
+   max(0, netRetirementIncome - desiredSpending - committedCapitalTax). It is
+   computed once after the immutable funding trial (never reconsuming
+   tax/loss/allowance/insurance) and only when required is zero without
+   shortfall outside accumulation. Income may pay the trial capital tax while no
+   sale occurs: it is not additionally debited from holdings. The surplus is
+   split proportionally to CURRENT post-funding holdings (not target weights);
+   only when that total is zero, equally across all declared supported buckets
+   including zero values (zero-NAV purchases rejected, never inventing units).
+   Fund shares add pooled acquisition cost plus December pending VP via
+   `calculateVorabpauschale(start=share/(1+r), end=share, month=12)` (receipt
+   next year); bank shares add principal only. New money earns no return this
+   year. This is separate from the bounded pension-rounding excessRepurchase to
+   target weights. The already-committed contributions follow the same December-purchase
+   convention (fund cost, December VP, no same-year return, unavailable for the
+   earlier funding step), matching the existing accumulation
+   return-before-contribution convention. A year can therefore show a funding
+   shortfall and a positive subsequent contribution. Historical verification
+   receipts that describe surplus as remaining outside the portfolio refer to
+   the pre-reinvestment behaviour and are retained as history in
+   `docs/verification/`.
 5. Calculate next year's pending VP on retained old units **per fund bucket**, with
    each bucket's own gain cap, then sum. Opposite bucket returns must not cancel the
    legal per-fund VP cap. December purchases get 1/12 of the capped annual amount for

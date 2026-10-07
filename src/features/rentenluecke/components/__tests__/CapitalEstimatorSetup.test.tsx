@@ -65,7 +65,8 @@ describe('mandatory detailed capital setup interactions', () => {
   it('discloses the joint pension-tax funding and bank blocking warning', () => {
     render(<Harness />)
     expect(screen.getByText(/im selben Finanzierungs-Fixpunkt/)).toBeInTheDocument()
-    expect(screen.getByText(/kein Vermögensverbrauch nötig/)).toBeInTheDocument()
+    expect(screen.getByText(/am Jahresende.*reinvestiert/)).toBeInTheDocument()
+    expect(screen.queryByText(/kein Vermögensverbrauch nötig/)).not.toBeInTheDocument()
     expect(screen.getByText(/zu Zielgewichten zurückgekauft/)).toBeInTheDocument()
     expect(screen.queryByText(/kein Verkaufsgewinn/)).not.toBeInTheDocument()
     expect(screen.getByText(/kann ein einziger abgetasteter Negativpfad die gesamte Berechnung blockieren/)).toBeInTheDocument()
