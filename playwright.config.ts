@@ -6,6 +6,16 @@ import { defineConfig, devices } from '@playwright/test';
 // They are harmless on larger CI runners.
 const launchArgs = ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'];
 
+const previewCommand =
+  'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort';
+// Every invocation (including direct `npx playwright test`) builds fresh
+// assets before its owned preview server, so a stale dist/ is never served
+// silently. CI already built once before `npx playwright test`, so the build
+// is skipped there to avoid a redundant second build.
+const webServerCommand = process.env.CI
+  ? previewCommand
+  : `npm run build && ${previewCommand}`;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -47,10 +57,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
+    command: webServerCommand,
     url: 'http://127.0.0.1:4173/rentenlueckenrechner/',
     // Never reuse a stale preview server: it silently serves an old dist
     // build and makes both patched and HEAD E2E runs fail spuriously.
+    // Playwright never kills a foreign server; a port conflict fails fast
+    // via --strictPort so it can be stopped manually.
     reuseExistingServer: false,
     timeout: 120_000,
   },
