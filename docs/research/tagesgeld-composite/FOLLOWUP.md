@@ -2,6 +2,22 @@
 
 Research-only own calculations, checked 2026-10-05. No application code, model or default changed. Supersedes the initial end-2020 estimate for the extended-history comparison, not its recorded observations.
 
+## Delivery reconciliation — PR #86 shipped
+
+The feature investigated here was implemented by [PR #86](https://github.com/MaTeuff-bot/rentenlueckenrechner/pull/86), merged as `92f620d81664b340dd1969b4927c2077c005daa6`. Its exact-merge [Pages deployment](https://github.com/MaTeuff-bot/rentenlueckenrechner/actions/runs/37424334619) succeeded. This is deployment evidence, not a claim of a newly repeated live-browser verification. The authoritative implemented contracts are in [the Tagesgeld rule snapshot](../../tagesgeld-planzins-rules-2026.md).
+
+This document preserves the original research sample and raw outcomes; it is not an outstanding implementation prerequisite. Later approved product decisions resolved the questions below:
+
+- **Sources:** production uses the same SU0022-through-2002 / SUD101-from-2003 composite. All 57 overlapping annual observations match the research to floating-point precision (maximum absolute difference about 1.39e-17).
+- **1975:** production includes a marked January estimate, linearly interpolated November 1974 to February 1975 with January two-thirds along the interval; it averages that estimate with eleven observed monthly quotes. The primary research sample below still excludes 1975.
+- **Window:** production bundles 58 deposit observations, 1968–2025. Default joint deposit/JST/current-CPI coverage is 53 years, 1968–2020 including 1975. Research-only CPI extension through 2025 did not extend production equity/CPI history. Shorter selected asset histories still restrict the common intersection.
+- **Negative nominal rates:** raw annual rates remain unchanged, including 2021. The explicitly disclosed account-switching strategy applies `max(0, rawNominal)` before separate costs/tax/KV/PV, without changing year pairing, flooring real returns or dropping/redrawing years. No raw negative nominal rate lies in the default 1968–2020 window, so this historical floor does not bind there.
+- **Modes:** historical joint bootstrap and an editable real-target mode were added alongside the existing explicitly confirmed constant-nominal 2% proposal/default. The real mode applies `max(0, (1+realTarget)*(1+inflation)-1)`; its real target is not attained where the nominal floor binds. Neither alternative silently replaces existing confirmed scenarios.
+- **Different means, not a discrepancy:** the original raw research mean is −0.5483% over 57 years, 1968–2025 excluding 1975. The shipped −0.28% real proposal rounds the raw 53-year default-window mean −0.27631615093%, including estimated 1975. Independently recomputing the implemented 58-year series with the research CPI gives a raw mean −0.56294637592% and zero-floor-strategy mean −0.56283485341%. These are descriptive sample means, not forward calibration; the raw research path quantiles below are not shipped-strategy outcomes.
+- **Sampling:** production retains iid joint calendar-year resampling. The 3-/5-year blocks below remain research sensitivity experiments, not implemented product options.
+
+Remaining research questions are calibration/validation of proposal values, possible future source-history extensions and alternative temporal sampling—not delivery of the three shipped modes. No changes to calculations, defaults, source data or dependencies are made by this research closeout.
+
 ## 1. Frequency-aware SU0022 annualization
 
 Retain SU0022 through 2002 and SUD101 from 2003. For 1968 select March/June/September/November (one quote per quarter); for 1969–1974 select February/May/August/November and equally average the four annualized quotes. Extra observations in 1971/1973 are retained in the audit but not overweighted. From 1976 use the arithmetic mean of twelve monthly annualized quotes. These are explicit approximations to annual credited interest, not realized account returns. No monthly rates are invented or annual rate quotes compounded twelve times.
@@ -52,7 +68,9 @@ The app's bundled JST equity still ends in **2020**: full joint composite/CPI/JS
 
 Prefer a jointly sampled deposit/inflation proxy over constant-real replacement for historical-bootstrap consistency. Approximately **−0.55% real** is now a descriptive full-composite mean, not an approved default or stable-law estimate. Before implementation settle: negative nominal-interest eligibility/accounting; whether to extend equity history or retain common-year restriction; early-year/1975 conventions; iid versus block sampling; and source/proxy disclosure. No product decisions are implied by this research.
 
-## Accepted strategy: avoid negative-rate deposits (not yet implemented)
+## Accepted strategy: avoid negative-rate deposits (implemented by PR #86)
+
+The following direction/copy/acceptance text records the pre-implementation decision. PR #86 implemented it; see the delivery reconciliation above for the final sample, modes and boundaries.
 
 Max selected the explicit zero-floor deposit strategy after reviewing the negative-interest alternatives. For the historical composite, preserve each raw nominal annual observation and its paired inflation/equity calendar year. Apply `strategyGrossRate = max(0, rawNominalDepositRate)` only as a disclosed investor-strategy transformation, before separate costs, taxation and insurance accounting. Do not drop years, redraw paths, alter inflation, floor real returns or apply this rule to equity/bills/other sources. This supersedes the earlier prohibition on an undisclosed floor specifically for this approved, disclosed strategy; it does not change the archived raw research results above.
 

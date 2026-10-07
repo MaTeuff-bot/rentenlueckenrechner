@@ -2,7 +2,9 @@
 
 **Source: Deutsche Bundesbank; CPI source: Federal Statistical Office, Wiesbaden, via the app’s Bundesbank/Destatis snapshot; equity: JST Macrohistory R.6. Annual aggregations, composite, deflation and bootstrap are own calculations, not an official Bundesbank composite.**
 
-Downloaded 2026-10-05 UTC. Exact timestamps, URLs and SHA-256 hashes: `sources.json`. No production source/default changes, commit or push.
+Downloaded 2026-10-05 UTC. Exact timestamps, URLs and SHA-256 hashes: `sources.json`. This is the original research snapshot; it does not itself change production sources/defaults.
+
+**Delivery status:** the investigated deposit feature shipped in [PR #86](https://github.com/MaTeuff-bot/rentenlueckenrechner/pull/86). Read [FOLLOWUP.md — delivery reconciliation](FOLLOWUP.md#delivery-reconciliation--pr-86-shipped) for the implemented 1975 estimate, common sample window, disclosed nominal zero-floor strategy and three selectable modes. Strict-coverage results below remain historical raw research, not the final production sample or strategy outcomes.
 
 ## Conclusions
 

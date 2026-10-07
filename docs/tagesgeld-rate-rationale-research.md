@@ -2,6 +2,10 @@
 
 Research checked: **5 October 2026**. Scope: evidence and recommendation only; no default, configuration, calculation, variable-rate model or inflation model changes.
 
+## Delivery status
+
+This initial rationale was expanded into [composite deposit research](research/tagesgeld-composite/FOLLOWUP.md), whose feature shipped in [PR #86](https://github.com/MaTeuff-bot/rentenlueckenrechner/pull/86). Production now offers historical joint deposit bootstrap and a real-target assumption with a disclosed nominal zero floor alongside the existing explicitly confirmed constant-nominal 2% proposal/default. The research did not calibrate 2% as a forecast; the recommendation below remains valid as scenario labeling, not an outstanding prerequisite or instruction to change defaults. See the [implemented rule snapshot](tagesgeld-planzins-rules-2026.md).
+
 ## Recommendation
 
 **A constant nominal 2% p.a. rate is defensible as an explicitly chosen planning scenario, but the evidence reviewed does not establish it as an empirically justified long-term default.** Its rationale is a transparent, reproducible “what if” calculation—not a calibrated expectation of future Tagesgeld returns. Keep the existing default unchanged pending a separate product decision.
