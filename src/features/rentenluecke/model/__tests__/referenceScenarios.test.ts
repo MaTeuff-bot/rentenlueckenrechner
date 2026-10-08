@@ -53,7 +53,7 @@ function expectLedgerConservation(rows: YearlyPeriodRow[]) {
     if (row.capitalAssessment) {
       // Ledger path: paid withdrawal is the authoritative outflow.
       expect(row.closingCapital).toBeMoneyClose(
-        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal)
+        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal + (row.surplusReinvested ?? 0))
     } else {
       // Scalar path: gap withdrawal plus funded Kapitalertragsteuer is the authoritative
       // outflow; contributions add. (Zero when no taxable gains exist.)

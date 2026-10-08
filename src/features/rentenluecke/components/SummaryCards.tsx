@@ -209,7 +209,7 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           Fondserträge (Entnahmen im Ruhestand, Umschichtungsgewinne und Vorabpauschalen) und Bankzinsen bei automatischer
           Kapitalbasis (Fondserträge, Zinsen) werden nach Abgeltungsteuer (25 % zuzüglich 5,5 %
           Solidaritätszuschlag) besteuert; Bankzinsen ohne Teilfreistellung in derselben Bemessung mit gemeinsamem
-          Verlusttopf und Sparerpauschbetrag. Das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Nicht gedeckte
+          Verlusttopf und Sparerpauschbetrag. Das Portfolio finanziert Entnahmelücke zuzüglich Steuer. Ein Überschuss nach allen modellierten Abzügen wird am Jahresende reinvestiert und ist im Endkapital enthalten. Nicht gedeckte
           Beträge bleiben als nicht gedeckte Entnahme sichtbar.
         </p>
         <ul>

@@ -118,7 +118,7 @@ describe('retirement income streams', () => {
     expect(result.retirementRows.map((row) => row.gapWithdrawal)).toEqual([24_000, 0, 0, 24_000])
   })
 
-  it('reports consumed surplus without adding it to portfolio capital', () => {
+  it('reinvests surplus year-end into portfolio capital', () => {
     const result = zeroPathResult(
       input({
         planningAge: 68,
@@ -128,8 +128,9 @@ describe('retirement income streams', () => {
     const [row] = result.retirementRows
 
     expect(row.surplusIncome).toBe(12_000)
+    expect(row.surplusReinvested).toBe(12_000)
     expect(row.gapWithdrawal).toBe(0)
-    expect(row.closingCapital).toBe(row.openingCapital)
+    expect(row.closingCapital).toBe(row.openingCapital + 12_000)
   })
 
   it('uses net rather than gross stream income in required-capital search', () => {

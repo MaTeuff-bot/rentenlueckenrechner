@@ -212,7 +212,7 @@ describe('tagesgeld tax contracts', () => {
     const result = simulateScenarioWithReturnPath(input, [], undefined, path)
     for (const row of result.rows) {
       expect(row.closingCapital).toBeCloseTo(
-        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal,
+        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal + (row.surplusReinvested ?? 0),
         5,
       )
       const assessment = row.capitalAssessment!

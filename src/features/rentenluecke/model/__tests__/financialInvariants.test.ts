@@ -233,7 +233,7 @@ describe('bootstrap accounting consistency', () => {
       for (const row of allRows(single)) {
         if (row.capitalAssessment) {
           expect(row.closingCapital, `${makeScenario.name} age ${row.ageStart}`).toBeMoneyClose(
-            row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal)
+            row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment.paidWithdrawal + (row.surplusReinvested ?? 0))
         } else {
           // No public route reaches the scalar path anymore; every row carries
           // the detailed assessment. Kept as a guard, never as a forecast.
@@ -396,7 +396,7 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
       expect((row.netGapWithdrawal ?? 0) + insurance + tax + (row.pensionIncomeTax ?? 0)).toBeMoneyClose(row.capitalAssessment!.paidWithdrawal)
       // Conservation through the single outflow; shortfall stays visible.
       expect(row.closingCapital).toBeMoneyClose(
-        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal)
+        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal + (row.surplusReinvested ?? 0))
       expect(row.unfundedWithdrawal).toBeMoneyClose(Math.max(0, row.gapWithdrawal - row.capitalAssessment!.paidWithdrawal))
     }
     // Slice 1b: accumulation Umschichtung gains are taxed through the same path and

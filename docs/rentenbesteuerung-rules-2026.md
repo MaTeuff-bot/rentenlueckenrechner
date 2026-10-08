@@ -48,8 +48,10 @@ NOT enter the zvE (Abgeltung fertig, slices 1/1b are separate).
   `required = max(0, Bedarf + KV/PV + Kapitalertragsteuer + Rentensteuer)` via
   `additionalRequirementForTrial`) → one display assessment from the committed
   KV/PV amounts (no extra sale follows). Only what outside income cannot cover
-  is funded from the portfolio; a covering surplus keeps absorbing the tax
-  outside the portfolio (required 0, no sale, no repurchase). The committed sale
+  is funded from the portfolio; a covering surplus first absorbs the tax in
+  income (required 0, no sale, no additional portfolio debit) and the remaining
+  after-all-charges surplus is reinvested year-end proportionally to current
+  holdings (in closing capital). The committed sale
   realizes gains normally (cost/VP release and loss/allowance consumption from
   the selected trial, consumed once). A small rounding excess (≤ inflation
   factor, from §32a floor steps) is repurchased the same year at target weights

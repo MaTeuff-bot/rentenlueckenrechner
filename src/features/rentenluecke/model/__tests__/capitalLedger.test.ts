@@ -48,7 +48,7 @@ describe('integrated capital assessment ledger', () => {
       expect(() => simulateCapitalLedgerPath(normalizeInput(input), invalid, () => 0)).toThrow(/Renditepfad/)
     }
   })
-  it('keeps retirement income surplus outside the portfolio in full and bootstrap ledgers', () => {
+  it('reinvests retirement income surplus year-end in full and bootstrap ledgers', () => {
     const input = estimatorInput()
     input.currentAge = input.retirementAge = 67
     input.monthlyDesiredSpendingToday = 100
@@ -59,9 +59,15 @@ describe('integrated capital assessment ledger', () => {
     expect(full.summary.requiredCapitalAtRetirement).toBe(0)
     for (const row of full.rows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
+      expect(row.surplusReinvested).toBeCloseTo(row.surplusIncome, 8)
       expect(row.contribution).toBe(0)
       expect(row.capitalAssessment!.paidWithdrawal).toBe(0)
-      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn)
+      expect(row.capitalAssessment!.requiredWithdrawal).toBe(0)
+      // Corrected after-all-charges surplus: income pays the trial capital tax, no second debit.
+      expect(row.surplusIncome).toBeCloseTo(Math.max(0, row.retirementIncomeNet - row.desiredSpending - (row.capitalIncomeTax ?? 0)), 8)
+      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + (row.surplusReinvested ?? 0), 6)
+      // No overshoot beyond the pre-tax margin.
+      expect(row.surplusIncome).toBeLessThanOrEqual(Math.max(0, row.retirementIncomeNet - row.desiredSpending) + 1e-9)
     }
   })
   it('retains worthless fund costs without disposal and searches fresh capital after accumulation loss', () => {
@@ -120,7 +126,7 @@ describe('integrated capital assessment ledger', () => {
     expect(r.rows[0].capitalAssessment!.movement.costReleased).toBeCloseTo(871.504435823319)
     expect(r.rows[1].capitalAssessment!.receivedVorabpauschale).toBeGreaterThan(0)
     for (const row of r.rows) {
-      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal, 5)
+      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal + (row.surplusReinvested ?? 0), 5)
       if (row.phase === 'retirement') {
         // Slice-1 funding rule: the required withdrawal funds the net spending gap
         // plus Kapitalertragsteuer, so it exceeds desired-minus-net by exactly the tax.

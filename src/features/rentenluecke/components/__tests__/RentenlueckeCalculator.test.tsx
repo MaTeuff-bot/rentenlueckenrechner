@@ -86,7 +86,7 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByRole('columnheader', { name: 'Abzüge gesamt' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Verfügbarer Netto-Cashflow' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Entnahmelücke' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Konsumierter Überschuss' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Überschuss (reinvestiert)' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Entnahme für Nettolücke' })).toBeInTheDocument()
     expect(screen.getAllByRole('cell', { name: '0 €' }).length).toBeGreaterThan(0)
   })

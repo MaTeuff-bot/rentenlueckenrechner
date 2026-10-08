@@ -1,4 +1,4 @@
-import { createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
+import { calculateVorabpauschale, createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { calculateRetirementIncomeForYear, grvPensionGrossForYear } from '../retirementIncomeStreams'
 import { assessPensionYearTaxValues, resolvePensionTaxSetup } from '../tax/incomeTax'
@@ -74,9 +74,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
         fundedExcessBound: inflationFactor,
       }
       : undefined
+    const spendingLessOtherIncome = desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0)
     const result = simulateEstimatorYear(state, {
       projectedBasisRate: setup.projectedBasisRate, expenseAllowance: 51 * inflationFactor,
-      spendingLessOtherIncome: desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0),
+      spendingLessOtherIncome,
       withdrawalTax: { openingLossCarryforward: state.simulatedLossCarryforward, allowanceAvailable },
       buckets: buckets.map((b, n) => {
         const r = rates.find(r => r.id === b.id)
@@ -96,15 +97,56 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     const pensionIncomeTax = pensionAssessment?.pensionIncomeTax ?? 0
     const pensionTaxBase = pensionAssessment?.pensionTaxBase ?? 0
     const retirementIncomeNet = (income?.net ?? 0) - pensionIncomeTax
-    // Joint funding: the estimator trial already funds spending + insurance +
-    // capital tax + pension tax (required = max(0, need)), so the gap is the
-    // committed required withdrawal. A covering surplus keeps absorbing the tax
-    // outside the portfolio (required 0, no sale, no repurchase).
+    // Signed funding need from the committed immutable trial (before clamp):
+    // spending + own KV/PV + committed capital tax + pension-tax extra.
+    // required = max(0, need); surplus = max(0, -need), equivalently
+    // max(0, net - desired - committedCapitalTax). Income may pay the trial
+    // capital tax while no sale occurs: never debit it again from holdings.
+    const committedCapitalTax = result.withdrawalTax ? result.withdrawalTax.capitalIncomeTax : 0
+    const signedNeed = spendingLessOtherIncome + result.insurance.kv + result.insurance.pv + committedCapitalTax + pensionIncomeTax
+    const rawSurplus = Math.max(0, -signedNeed)
+    const surplusIncome = accumulation ? 0 : rawSurplus
+    // Year-end surplus reinvestment on the mandatory detailed ledger only.
+    // Proportional to CURRENT post-funding holdings (not target weights);
+    // equal across all declared supported buckets only when that total is zero.
+    // Fund shares add pooled cost + December pending VP (receipt next year);
+    // bank shares add principal only. No current-year return on new money.
+    // Loss/allowance/VP/tax/insurance are committed once, never reconsumed.
+    // Separate from the bounded pension-rounding excessRepurchase above.
+    const canReinvest = !accumulation && result.status !== 'shortfall' && result.requiredWithdrawal === 0 && surplusIncome > 0
+    const surplusReinvested = canReinvest ? surplusIncome : 0
+    let committedClosingState = result.closingState!
+    let committedPending = result.pendingVorabpauschale
+    let committedClosingCapital = result.closingCapital
+    if (surplusReinvested > 0) {
+      const baseTotal = committedClosingState.buckets.reduce((s, b) => s + b.value, 0)
+      const shares = committedClosingState.buckets.map(b => baseTotal > 0 ? surplusReinvested * b.value / baseTotal : surplusReinvested / committedClosingState.buckets.length)
+      committedClosingState.buckets.forEach((b, n) => {
+        if (b.eligibility === 'accumulating-equity-fund' && shares[n] > 0) {
+          const rate = rates.find(r => r.id === b.id)?.totalReturnRate ?? 0
+          if (rate === -1) throw new Error('Cannot purchase a fund at zero NAV')
+        }
+      })
+      let extraCost = 0
+      let extraPending = 0
+      const reinvestedBuckets = committedClosingState.buckets.map((b, n) => {
+        const share = shares[n]
+        if (b.eligibility === 'accumulating-equity-fund' && share > 0) {
+          const rate = rates.find(r => r.id === b.id)?.totalReturnRate ?? 0
+          extraCost += share
+          extraPending += calculateVorabpauschale({ startValue: share / (1 + rate), endValue: share, projectedBasisRate: setup.projectedBasisRate, acquisitionMonth: 12 })
+        }
+        return { ...b, value: b.value + share }
+      })
+      committedClosingState = { ...committedClosingState, buckets: reinvestedBuckets, fundAcquisitionCost: committedClosingState.fundAcquisitionCost + extraCost, pendingVorabpauschale: committedClosingState.pendingVorabpauschale + extraPending }
+      committedPending += extraPending
+      committedClosingCapital = reinvestedBuckets.reduce((s, b) => s + b.value, 0)
+    }
     const gapWithdrawal = accumulation ? 0 : result.requiredWithdrawal
     const estimatorShortfall = result.status === 'shortfall'
-    const closingCapital = result.closingCapital
+    const closingCapital = committedClosingCapital
     const paidWithdrawal = result.paidWithdrawal
-    const capitalAssessment = result
+    const capitalAssessment = surplusReinvested > 0 ? { ...result, closingState: committedClosingState, closingCapital: committedClosingCapital, pendingVorabpauschale: committedPending } : result
     return { capitalAssessment, insurance: income?.insurance,
       yearIndex: index, ageStart: age, ageEnd: age + 1, phase: accumulation ? 'accumulation' : 'retirement', inflationFactor,
       nominalReturnRate: result.openingCapital ? result.investmentReturn / result.openingCapital : rates.reduce((s, r) => s + r.totalReturnRate * weights[buckets.findIndex(b => b.id === r.id)], 0),
@@ -112,7 +154,7 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
       contribution, desiredSpending, retirementIncome: retirementIncomeNet, retirementIncomeGross: income?.gross ?? 0,
       retirementIncomeDeductions: income?.deductions ?? 0, retirementIncomeOtherDeductions: income?.otherDeductions ?? 0,
       healthInsurance: income?.kv ?? 0, careInsurance: income?.pv ?? 0, portfolioContributionBase: income?.portfolioBase ?? 0,
-      retirementIncomeNet, surplusIncome: Math.max(0, retirementIncomeNet - desiredSpending),
+      retirementIncomeNet, surplusIncome, surplusReinvested,
       gapWithdrawal, gapWithdrawalToday: gapWithdrawal / inflationFactor,
       ...(!accumulation ? { pensionIncomeTax, pensionTaxBase } : {}),
       ...(result.withdrawalTax ? {

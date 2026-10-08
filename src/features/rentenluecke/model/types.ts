@@ -82,6 +82,7 @@ export type YearlyPeriodRow = {
   portfolioContributionBase: number
   retirementIncomeNet: number
   surplusIncome: number
+  surplusReinvested?: number
   gapWithdrawal: number
   gapWithdrawalToday: number
   capitalIncomeTax?: number

@@ -297,9 +297,9 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
         scaledSparerpauschbetrag(row.inflationFactor), true, assessment.bankInterest)
       expect(row.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
       expect(row.taxableWithdrawal).toBeCloseTo(expected.taxableWithdrawal, 9)
-      // Estimator conservation through the single authoritative outflow.
+      // Estimator conservation through the single authoritative outflow plus reinvested surplus.
       expect(row.closingCapital).toBeCloseTo(
-        row.openingCapital + row.investmentReturn + row.contribution - assessment.paidWithdrawal, 6)
+        row.openingCapital + row.investmentReturn + row.contribution - assessment.paidWithdrawal + (row.surplusReinvested ?? 0), 6)
       openingLoss = assessment.closingState!.simulatedLossCarryforward
     }
   })
@@ -340,7 +340,7 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
     expect(first.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
   })
 
-  it('leaves surplus income outside the portfolio with interest credited exactly once', () => {
+  it('reinvests surplus income year-end with interest credited exactly once', () => {
     const input = interestFixture()
     input.currentAge = input.retirementAge = 67
     input.monthlyDesiredSpendingToday = 100
@@ -351,9 +351,11 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
     expect(full.summary.requiredCapitalAtRetirement).toBe(0)
     for (const row of full.rows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
+      expect(row.surplusReinvested).toBeCloseTo(row.surplusIncome, 8)
       expect(row.capitalAssessment!.paidWithdrawal).toBe(0)
-      // No double credit: the credited gross interest is inside the single return.
-      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn, 6)
+      expect(row.surplusIncome).toBeCloseTo(Math.max(0, row.retirementIncomeNet - row.desiredSpending - (row.capitalIncomeTax ?? 0)), 8)
+      // No double credit: the credited gross interest is inside the single return; surplus adds once.
+      expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + (row.surplusReinvested ?? 0), 6)
     }
   })
 })

@@ -80,7 +80,7 @@ export function YearlyTable({ rows }: YearlyTableProps) {
                   <th>Steuerpflichtige Fondserträge / Zinsen</th>
                   <th>Sparerpauschbetrag angerechnet</th>
                   <th>Nettoentnahme nach Steuer</th>
-                  <th>Konsumierter Überschuss</th>
+                  <th title="Im Endkapital enthalten: Jahresüberschuss nach allen modellierten Abzügen wird am Jahresende reinvestiert">Überschuss (reinvestiert)</th>
                   <th>Nicht gedeckte Entnahme</th>
                 </>
               ) : null}
