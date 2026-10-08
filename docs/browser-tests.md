@@ -20,7 +20,7 @@ Journeys (all on Chromium unless noted):
 2. `e2e/readiness-links.spec.ts` — missing answers block the forecast, issue
    links focus the relevant controls, correcting enables results.
 3. `e2e/persistence.spec.ts` — reload retains the nonzero cost basis,
-   holdings, insurance answers and the deterministic required-capital result
+   holdings, insurance answers and the deterministic median-capital result
    text (stable text compared before/after, not discarded).
 4. `e2e/capital-mode.spec.ts` — mandatory detailed-portfolio gating across
    insurance modes: no per-phase capital selects, mode switching preserves

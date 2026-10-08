@@ -56,7 +56,9 @@ describe('integrated capital assessment ledger', () => {
     const full = simulateScenarioWithReturnPath(input, [], undefined, path(input))
     const sampled = simulateCapitalLedgerPath(normalizeInput(input), path(input), () => 0)
     expect(sampled.rows).toEqual(full.rows)
-    expect(full.summary.requiredCapitalAtRetirement).toBe(0)
+    expect(full.summary.survivesUntilPlanningAge).toBe(true)
+    expect(full.retirementRows.every((row) => !row.depleted)).toBe(true)
+    expect(full.retirementRows.every((row) => row.unfundedWithdrawal === 0)).toBe(true)
     for (const row of full.rows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
       expect(row.surplusReinvested).toBeCloseTo(row.surplusIncome, 8)
@@ -70,7 +72,7 @@ describe('integrated capital assessment ledger', () => {
       expect(row.surplusIncome).toBeLessThanOrEqual(Math.max(0, row.retirementIncomeNet - row.desiredSpending) + 1e-9)
     }
   })
-  it('retains worthless fund costs without disposal and searches fresh capital after accumulation loss', () => {
+  it('retains worthless fund costs without disposal and funds fresh capital after accumulation loss', () => {
     const input = estimatorInput()
     input.estimatorPortfolio = [{ ...input.estimatorPortfolio![0], value: input.currentCapital }]
     input.monthlyContributionToday = 0
@@ -80,7 +82,9 @@ describe('integrated capital assessment ledger', () => {
     expect(result.rows[0].capitalAssessment!.closingState!.fundAcquisitionCost).toBe(30000)
     expect(result.rows[0].capitalAssessment!.closingState!.simulatedLossCarryforward).toBe(0)
     expect(result.retirementRows[0].unfundedWithdrawal).toBeGreaterThan(0)
-    expect(result.summary.requiredCapitalAtRetirement).toBeGreaterThan(0)
+    expect(result.summary.survivesUntilPlanningAge).toBe(false)
+    expect(result.summary.depletionAge).not.toBeNull()
+    expect(result.retirementRows.every((row) => row.closingCapital >= 0)).toBe(true)
     expect(simulateCapitalLedgerPath(normalizeInput(input), returns, () => 0).rows).toEqual(result.rows)
   })
   it('rejects allocation purchases at zero NAV explicitly without mutating the input', () => {
@@ -191,22 +195,22 @@ describe('integrated capital assessment ledger', () => {
     expect(simulateHistoricalBootstrapScenario(input, settings)).toEqual(simulateHistoricalBootstrapScenario(input, settings))
     expect(runHistoricalBootstrapSimulation(input, settings)).toEqual(runHistoricalBootstrapSimulation(input, settings))
   }, 30000)
-  it('searches required capital with the same cost ratio and funding calculation', () => {
+  it('keeps cost ratio and funding consistent in the forward ledger with exact-zero distinction', () => {
     const input = estimatorInput()
     input.currentAge = input.retirementAge = 67
     input.planningAge = 69
     input.retirementInsurance!.pension = { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' }
     const result = simulateScenarioWithReturnPath(input, [], undefined, path(input))
-    const required = result.summary.requiredCapitalAtRetirement
-    const scaled = structuredClone(input)
-    scaled.currentCapital = required
-    scaled.estimatorPortfolio!.forEach(b => { b.value *= required / input.currentCapital })
-    scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= required / input.currentCapital
-    expect(simulateScenarioWithReturnPath(scaled, [], undefined, path(scaled)).summary.survivesUntilPlanningAge).toBe(true)
-    scaled.currentCapital = required - 2
-    scaled.estimatorPortfolio!.forEach(b => { b.value *= (required - 2) / required })
-    scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= (required - 2) / required
-    expect(simulateScenarioWithReturnPath(scaled, [], undefined, path(scaled)).summary.survivesUntilPlanningAge).toBe(false)
+    // Forward ledger only: cost ratio preserved, funding visible without a lifetime search.
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
+    for (const row of result.retirementRows) {
+      expect(row.closingCapital).toBeGreaterThanOrEqual(0)
+      expect(row.closingCapital).toBeCloseTo(
+        row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal + (row.surplusReinvested ?? 0), 6)
+    }
+    // Exact-zero fully funded counts as survival, distinct from unfunded depletion.
+    expect(result.retirementRows.every((row) => row.unfundedWithdrawal === 0)).toBe(result.summary.survivesUntilPlanningAge)
   })
   it('keeps bank-only gross interest separate from costs and ignores retained hidden fund setup', () => {
     const input = estimatorInput()

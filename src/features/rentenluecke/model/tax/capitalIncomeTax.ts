@@ -29,7 +29,7 @@ const inflationFactorSchema = z.number().finite().nonnegative()
 /** Effective annual Sparerpauschbetrag for a model year: base 1,000 EUR scaled by
  * the scenario's cumulative inflation factor. Planning assumption — the statute
  * fixes nominal amounts; scaling keeps the allowance's real value constant.
- * Schemas are module-level so hot paths (capital search, bootstrap trials) reuse
+ * Schemas are module-level so hot paths (funding-solver trials, bootstrap trials) reuse
  * them instead of rebuilding per call. */
 export function scaledSparerpauschbetrag(inflationFactor: number): number {
   return money.parse(SPARERPAUSCHBETRAG_SINGLE * inflationFactorSchema.parse(inflationFactor))

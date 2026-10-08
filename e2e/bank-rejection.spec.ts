@@ -52,6 +52,6 @@ test('bank deposit without confirmed common rate stays blocked with cash issue',
   // result panel surfaces the same cash issue instead of the generic
   // open-forecast text, and no forecast artefacts appear.
   await expect(page.getByText('KV/PV-Abrechnung im Detail', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Dein Kapitalbedarf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Kapital zum Rentenbeginn', { exact: true })).toHaveCount(0);
   await expect(page.locator('#ergebnis').getByText(/Tagesgeld-Planungszins unter Rechenannahmen/)).toBeVisible({ timeout: 30000 });
 });

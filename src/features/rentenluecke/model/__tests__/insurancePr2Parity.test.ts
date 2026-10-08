@@ -41,7 +41,7 @@ function equivalentCases(name: typeof cases[number]): { legacy: RentenlueckeInpu
 }
 function expectNumericalParity(actual: SimulationResult, legacy: SimulationResult) {
   expect(actual.rows).toEqual(legacy.rows)
-  expect(actual.summary.requiredCapitalAtRetirement).toBe(legacy.summary.requiredCapitalAtRetirement)
+  expect(actual.summary.projectedCapitalAtRetirement).toBe(legacy.summary.projectedCapitalAtRetirement)
   expect(actual.summary).toEqual(legacy.summary)
   for (const row of actual.retirementRows) {
     // Assessment-only capital must never enter spendable receipts. Insurance is deducted once.
@@ -51,7 +51,7 @@ function expectNumericalParity(actual: SimulationResult, legacy: SimulationResul
 }
 
 describe('PR2 canonical answers versus equivalent legacy engine inputs', () => {
-  it.each(cases)('%s: full annual ledger, capital search, explicit paths and fixed-seed bootstrap parity', name => {
+  it.each(cases)('%s: full annual ledger, explicit paths and fixed-seed bootstrap parity', name => {
     const { legacy, coverage } = equivalentCases(name)
     const snapshot = structuredClone(legacy)
     // Deliberately stale cached fields prove canonical answers actually control the model input.

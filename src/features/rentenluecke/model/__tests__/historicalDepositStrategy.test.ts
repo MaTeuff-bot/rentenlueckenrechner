@@ -259,7 +259,7 @@ describe('deterministic reference and required capital', () => {
     }
     const constant = simulateHistoricalBootstrapReferenceScenario(input, constantSettings)
     expect(first.rows[0].closingCapitalToday).not.toBe(constant.rows[0].closingCapitalToday)
-    expect(Number.isFinite(first.summary.requiredCapitalAtRetirement)).toBe(true)
+    expect(Number.isFinite(first.summary.projectedCapitalAtRetirement)).toBe(true)
   })
 
   it('credits gross bank interest once and taxes it through the existing ledger', () => {

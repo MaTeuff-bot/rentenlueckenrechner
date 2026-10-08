@@ -101,9 +101,6 @@ export type SimulationSummary = {
   annualGapToday: number
   monthlyGapToday: number
   projectedCapitalAtRetirement: number
-  requiredCapitalAtRetirement: number
-  capitalShortfallAtRetirement: number
-  capitalSurplusAtRetirement: number
   depletionAge: number | null
   depletionAgeEnd: number | null
   survivesUntilPlanningAge: boolean

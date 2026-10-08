@@ -1,5 +1,5 @@
-// Validation-free Abgeltungsteuer arithmetic for hot paths (solver trials, capital
-// search). Deliberately dependency-free: no zod in this module so V8 optimizes the
+// Validation-free Abgeltungsteuer arithmetic for hot paths (within-year solver trials).
+// Deliberately dependency-free: no zod in this module so V8 optimizes the
 // tight per-year/per-trial call without module-level parse overhead.
 export function assessCore(
   fundSaleGain: number,

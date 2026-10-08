@@ -62,7 +62,11 @@ describe('RentenlueckeCalculator', () => {
     render(<RentenlueckeCalculator />)
 
     expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
-    expect(screen.getAllByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toHaveLength(0)
+    expect(screen.getAllByText(/Median-Kapital zum Rentenbeginn/)).not.toHaveLength(0)
+    expect(screen.getByText(/P50 ist ein Stichtagswert je Alter/)).toBeInTheDocument()
+    expect(screen.queryByText(/Benötigtes Kapital zum Rentenbeginn/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Kapital-Lücke zum Rentenbeginn/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Median-Überschuss zum Rentenbeginn/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' })).toBeInTheDocument()
     fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
     fireEvent.click(screen.getByRole('tab', { name: /Rechenannahmen/ }))

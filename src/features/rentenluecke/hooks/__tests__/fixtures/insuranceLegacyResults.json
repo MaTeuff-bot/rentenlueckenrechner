@@ -428,9 +428,6 @@
         "annualGapToday": 12847.08384,
         "monthlyGapToday": 1070.59032,
         "projectedCapitalAtRetirement": 78530.17919,
-        "requiredCapitalAtRetirement": 37898.096917593815,
-        "capitalShortfallAtRetirement": 0,
-        "capitalSurplusAtRetirement": 40632.08227240618,
         "depletionAge": null,
         "depletionAgeEnd": null,
         "survivesUntilPlanningAge": true
@@ -723,9 +720,6 @@
         "annualGapToday": 12847.08384,
         "monthlyGapToday": 1070.59032,
         "projectedCapitalAtRetirement": 84717.21848720765,
-        "requiredCapitalAtRetirement": 37609.03881516981,
-        "capitalShortfallAtRetirement": 0,
-        "capitalSurplusAtRetirement": 47108.17967203783,
         "depletionAge": null,
         "depletionAgeEnd": null,
         "survivesUntilPlanningAge": true
@@ -1319,9 +1313,6 @@
         "annualGapToday": 14400,
         "monthlyGapToday": 1200,
         "projectedCapitalAtRetirement": 78530.17919,
-        "requiredCapitalAtRetirement": 42479.102838434585,
-        "capitalShortfallAtRetirement": 0,
-        "capitalSurplusAtRetirement": 36051.07635156541,
         "depletionAge": null,
         "depletionAgeEnd": null,
         "survivesUntilPlanningAge": true
@@ -1614,9 +1605,6 @@
         "annualGapToday": 14400,
         "monthlyGapToday": 1200,
         "projectedCapitalAtRetirement": 84819.48308788413,
-        "requiredCapitalAtRetirement": 41969.68719134099,
-        "capitalShortfallAtRetirement": 0,
-        "capitalSurplusAtRetirement": 42849.79589654314,
         "depletionAge": null,
         "depletionAgeEnd": null,
         "survivesUntilPlanningAge": true

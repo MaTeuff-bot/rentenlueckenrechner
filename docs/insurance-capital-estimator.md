@@ -1,7 +1,7 @@
 # Insurance capital-income estimator: integrated annual planning model
 
-PR2 activates the PR1 estimator in the shared yearly ledger. Deterministic results,
-required-capital search and historical bootstrap use the same fund/bank accounting,
+PR2 activates the PR1 estimator in the shared yearly ledger. Deterministic results
+and historical bootstrap use the same fund/bank accounting,
 income and KV/PV calculation. React only edits inputs and displays ledger outputs.
 The insurance callback itself returns only KV/PV and never adds tax costs; the
 ledger integration separately calculates Kapitalertragsteuer on withdrawals,
@@ -19,8 +19,7 @@ until removed/replaced. No partial coverage, automatic switching or liquidation 
 in euros (zero is explicit); it excludes bank principal. Scope and eligible loss-pool
 declarations are required. Missing values do not produce a complete forecast.
 An all-zero opening portfolio is incomplete because no
-allocation weights can be derived. Depletion after a valid opening allocation is supported and retains that
-allocation for hypothetical required-capital searches.
+allocation weights can be derived. Depletion after a valid opening allocation is supported.
 
 Persistence stays at version/key v15. Classification, setup and holdings are
 additive optional fields; valid existing amounts, income streams, allocation and
@@ -233,13 +232,9 @@ opening bucket exactly once; missing years never fall back to expected returns.
 Allocation purchases after a −100% fund return are rejected explicitly as zero-NAV
 purchases, just like savings purchases; this does not recognize a disposal or loss.
 
-Required-capital search uses the same retirement ledger and a €1 bracket. Hypothetical
-starting portfolios scale the projected per-euro acquisition cost, assessed/pending VP
-and simulated loss history. This is an explicit search assumption, not a transaction
-or mutation of the actual portfolio. When projected assets are zero, hypothetical new
-funds are acquired at cost with no prior adjustments. Bootstrap percentile trials
-calculate the same actual ledger without running unused required-capital searches;
-the reference result still performs the complete search.
+The forward ledger carries actual cashflows and survival only; no lifetime
+capital search is performed. Bootstrap percentile trials calculate the same actual
+ledger; the reference result is the same forward ledger at expected returns.
 
 ## Verification
 

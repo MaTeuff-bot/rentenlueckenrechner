@@ -6,6 +6,11 @@ Engine behavior underneath is covered by
 `src/features/rentenluecke/model/tax/bankInterestTax.test.ts` and
 `src/features/rentenluecke/components/__tests__/CapitalTaxLabels.test.tsx`.
 
+> Supersession-Hinweis (probability-led-results): Die Lebenszeit-Kapitalbedarfssuche
+> wurde entfernt; Karten- und Abschnittstitel lauten jetzt `Kapital zum Rentenbeginn`
+> bzw. `Median-Kapital zum Rentenbeginn (P50)`. Die nachfolgenden Schritte bleiben als
+> historische Aufnahme erhalten.
+
 ## 0. Start / reset (read first — saved data warning)
 
 1. `Eingaben` panel heading → `Eingaben zurücksetzen` restores factory defaults

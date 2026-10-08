@@ -4,7 +4,7 @@ import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, createDefaultR
 import { rentenlueckeInputSchema } from '../inputSchema'
 import { simulateScenario } from '../simulateScenario'
 import { simulateScenarioWithReturnPath } from '../stochasticReturns'
-import { automaticInsurance, insuredInput, pension, withScaledCapital, zeroBucketPath } from './insuranceFixtures'
+import { automaticInsurance, insuredInput, pension, zeroBucketPath } from './insuranceFixtures'
 import { expectedBucketReturns } from '../capitalIncome/returns'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 
@@ -136,12 +136,12 @@ describe('authoritative contribution ledger', () => {
     expect(row.retirementIncomeDeductions).toBeCloseTo(row.retirementIncomeGross - row.retirementIncomeNet - (row.pensionIncomeTax ?? 0))
     // Mandatory detailed ledger: the 60/40 fund/bank portfolio earns modeled 5 %
     // (6,000-fund/4,000-bank blended expectation: 5,000 on 100,000 with 800 bank
-    // interest, fully allowance-covered so capitalIncomeTax stays 0). Future gaps
-    // are partly return-funded, so the searched 2,447.51 sits below the nominal
-    // 3 × 898.725 = 2,696.175 sum (tier-3 pin for the taxed search).
+    // interest, fully allowance-covered so capitalIncomeTax stays 0). The forward
+    // ledger funds the actual gap from returns and capital (no lifetime search).
     expect(row.investmentReturn).toBeCloseTo(5_000)
     expect(row.capitalIncomeTax).toBe(0)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(2447.509765625, 0)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
   })
   it('turns an apparent income surplus into a funded gap after insurance', () => {
     const input = insuredInput({ monthlyDesiredSpendingToday: 1900 })
@@ -163,9 +163,9 @@ describe('authoritative contribution ledger', () => {
     expect(row.investmentReturn).toBeCloseTo(5_000)
     expect(row.capitalIncomeTax).toBe(0)
     expect(row.closingCapital).toBeCloseTo(102_366)
-    // Required capital funds the return-reduced gaps (tier-3 pin), not the
-    // nominal 3 × 2,634 = 7,902 sum.
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(7173.15673828125, 0)
+    // Forward ledger only: return-reduced gaps funded from actual capital (no lifetime search).
+    expect(result.summary.survivesUntilPlanningAge).toBe(true)
+    expect(result.retirementRows.every((row) => !row.depleted)).toBe(true)
   })
   it('keeps rental cash separate from its pre-tax assessment and never adds capital basis as cash', () => {
     // Mandatory: the capital assessment is modeled from the detailed portfolio
@@ -209,10 +209,8 @@ describe('authoritative contribution ledger', () => {
     // insurance: 24,000 + 3,243.09 + 160.34 = 27,403.43.
     expect(row.capitalIncomeTax).toBeCloseTo(160.33553873023286, 8)
     expect(row.gapWithdrawal).toBeCloseTo(27403.427338730235, 8)
-    expect(result.summary.requiredCapitalAtRetirement).toBeCloseTo(50868.988037109375, 0)
-    // Monotone search on the same detailed ledger: required survives, 2 € less fails.
-    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement), 0.02).summary.survivesUntilPlanningAge).toBe(true)
-    expect(simulateScenario(withScaledCapital(input, result.summary.requiredCapitalAtRetirement - 2), 0.02).summary.survivesUntilPlanningAge).toBe(false)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
   })
   it('indexes bases and thresholds with path inflation; phase and stream boundaries use row start age', () => {
     // Mandatory: the capital assessment is modeled per bucket, never a legacy

@@ -88,8 +88,8 @@ test('surplus reinvestment journey shows reinvested surplus and persists on relo
   expect(surplusTextBefore).not.toBe('');
   expect(endTextBefore).not.toBe('');
 
-  const requiredCapitalBefore = await page.locator('article.result-card-primary').textContent();
-  expect(requiredCapitalBefore).toContain('Benötigtes Kapital zum Rentenbeginn');
+  const medianBefore = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
+  expect(medianBefore).toContain('Median-Kapital zum Rentenbeginn');
 
   // Entered values are retained via the visible controls themselves.
   await page.getByRole('tab', { name: /Pers.nlicher Plan/ }).click();
@@ -102,8 +102,8 @@ test('surplus reinvestment journey shows reinvested surplus and persists on relo
   await page.getByRole('tab', { name: /Pers.nlicher Plan/ }).click();
   await expect(page.locator('#monthlyDesiredSpendingToday')).toHaveValue('100');
   await expect(page.locator('#retirement-income-amount-statutory-pension')).toHaveValue('5000');
-  const requiredCapitalAfter = await page.locator('article.result-card-primary').textContent();
-  expect(requiredCapitalAfter).toBe(requiredCapitalBefore);
+  const medianAfter = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
+  expect(medianAfter).toBe(medianBefore);
 
   await openYearlyTable(page);
   await page.getByRole('checkbox', { name: 'Details anzeigen' }).check();

@@ -46,7 +46,7 @@ planning approximation, disclosed like the insurance funding approximation.
 The retirement gap is a *net* obligation. The portfolio must fund
 `gapWithdrawal + capitalIncomeTax`, not just the gross withdrawal. A withdrawal
 whose sale proceeds do not cover tax plus gap leaves `unfundedWithdrawal` as today
-(never silently covered). This changes required-capital search inputs, so the
+(never silently covered). This changes forward-ledger funding inputs, so the
 reference-scenario and invariant suites pin the new numbers.
 
 ## Implemented rules

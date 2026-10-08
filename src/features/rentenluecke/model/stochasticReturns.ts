@@ -8,7 +8,6 @@ import { applySourceCostTreatment } from './historicalReturns/bootstrapSampling'
 import { deriveSummary } from './deriveSummary'
 import { rentenlueckeInputSchema } from './inputSchema'
 import { normalizeInput } from './normalizeInput'
-import { calculateRequiredCapitalAtRetirement } from './requiredCapital'
 import { simulateAccumulationRows } from './simulateAccumulation'
 import { simulateRetirementRows } from './simulateRetirement'
 import { simulateScenario } from './simulateScenario'
@@ -173,15 +172,8 @@ export function simulateScenarioWithReturnPath(
   const accumulationRows = simulateAccumulationRows(scenario, getAnnualReturn, getAnnualInflation)
   const projectedCapitalAtRetirement = accumulationRows.at(-1)?.closingCapital ?? scenario.currentCapital
   const retirementRows = simulateRetirementRows(scenario, projectedCapitalAtRetirement, getAnnualReturn, getAnnualInflation)
-  const requiredCapitalAtRetirement = calculateRequiredCapitalAtRetirement(
-    scenario,
-    undefined,
-    getAnnualInflation,
-    retirementRows,
-  )
   const summary = deriveSummary(
     projectedCapitalAtRetirement,
-    requiredCapitalAtRetirement,
     retirementRows,
   )
 
@@ -209,9 +201,7 @@ export function runStochasticSimulation(
   const parsedForBuckets = rentenlueckeInputSchema.parse(input)
   const useDetailed = needsDetailedPortfolio(parsedForBuckets)
   // Stochastic detailed paths aggregate actual ledger rows/survival per sampled
-  // per-bucket path, like the bootstrap. The required-capital search is skipped
-  // per path (it is unused for percentiles/success); the deterministic plan line
-  // above carries the authoritative search.
+  // per-bucket path, like the bootstrap.
   const capitalScenario = useDetailed ? normalizeInput(parsedForBuckets) : undefined
   const pathResults = Array.from({ length: settings.simulations }, () => {
     if (useDetailed) {

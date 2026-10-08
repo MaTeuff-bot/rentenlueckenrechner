@@ -56,9 +56,8 @@ NOT enter the zvE (Abgeltung fertig, slices 1/1b are separate).
   the selected trial, consumed once). A small rounding excess (≤ inflation
   factor, from §32a floor steps) is repurchased the same year at target weights
   (fund share adds cost plus December VP, no new assessment the same year).
-- Required-capital search needs no separate pension-tax loop: the scalar search
-  reuses the taxed `gapWithdrawal` rows, and the estimator search rebuilds rows
-  through the same taxed path. Same-year funding does not replicate
+- No lifetime capital search is performed; the forward ledger needs no separate pension-tax loop: it
+  reuses the taxed `gapWithdrawal` rows through the same taxed path. Same-year funding does not replicate
   evidenced-year tax billing; tax funding is a planning approximation, disclosed
   like the slice-1 funding approximation.
 

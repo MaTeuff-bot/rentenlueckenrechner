@@ -250,14 +250,12 @@ describe('reference scenario S1: standard KVdR retirement', () => {
     }
   })
 
-  it('pins required capital: 3,972 for one year, funded forever at 0% with income above zero gap', () => {
+  it('carries the 3,972 yearly gap as actual forward withdrawals at 0%', () => {
     // At modeled 0% the gap repeats 3,972 every year (3,108 pre-tax gap + 864
-    // GRV-Rentensteuer, slice 2); required capital is the 2 × 3,972 = 7,944
-    // nominal sum within the ledger search's €1 stop epsilon.
+    // GRV-Rentensteuer, slice 2) as actual forward withdrawals (no lifetime search).
     const result = simulateScenarioWithReturnPath(input, [], undefined, zeroPath)
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(7_944)
-    expect(required).toBeLessThanOrEqual(7_945)
+    expect(result.retirementRows.every((row) => row.gapWithdrawal === 3_972)).toBe(true)
+    expect(result.summary.annualGapToday).toBe(3_972)
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(100_000)
   })
 })
@@ -432,14 +430,9 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
       expect(row.sparerpauschbetragApplied).toBeDefined()
     }
     expectLedgerConservation(result.rows)
-    // Required capital funds gap + both taxes (tier-3 regression pin for the taxed search;
-    // slice 2 raises it by the jointly funded GRV-Rentensteuer: the search rebuilds
-    // rows through the taxed joint path, where each pension-tax share is funded by
-    // the gain-realizing sale itself. Both pins moved with the bank-interest-inclusive
-    // capital tax: the accumulation year now funds 69.365 tax (projected 104,930.635
-    // instead of 105,000); required capital rises to 34,707.357 with joint funding
-    // (was 34,552.850 pension-ignorant).
-    expect(result.summary.requiredCapitalAtRetirement).toBeMoneyClose(34707.357313855726)
+    // Forward ledger funds gap + both taxes through the taxed joint path, where each
+    // pension-tax share is funded by the gain-realizing sale itself. The accumulation
+    // year funds 69.365 tax (projected 104,930.635 instead of 105,000).
     expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(104930.63472440137)
   })
 
@@ -465,8 +458,7 @@ describe('reference scenario S5: zero-start accumulation', () => {
   it('blocks zero-start forecasts with a truthful diagnostic instead of inventing capital', () => {
     // No zero-start support: a zero opening allocation cannot start the detailed
     // ledger, even with accumulation contributions. The forecast blocks with the
-    // positive-allocation diagnostic on every public route; the required-capital
-    // trial endpoint at zero (candidate(0)) is unaffected — see requiredCapital.
+    // positive-allocation diagnostic on every public route.
     expect(input.currentCapital).toBe(0)
     expect(() => simulateScenario(input, 0.02)).toThrow(/positive Ausgangsallokation/)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, zeroBucketPath(input, input.planningAge - input.currentAge))).toThrow(/positive Ausgangsallokation/)
@@ -494,11 +486,9 @@ describe('reference scenario S6: depleted capital', () => {
     expect(result.summary.depletionAge).toBe(67)
     expectZeroStartNeverBorrows(result.rows)
     expectLedgerConservation(result.rows)
-    // At modeled 0% with no capital tax, required capital is the 8 × 24,000 =
-    // 192,000 nominal sum within the ledger search's €1 stop epsilon.
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(192_000)
-    expect(required).toBeLessThanOrEqual(192_001)
+    // At modeled 0% with no capital tax the forward ledger carries 8 × 24,000 as
+    // actual withdrawals with first-year 14,000 unfunded (no lifetime search).
+    expect(result.retirementRows.reduce((sum, row) => sum + row.gapWithdrawal, 0)).toBe(8 * 24_000)
   })
 })
 

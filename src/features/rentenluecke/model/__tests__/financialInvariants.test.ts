@@ -14,7 +14,6 @@ import type { RentenlueckeInput, YearlyPeriodRow } from '../types'
 import { normalizeInput } from '../normalizeInput'
 import { simulateAccumulationRows } from '../simulateAccumulation'
 import { simulateRetirementRows } from '../simulateRetirement'
-import { calculateRequiredCapitalAtRetirement } from '../requiredCapital'
 import {
   depletedScenario,
   earlyRetirementBridgeScenario,
@@ -23,7 +22,7 @@ import {
   voluntaryPortfolioCapitalScenario,
   zeroStartAccumulationScenario,
 } from './referenceScenarios.test'
-import { withScaledCapital, zeroBucketPath } from './insuranceFixtures'
+import { cashOnlyInput, zeroBucketPath } from './insuranceFixtures'
 
 /**
  * Financial-correctness sweep (hardening PR3). Extends the PR2 reference suite with
@@ -31,7 +30,7 @@ import { withScaledCapital, zeroBucketPath } from './insuranceFixtures'
  * rollforward of acquisition cost / Vorabpauschale / loss balances across the whole
  * ledger, an independent closed-form accumulator for multi-decade convention drift,
  * real/nominal reconciliation, bootstrap-accounting consistency, phase cashflow
- * boundaries and required-capital search soundness.
+ * boundaries and forward capital adequacy (including exact-zero fully-funded success).
  */
 
 const REL = 1e-6
@@ -347,8 +346,8 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
         row.openingCapital + row.investmentReturn + row.contribution - row.gapWithdrawal - row.capitalIncomeTax! + row.unfundedWithdrawal)
     }
     expect(retirementRows[0].closingCapital).toBeMoneyClose(80962.32142857143)
-    // Required capital funds gap + tax, not just the gap (2 x 24,000 = 48,000 pre-tax basis).
-    expect(calculateRequiredCapitalAtRetirement(scenario)).toBeMoneyClose(44696.044921875)
+    // Forward ledger funds gap + tax from actual capital (no lifetime search).
+    expect(retirementRows.every(row => row.unfundedWithdrawal === 0)).toBe(true)
     expect(retirementRows.every(row => !row.depleted)).toBe(true)
   })
 
@@ -512,27 +511,44 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
   })
 })
 
-describe('required-capital search soundness', () => {
-  it('is monotone: any capital below the required amount depletes, any above survives', () => {
-    const input = prepare(depletedScenario())
-    const result = simulateScenario(input, 0.02)
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThan(0)
-    // Depleted scenario: search over the same ledger must sit between survive/fail.
-    // Probes rescale the whole detailed portfolio (values plus pooled fund cost),
-    // never currentCapital alone, so the ledger stays consistent.
-    expect(simulateScenario(withScaledCapital(input, required), 0.02).summary.survivesUntilPlanningAge).toBe(true)
-    expect(simulateScenario(withScaledCapital(input, Math.max(0, required - 2)), 0.02).summary.survivesUntilPlanningAge).toBe(false)
+describe('forward capital adequacy (exact-zero and depletion)', () => {
+  it('treats exact-zero closing with fully funded withdrawals as survival', () => {
+    // Scalar hand case: 1,200 capital funds a 1,200 gap at 0% with no tax, so the
+    // forward ledger closes at exactly zero without depletion or unfunded remainder.
+    const scenario = normalizeInput(
+      prepare(cashOnlyInput({ currentAge: 67, retirementAge: 67, planningAge: 68, currentCapital: 1_200, monthlyContributionToday: 0, monthlyDesiredSpendingToday: 100, monthlyRetirementIncomeToday: 0, annualInflationRate: 0, annualReturnInRetirement: 0 })),
+    )
+    const [row] = simulateRetirementRows(scenario, 1_200)
+    expect(row.gapWithdrawal).toBe(1_200)
+    expect(row.closingCapital).toBe(0)
+    expect(row.depleted).toBe(false)
+    expect(row.unfundedWithdrawal).toBe(0)
   })
 
-  it('equals the hand-computed annuity-free sum for constant gaps at zero return and inflation', () => {
-    // 8 retirement years × 24,000 gap = 192,000 at explicitly modeled zero
-    // returns with a full cost basis (no capital tax); the ledger search stops
-    // within €1 above the nominal sum.
+  it('marks depletion with clamped zero and unfunded remainder when proceeds are insufficient', () => {
+    // Same hand case with 1,000 capital against the 1,200 gap: the forward ledger
+    // clamps at zero, flags depletion and keeps the 200 shortfall visible.
+    const scenario = normalizeInput(
+      prepare(cashOnlyInput({ currentAge: 67, retirementAge: 67, planningAge: 68, currentCapital: 1_000, monthlyContributionToday: 0, monthlyDesiredSpendingToday: 100, monthlyRetirementIncomeToday: 0, annualInflationRate: 0, annualReturnInRetirement: 0 })),
+    )
+    const [row] = simulateRetirementRows(scenario, 1_000)
+    expect(row.gapWithdrawal).toBe(1_200)
+    expect(row.closingCapital).toBe(0)
+    expect(row.depleted).toBe(true)
+    expect(row.unfundedWithdrawal).toBeCloseTo(200, 8)
+  })
+
+  it('carries the hand-computed gap sum as actual forward withdrawals at zero return and inflation', () => {
+    // 8 retirement years × 24,000 gap at explicitly modeled zero returns with a
+    // full cost basis (no capital tax) as actual forward withdrawals.
     const input = prepare(depletedScenario())
     const result = simulateScenarioWithReturnPath(input, [], undefined, zeroBucketPath(input, input.planningAge - input.currentAge))
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(8 * 24_000)
-    expect(required).toBeLessThanOrEqual(8 * 24_000 + 1)
+    const gapSum = result.retirementRows.reduce((sum, row) => sum + row.gapWithdrawal, 0)
+    expect(gapSum).toBe(8 * 24_000)
+    expect(result.summary.survivesUntilPlanningAge).toBe(false)
+    expect(result.summary.depletionAge).toBe(67)
+    expect(result.retirementRows[0].depleted).toBe(true)
+    expect(result.retirementRows[0].unfundedWithdrawal).toBe(14_000)
+    expect(result.retirementRows[0].closingCapital).toBe(0)
   })
 })

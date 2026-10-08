@@ -125,7 +125,7 @@ export async function setupFundOnlyBridge(page: Page) {
 
 export async function expectForecast(page: Page) {
   await page.getByText('KV/PV-Abrechnung im Detail', { exact: true }).waitFor({ timeout: 30000 });
-  await expect(page.getByText('Dein Kapitalbedarf', { exact: true })).toBeVisible();
+  await expect(page.getByText('Kapital zum Rentenbeginn', { exact: true })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Kapitalverlauf und Überlebenswahrscheinlichkeit' }),
   ).toBeVisible();
@@ -134,7 +134,7 @@ export async function expectForecast(page: Page) {
 export async function expectNoForecast(page: Page) {
   await expect(page.getByText(/Deine Prognose ist noch offen/)).toBeVisible();
   await expect(page.getByText('KV/PV-Abrechnung im Detail', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Dein Kapitalbedarf', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Kapital zum Rentenbeginn', { exact: true })).toHaveCount(0);
 }
 
 export async function openInsuranceBreakdown(page: Page) {

@@ -6,7 +6,7 @@ demselben Simulationsergebnis ab und berechnen keine eigene Geschäftslogik.
 
 ## Zonen
 
-- `src/features/rentenluecke/model/` — Framework-freie Rechenengine: Validierung, Normalisierung, deterministische Jahressimulation (Ledger), Kapitalbedarfssuche, stochastische Renditen. Kein React, kein DOM, keine UI-Importe.
+- `src/features/rentenluecke/model/` — Framework-freie Rechenengine: Validierung, Normalisierung, deterministische Jahressimulation (Ledger), stochastische Renditen. Kein React, kein DOM, keine UI-Importe.
 - `src/features/rentenluecke/hooks/` — React-Zustandsorchestrierung: Szenariozustand, Modellaufrufe, lokale Browserpersistenz. Keine Finanzformeln.
 - `src/features/rentenluecke/components/` — React-Darstellung: Eingaben, Kennzahlen, Recharts-Diagramm, Jahrestabelle sowie UI-Formatierung (`format.ts`). Keine Finanzformeln. Die Eingaben sind in vier Tabs gruppiert (lokaler State, kein Router); die Vermögens-Ansicht trennt presentational „Was ich besitze“/„Wie ich anlegen will“.
 - `src/features/rentenluecke/charting/` — Reine Ableitung von Diagramm-/Anzeigezeilen und Risiko-Chips aus Simulationsergebnissen (mit Mortalitäts-Overlay). Kein React.

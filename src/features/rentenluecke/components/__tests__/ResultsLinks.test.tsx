@@ -48,15 +48,20 @@ beforeEach(() => {
 })
 
 describe('results-to-inputs linking', () => {
-  it('routes required-capital and spending results to their owning inputs', () => {
+  it('routes median-capital, work-end and spending results to their owning inputs', () => {
     render(<RentenlueckeCalculator />)
 
-    const requiredLink = screen.getByRole('link', { name: 'Benötigtes Kapital anpassen: Vermögen bearbeiten' })
-    expect(requiredLink).toHaveAttribute('href', '#portfolio-add')
-    fireEvent.click(requiredLink)
+    const savingsLink = screen.getByRole('link', { name: 'Sparrate anpassen: Vermögen bearbeiten' })
+    expect(savingsLink).toHaveAttribute('href', '#monthlyContributionToday')
+    fireEvent.click(savingsLink)
     expect(screen.getByRole('tab', { name: /Vermögen/ })).toHaveAttribute('aria-selected', 'true')
-    expect(document.getElementById('input-tabpanel-vermoegen')).toBeVisible()
-    expect(document.activeElement).toBe(document.getElementById('portfolio-add'))
+    expect(document.activeElement).toBe(document.getElementById('monthlyContributionToday'))
+
+    const workEndLink = screen.getByRole('link', { name: 'Zeitplan anpassen: Rentenalter bearbeiten' })
+    expect(workEndLink).toHaveAttribute('href', '#retirementAge')
+    fireEvent.click(workEndLink)
+    expect(screen.getByRole('tab', { name: /Persönlicher Plan/ })).toHaveAttribute('aria-selected', 'true')
+    expect(document.activeElement).toBe(document.getElementById('retirementAge'))
 
     const spendingLink = screen.getByRole('link', { name: 'Gewünschte Ausgaben anpassen: Ausgaben bearbeiten' })
     expect(spendingLink).toHaveAttribute('href', '#monthlyDesiredSpendingToday')

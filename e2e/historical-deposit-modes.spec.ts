@@ -50,14 +50,14 @@ test('historical deposit strategy forecasts with floor disclosure and reloads', 
   await expect(rows.first()).toBeVisible();
   await expect(await rows.count()).toBeGreaterThan(5);
 
-  const before = await page.locator('article.result-card-primary').textContent();
+  const before = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
   await page.reload();
   await page.getByRole('tab', { name: /Rechenannahmen/ }).click();
   await expect(page.locator('#cash-mode-historical')).toBeChecked();
   await expect(page.locator('#cash-planning-rate-confirmed')).toBeChecked();
   await expect(page.getByTestId('cash-historical-disclosure')).toBeVisible();
   await expectForecast(page);
-  const after = await page.locator('article.result-card-primary').textContent();
+  const after = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
   expect(after).toBe(before);
 });
 
@@ -78,13 +78,13 @@ test('real-rate assumption forecasts with floor disclosure and reloads', async (
   await expect(rows.first()).toBeVisible();
   await expect(await rows.count()).toBeGreaterThan(5);
 
-  const before = await page.locator('article.result-card-primary').textContent();
+  const before = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
   await page.reload();
   await page.getByRole('tab', { name: /Rechenannahmen/ }).click();
   await expect(page.locator('#cash-mode-real')).toBeChecked();
   await expect(page.locator('#cash-planning-rate-confirmed')).toBeChecked();
   await expect(page.getByTestId('cash-real-disclosure')).toBeVisible();
   await expectForecast(page);
-  const after = await page.locator('article.result-card-primary').textContent();
+  const after = await page.locator('article.result-card:has-text("Median-Kapital zum Rentenbeginn")').textContent();
   expect(after).toBe(before);
 });
