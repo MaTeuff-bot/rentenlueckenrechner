@@ -25,6 +25,11 @@ After the final Codex fixes:
 - Real Chromium script scripts/verifyInsuranceEstimatorBrowser.mjs: desktop 1440 and mobile 390 passed again after fixes. JSON and screenshots in this directory. No page errors, horizontal overflow or unrelated-storage deletion.
 - Hermes reviewed ledger, return paths, setup/persistence and source-rule interaction; re-fetched official InvStG sections 18/19. Focused Codex review fixed zero-capital completeness, malformed explicit paths and zero-NAV allocation purchase diagnostics, adding regressions. Hermes then independently reran the full gates above.
 
+> Supersession-Hinweis (probability-led-results): Die Lebenszeit-Kapitalbedarfssuche
+> (`requiredCapital`) wurde entfernt; das Forward-Ledger und der inneryearliche
+> Finanzierungsausgleich bleiben unverändert. Die nachfolgenden Absätze beschreiben
+> den damaligen Stand und bleiben als historische Aufnahme erhalten.
+
 ## Remaining review focus and limitations
 
 This is an annual planning approximation, not exact insurer billing or fully after-tax spending power. Historical VP is omitted at opening; required-capital search scales projected per-euro basis/adjustment history. Income surplus remains outside the portfolio as before. A portfolio with no positive starting allocation needs explicit manual capital estimation. Negative gross bank-interest paths and zero-NAV purchases are rejected rather than fabricated; a failed stochastic path blocks the combined forecast. In particular synthetic cash draws may become negative, making manual capital estimation necessary for such scenarios. Positive gross interest with negative cost-net wealth return is supported and tested.

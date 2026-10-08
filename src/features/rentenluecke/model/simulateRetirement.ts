@@ -32,7 +32,7 @@ export function assessScalarWithdrawalTax(
   input: { capitalBeforeCashflow: number; investmentReturn: number; gapWithdrawal: number },
 ) {
   // State scope/loss validated at creation; the hot arithmetic lives in the
-  // dependency-free pure core (positional args keep the capital search fast).
+  // dependency-free pure core (positional args keep the funding loop fast).
   const result = assessCore(
     estimateScalarWithdrawalGain(input), 0,
     state.lossCarryforward, state.allowanceAnnual, false)
@@ -47,7 +47,7 @@ export function createRetirementTaxState(openingLossCarryforward = 0): CapitalIn
   })
 }
 
-// Shared funding step used by the ledger and required-capital search.
+// Shared within-year funding step used by the ledger.
 // The portfolio funds gapWithdrawal + capitalIncomeTax (Abgeltungsteuer withholding
 // analogy: tax first, the gap receives the remainder). Shortfalls stay visible as
 // unfundedWithdrawal and are never silently covered.

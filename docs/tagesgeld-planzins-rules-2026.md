@@ -18,7 +18,7 @@ are explicitly confirmed proposals, not validated market or long-term values.
 - `constant-nominal` (default proposal): source id `tagesgeld-planzins-v1`,
   kind `planningRate`, category/role `cash`, expected return = planning rate,
   volatility 0, cost treatment `deductBucketAnnualCost`. Same rate on all paths
-  (reference, bootstrap, required-capital search), all years/buckets/paths.
+  (reference, bootstrap), all years/buckets/paths.
   Multiple bank buckets share this one rate; no per-bucket factor, no spurious
   diversification. Resolution independent of sampled year and scenario inflation.
   Threaded via `HistoricalBootstrapSettings.cashPlanningRate`. Result bands omit
@@ -94,7 +94,7 @@ incomplete/unsupported.
 
 ## Deterministic expected-return convention
 
-Reference scenario and required-capital search never silently fall back to
+The reference scenario never silently falls back to
 constant nominal; they use the selected mode consistently:
 
 - Constant: expected nominal = planning rate.

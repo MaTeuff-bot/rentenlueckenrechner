@@ -98,21 +98,6 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
   const { summary } = result
   const retirementAge = result.retirementRows[0]?.ageStart ?? result.rows.at(-1)?.ageEnd
   const retirementPercentileRow = stochasticSummary.rows.find((row) => row.ageStart === retirementAge)
-  const planRetirementRow = result.accumulationRows.at(-1)
-  const planCapitalAtRetirementToday = planRetirementRow?.closingCapitalToday ?? summary.projectedCapitalAtRetirement
-  const retirementCapitalToTodayFactor =
-    planRetirementRow && summary.projectedCapitalAtRetirement > 0
-      ? planRetirementRow.closingCapitalToday / summary.projectedCapitalAtRetirement
-      : 1
-  const requiredCapitalAtRetirementToday = summary.requiredCapitalAtRetirement * retirementCapitalToTodayFactor
-  const displayedProjectedCapital = retirementPercentileRow?.p50CapitalToday ?? planCapitalAtRetirementToday
-  const displayedShortfall = Math.max(0, requiredCapitalAtRetirementToday - displayedProjectedCapital)
-  const displayedSurplus = Math.max(0, displayedProjectedCapital - requiredCapitalAtRetirementToday)
-  const hasShortfall = displayedShortfall > 0
-  const firstMedianDepletionRow =
-    result.retirementRows.length > 0
-      ? stochasticSummary.rows.find((row) => row.ageStart >= result.retirementRows[0].ageStart && row.p50CapitalToday <= 0)
-      : null
   const totalPensionIncomeTax = result.retirementRows.reduce((sum, row) => sum + (row.pensionIncomeTax ?? 0), 0)
   const taxedPensionYears = result.retirementRows.filter((row) => (row.pensionIncomeTax ?? 0) > 0).length
   const averagePensionIncomeTax = result.retirementRows.length > 0 ? totalPensionIncomeTax / result.rows.length : 0
@@ -127,38 +112,27 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
 
   return (
     <section aria-labelledby="capital-answer-title">
-      <h3 id="capital-answer-title">Dein Kapitalbedarf</h3>
+      <h3 id="capital-answer-title">Kapital zum Rentenbeginn</h3>
       <div className="summary-grid">
-        <article className="result-card result-card-primary">
-          <span>Benötigtes Kapital zum Rentenbeginn, heutige Kaufkraft</span>
-          <strong>{formatApproxCurrency(requiredCapitalAtRetirementToday)}</strong>
-          <AdjustLink
-            section="vermoegen"
-            fieldId="portfolio-add"
-            label="Benötigtes Kapital anpassen: Vermögen bearbeiten"
-            onRequestSection={onRequestSection}
-          />
-        </article>
-        <article className="result-card">
-          <span>Median-Kapital zum Rentenbeginn (P50)</span>
-          <strong>{formatApproxCurrency(displayedProjectedCapital)}</strong>
-          <AdjustLink
-            section="vermoegen"
-            fieldId="monthlyContributionToday"
-            label="Sparrate anpassen: Vermögen bearbeiten"
-            onRequestSection={onRequestSection}
-          />
-        </article>
-        <article className={`result-card ${hasShortfall ? 'warning-card' : 'success-card'}`}>
-          <span>{hasShortfall ? 'Kapital-Lücke zum Rentenbeginn' : 'Median-Überschuss zum Rentenbeginn'}</span>
-          <strong>{formatApproxCurrency(hasShortfall ? displayedShortfall : displayedSurplus)}</strong>
-          <AdjustLink
-            section="zeitplan"
-            fieldId="retirementAge"
-            label="Zeitplan anpassen: Rentenalter bearbeiten"
-            onRequestSection={onRequestSection}
-          />
-        </article>
+        {retirementPercentileRow ? (
+          <article className="result-card">
+            <span>Median-Kapital zum Rentenbeginn (P50), heutige Kaufkraft</span>
+            <strong>{formatApproxCurrency(retirementPercentileRow.p50CapitalToday)}</strong>
+            <small>P50 ist ein Stichtagswert je Alter, kein lebenslanger Verlauf.</small>
+            <AdjustLink
+              section="vermoegen"
+              fieldId="monthlyContributionToday"
+              label="Sparrate anpassen: Vermögen bearbeiten"
+              onRequestSection={onRequestSection}
+            />
+            <AdjustLink
+              section="zeitplan"
+              fieldId="retirementAge"
+              label="Zeitplan anpassen: Rentenalter bearbeiten"
+              onRequestSection={onRequestSection}
+            />
+          </article>
+        ) : null}
         <article className="result-card">
           <span>Kapitalertragsteuer{capitalTaxTitleSuffix(taxedRows, usesHoldingsBreakdown)} (gesamt{result.rows.length > 0 ? `, ø ${formatCurrency(averageCapitalIncomeTax, 100)}/Jahr` : ''})</span>
           <strong>{formatApproxCurrency(totalCapitalIncomeTax, 50)}</strong>
@@ -180,17 +154,16 @@ export function SummaryCards({ result, stochasticSummary, onRequestSection }: Su
           />
         </article>
       </div>
-      {firstMedianDepletionRow ? (
+      {summary.depletionAge !== null && summary.depletionAgeEnd !== null ? (
         <p className="depletion-note">
-          Im Median-Verlauf ist das Kapital im Jahr {firstMedianDepletionRow.ageStart}-{firstMedianDepletionRow.ageEnd}{' '}
-          aufgebraucht.
-        </p>
-      ) : summary.depletionAge !== null && summary.depletionAgeEnd !== null ? (
-        <p className="depletion-note">
-          Der Planwert reicht nicht vollständig im Jahr {summary.depletionAge}-{summary.depletionAgeEnd}.
+          Der Referenz-Planwert (Erwartungswert der Auswahl, keine Prognose) reicht im Jahr{' '}
+          {summary.depletionAge}-{summary.depletionAgeEnd} nicht bis zum Planungshorizont.
         </p>
       ) : (
-        <p className="survival-note">Der Median-Verlauf deckt die Entnahmen bis zum Planungshorizont.</p>
+        <p className="survival-note">
+          Der Referenz-Planwert (Erwartungswert der Auswahl, keine Prognose) deckt die Entnahmen bis zum
+          Planungshorizont.
+        </p>
       )}
       <details className="method-details">
         <summary>Hinweise zur Renten- und Kapitalertragsteuer</summary>

@@ -304,23 +304,17 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
     }
   })
 
-  it('searches required capital with the interest-inclusive funding loop (survives/fails probe)', () => {
+  it('funds the forward ledger with the interest-inclusive funding loop', () => {
     const input = interestFixture()
     input.currentAge = input.retirementAge = 67
     input.planningAge = 69
     input.retirementInsurance!.pension = { status: 'voluntary', circumstances: 'standard', capitalMode: 'automatic', drvSubsidy: 'not-received' }
     const result = simulateScenario(input, 0.02)
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThan(0)
-    const scaled = structuredClone(input)
-    scaled.currentCapital = required
-    scaled.estimatorPortfolio!.forEach(b => { b.value *= required / input.currentCapital })
-    scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= required / input.currentCapital
-    expect(simulateScenario(scaled, 0.02).summary.survivesUntilPlanningAge).toBe(true)
-    scaled.currentCapital = required - 2
-    scaled.estimatorPortfolio!.forEach(b => { b.value *= (required - 2) / required })
-    scaled.retirementInsurance!.capitalEstimator!.fundAcquisitionCost! *= (required - 2) / required
-    expect(simulateScenario(scaled, 0.02).summary.survivesUntilPlanningAge).toBe(false)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
+    for (const row of result.retirementRows) {
+      expect(row.closingCapital).toBeGreaterThanOrEqual(0)
+    }
   })
 
   it('keeps shortfalls visible with the interest-inclusive tax assessed', () => {
@@ -348,7 +342,8 @@ describe('ledger integration: required capital, bootstrap, shortfall and surplus
     const full = simulateScenarioWithReturnPath(input, [], undefined, interestPath(input))
     const sampled = simulateCapitalLedgerPath(normalizeInput(input), interestPath(input), () => 0)
     expect(sampled.rows).toEqual(full.rows)
-    expect(full.summary.requiredCapitalAtRetirement).toBe(0)
+    expect(full.summary.survivesUntilPlanningAge).toBe(true)
+    expect(full.retirementRows.every((row) => !row.depleted)).toBe(true)
     for (const row of full.rows) {
       expect(row.surplusIncome).toBeGreaterThan(0)
       expect(row.surplusReinvested).toBeCloseTo(row.surplusIncome, 8)

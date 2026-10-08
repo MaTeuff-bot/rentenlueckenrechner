@@ -160,7 +160,7 @@ describe('useScenarioState', () => {
     const { result } = renderHook(() => useScenarioState())
     act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
     const pension = result.current.retirementIncomeStreams[0]
-    const requiredBefore = result.current.result!.summary.requiredCapitalAtRetirement
+    const gapBefore = result.current.result!.retirementRows[0].gapWithdrawal
 
     act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
     // The 20 % haircut lands in other deductions; automatic voluntary KV/PV now
@@ -172,7 +172,7 @@ describe('useScenarioState', () => {
       - updatedRow.healthInsurance
       - updatedRow.careInsurance
       - (updatedRow.pensionIncomeTax ?? 0))
-    expect(result.current.result!.summary.requiredCapitalAtRetirement).toBeGreaterThan(requiredBefore)
+    expect(result.current.result!.retirementRows[0].gapWithdrawal).toBeGreaterThan(gapBefore)
 
     act(() => result.current.addRetirementIncomeStream())
     expect(result.current.retirementIncomeStreams).toHaveLength(2)

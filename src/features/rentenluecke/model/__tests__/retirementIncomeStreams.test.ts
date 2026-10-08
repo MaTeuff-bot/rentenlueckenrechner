@@ -87,11 +87,9 @@ describe('retirement income streams', () => {
     expect(row.retirementIncomeNet).toBe(21_600)
     expect(row.retirementIncome).toBe(row.retirementIncomeNet)
     expect(row.gapWithdrawal).toBe(2_400)
-    // 3 × 2,400 at modeled zero returns with no capital tax, within the ledger
-    // search's €1 stop epsilon.
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(7_200)
-    expect(required).toBeLessThanOrEqual(7_201)
+    // 3 × 2,400 at modeled zero returns with no capital tax as actual forward withdrawals.
+    expect(result.summary.annualGapToday).toBe(2_400)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
   })
 
   it('ignores haircut settings for a net stream', () => {
@@ -133,8 +131,8 @@ describe('retirement income streams', () => {
     expect(row.closingCapital).toBe(row.openingCapital + 12_000)
   })
 
-  it('uses net rather than gross stream income in required-capital search', () => {
-    // Zero-start blocks every forecast; both searches open with a positive
+  it('uses net rather than gross stream income in the forward ledger', () => {
+    // Zero-start blocks every forecast; both cases run with a positive
     // allocation on the mandatory detailed ledger at modeled zero returns.
     const gross = zeroPathResult(
       input({
@@ -147,11 +145,11 @@ describe('retirement income streams', () => {
       }),
     )
 
-    // 3 × 6,000 gap at modeled zero returns with no capital tax, within the
-    // ledger search's €1 stop epsilon; the net stream leaves no gap at all.
-    const required = gross.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(18_000)
-    expect(required).toBeLessThanOrEqual(18_001)
-    expect(net.summary.requiredCapitalAtRetirement).toBe(0)
+    // 3 × 6,000 gap at modeled zero returns with no capital tax as actual forward
+    // withdrawals; the net stream leaves no gap at all.
+    expect(gross.retirementRows.every((row) => row.gapWithdrawal === 6_000)).toBe(true)
+    expect(gross.summary.annualGapToday).toBe(6_000)
+    expect(net.retirementRows.every((row) => row.gapWithdrawal === 0)).toBe(true)
+    expect(net.summary.survivesUntilPlanningAge).toBe(true)
   })
 })

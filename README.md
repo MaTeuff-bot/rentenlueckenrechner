@@ -1,6 +1,6 @@
 # Persönlicher Ruhestandsplaner
 
-Der Rentenlückenrechner ist eine Vite/React/TypeScript-App zur vereinfachten Ruhestandsplanung. Er schätzt die Netto-Rentenlücke und das benötigte Kapital zum Rentenbeginn und zeigt Vermögensverläufe, Kennzahlen und eine Jahrestabelle. Die Ergebnisse sind Modellrechnungen, keine Finanzberatung oder Prognosen.
+Der Rentenlückenrechner ist eine Vite/React/TypeScript-App zur vereinfachten Ruhestandsplanung. Er schätzt die Netto-Rentenlücke und zeigt das Kapital zum Rentenbeginn (Referenz-Planwert und Median P50 der simulierten Pfade) sowie Vermögensverläufe, Kennzahlen und eine Jahrestabelle. Die Ergebnisse sind Modellrechnungen, keine Finanzberatung oder Prognosen.
 
 ## Eingaben und Berechnungsgrundlage
 
@@ -94,7 +94,7 @@ Modulgrenzen und Zonenzuständigkeiten: [docs/ARCHITECTURE.md](docs/ARCHITECTURE
 Jährliches Ledger als Berechnungsfläche und Feature-Effektkarte: [docs/ledger-effect-map.md](docs/ledger-effect-map.md).
 Regelsnapshots: [Kapitalertragsteuer 2026](docs/kapitalertragsteuer-rules-2026.md), [Rentenbesteuerung (GRV) 2026](docs/rentenbesteuerung-rules-2026.md), [GKV/PV-Beiträge 2026](docs/gkv-pv-rules-2026.md).
 
-- `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Kapitalbedarfssuche, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
+- `src/features/rentenluecke/model/`: Framework-freie Validierung, Normalisierung, Jahresledger, Einkommensströme, Portfolio- und Renditemodelle; gebündelte Renditedaten unter `returnData/`.
 - `src/features/rentenluecke/charting/`: Aus Simulationsergebnissen abgeleitete Diagrammdaten und Risikokarten.
 - `src/features/rentenluecke/mortality/`: Destatis-Sterbetafel und Überlebenswahrscheinlichkeiten; erzeugt aus GENESIS `12621-0001` über `scripts/generateDestatisLifeTable.mjs`.
 - `src/features/rentenluecke/hooks/`: Szenariozustand, Modellaufrufe und lokale Browserpersistenz.

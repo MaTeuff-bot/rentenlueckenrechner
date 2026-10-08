@@ -21,8 +21,8 @@ describe('Rentenluecke model', () => {
     // owes 4,105.06 pension tax against a 4,096.53 pre-tax surplus, leaving a
     // small first-year gap of 8.53. Pension tax and gap are return-independent;
     // the mandatory detailed ledger runs at explicitly modeled zero returns with
-    // a full cost basis (no capital tax), so required capital is the nominal
-    // 23-year gap sum within the ledger search's €1 stop epsilon (1,782.33).
+    // a full cost basis (no capital tax); the forward ledger carries the nominal
+    // 23-year gap sum as actual withdrawals (no lifetime search).
     const scenarioInput = withFullCostBasis(input({
       currentCapital: 10_000,
       monthlyDesiredSpendingToday: 1_800,
@@ -35,9 +35,9 @@ describe('Rentenluecke model', () => {
     expect(first.pensionIncomeTax).toBeCloseTo(4105.061976321859, 8)
     expect(first.gapWithdrawal).toBeCloseTo(8.534432383203239, 8)
     const gapSum = result.retirementRows.reduce((sum, row) => sum + row.gapWithdrawal, 0)
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(gapSum)
-    expect(required).toBeLessThanOrEqual(gapSum + 1)
+    expect(gapSum).toBeGreaterThan(0)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
     expect(result.summary.monthlyGapToday).toBeCloseTo(5 / 12, 8)
     expect(result.retirementRows.every((row) => row.gapWithdrawal === 0)).toBe(false)
   })
@@ -46,8 +46,8 @@ describe('Rentenluecke model', () => {
     // Slice 2: the 24,000 GRV pension (Rentenbeginn 2053 → 97.5 %) owes 2,405/yr
     // GRV-Rentensteuer, so each year's gap is 12,000 + 2,405 = 14,405 (net of ALL
     // deductions). The mandatory detailed ledger runs at explicitly modeled zero
-    // returns with a full cost basis (no capital tax), so required capital is the
-    // 3 × 14,405 = 43,215 nominal sum within the ledger search's €1 stop epsilon.
+    // returns with a full cost basis (no capital tax); the forward ledger carries
+    // 3 × 14,405 as actual withdrawals (no lifetime search).
     const scenarioInput = withFullCostBasis(input({
       retirementAge: 67,
       planningAge: 70,
@@ -60,9 +60,9 @@ describe('Rentenluecke model', () => {
       zeroBucketPath(scenarioInput, scenarioInput.planningAge - scenarioInput.currentAge))
 
     expect(result.retirementRows.map(row => row.gapWithdrawal)).toEqual([14_405, 14_405, 14_405])
-    const required = result.summary.requiredCapitalAtRetirement
-    expect(required).toBeGreaterThanOrEqual(43_215)
-    expect(required).toBeLessThanOrEqual(43_216)
+    expect(result.summary.annualGapToday).toBeCloseTo(14_405, 8)
+    expect(result.summary.monthlyGapToday).toBeCloseTo(14_405 / 12, 8)
+    expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
   })
 
   it('applies accumulation return before adding the end-of-year contribution', () => {

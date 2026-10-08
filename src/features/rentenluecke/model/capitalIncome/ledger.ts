@@ -31,8 +31,8 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   }
   const factor = createInflationFactorResolver(scenario.annualInflationRate, inflation)
   // Rentenbesteuerung setup is capital-independent (frozen Rentenfreibetrag from
-  // the first retirement year with GRV receipt). Shared across year() calls and
-  // required-capital candidate trials; see docs/rentenbesteuerung-rules-2026.md.
+  // the first retirement year with GRV receipt). Shared across year() calls;
+  // see docs/rentenbesteuerung-rules-2026.md.
   const pensionTaxSetup = resolvePensionTaxSetup({
     streams: input.retirementIncomeStreams,
     currentAge: scenario.currentAge,
@@ -177,53 +177,27 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
   }
   const retirementState = state
   const projectedCapital = state.buckets.reduce((s, b) => s + b.value, 0)
-  const retirement = (opening: EstimatorState, stopOnShortfall = false) => {
+  const retirement = (opening: EstimatorState) => {
     let current = opening
     const rows: YearlyPeriodRow[] = []
     for (let index = scenario.yearsToRetirement; index < scenario.yearsToRetirement + scenario.retirementYears; index++) {
       const row = year(current, index)
       rows.push(row)
-      if (stopOnShortfall && row.depleted) break
       current = row.capitalAssessment!.closingState!
     }
     return rows
   }
   const retirementRows = retirement(retirementState)
-  // Hypothetical starting portfolios preserve the projected per-euro cost/VP history.
-  // This is a search assumption, never an accounting movement on the actual ledger.
-  const candidate = (capital: number): EstimatorState => {
-    if (projectedCapital === 0) return { ...initial, buckets: initial.buckets.map((b, n) => ({ ...b, value: capital * weights[n] })), fundAcquisitionCost: capital * buckets.reduce((s, b, n) => s + (b.holding === 'accumulating-equity-fund' ? weights[n] : 0), 0) }
-    const scale = capital / projectedCapital
-    return { ...retirementState, buckets: retirementState.buckets.map(b => ({ ...b, value: b.value * scale })), fundAcquisitionCost: retirementState.fundAcquisitionCost * scale,
-      assessedVorabpauschalen: retirementState.assessedVorabpauschalen * scale, pendingVorabpauschale: retirementState.pendingVorabpauschale * scale, simulatedLossCarryforward: retirementState.simulatedLossCarryforward * scale }
-  }
-  const requiredCapital = () => {
-    const survives = (capital: number) => !retirement(candidate(capital), true).some(r => r.depleted)
-    let high = Math.max(1, projectedCapital), low = 0
-    if (survives(0)) high = 0
-    else {
-      while (!survives(high)) {
-        high *= 2
-        if (high > 1e12) throw new Error('Erforderliches Kapital: keine tragfähige Obergrenze gefunden.')
-      }
-      while (high - low > 1) {
-        const mid = (low + high) / 2
-        if (survives(mid)) high = mid
-        else low = mid
-      }
-    }
-    return high
-  }
-  return { rows: [...accumulationRows, ...retirementRows], accumulationRows, retirementRows, projectedCapital, requiredCapital }
+  return { rows: [...accumulationRows, ...retirementRows], accumulationRows, retirementRows, projectedCapital }
 }
 
 export function simulateCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPath, inflation?: AnnualInflationResolver, cashPlanningRate?: number, cashRealRate?: number): SimulationResult {
   const ledger = buildCapitalLedger(scenario, path, inflation, cashPlanningRate, cashRealRate)
   return { rows: ledger.rows, accumulationRows: ledger.accumulationRows, retirementRows: ledger.retirementRows,
-    summary: deriveSummary(ledger.projectedCapital, ledger.requiredCapital(), ledger.retirementRows) }
+    summary: deriveSummary(ledger.projectedCapital, ledger.retirementRows) }
 }
 
-/** Bootstrap percentiles need actual cashflows/survival, not a capital search for each trial. */
+/** Bootstrap paths use the same forward ledger cashflows and survival. */
 export function simulateCapitalLedgerPath(scenario: NormalizedScenario, path: BucketReturnPath, inflation: AnnualInflationResolver) {
   const ledger = buildCapitalLedger(scenario, path, inflation)
   return { rows: ledger.rows, summary: { survivesUntilPlanningAge: ledger.retirementRows.every(r => !r.depleted) } }

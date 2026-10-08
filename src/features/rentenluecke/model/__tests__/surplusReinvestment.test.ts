@@ -355,7 +355,7 @@ describe('retirement surplus reinvestment (signed funding need)', () => {
     // Surplus stays nominal; today divisor is next-year factor.
   })
 
-  it('shares deterministic, bootstrap and required-capital paths with controlled returns', () => {
+  it('shares deterministic, bootstrap and forward paths with controlled returns', () => {
     const input = mixedInput(60_000, 40_000, 30_000, 100, 2000, 2)
     const path = mixedPath(2, 0.05, 0.02)
     const full = simulateScenarioWithReturnPath(input, [], undefined, path)
@@ -373,12 +373,14 @@ describe('retirement surplus reinvestment (signed funding need)', () => {
     for (const row of surplusFull.retirementRows) {
       expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + (row.surplusReinvested ?? 0), 6)
     }
-    // Required capital survives with surplus compounding; zero candidate is not artificial:
-    // with low spending it is legitimately 0, with high spending it is positive.
-    expect(full.summary.requiredCapitalAtRetirement).toBeGreaterThanOrEqual(0)
+    // Forward ledger only: surplus compounding visible without a lifetime search.
+    expect(Number.isFinite(full.summary.projectedCapitalAtRetirement)).toBe(true)
+    expect(full.summary.survivesUntilPlanningAge).toBe(full.retirementRows.every((row) => !row.depleted))
     const lowSpending = mixedInput(60_000, 40_000, 30_000, 3000, 100, 2)
     const lowResult = simulateScenarioWithReturnPath(lowSpending, [], undefined, mixedPath(2, 0, 0).map(r => r.map(b => b.id === 'bank' ? { ...b, totalReturnRate: 0, grossBankReturnRate: 0 } : b)))
-    expect(lowResult.summary.requiredCapitalAtRetirement).toBe(0)
+    expect(lowResult.summary.survivesUntilPlanningAge).toBe(true)
+    expect(lowResult.retirementRows.every((row) => !row.depleted)).toBe(true)
+    expect(lowResult.retirementRows.every((row) => row.unfundedWithdrawal === 0)).toBe(true)
     // Monotonicity spot-check (empirical, not a proof): surviving capital implies larger survives.
     // Truly unproved domains (discontinuous callbacks, shortfall branching) are not claimed as proven.
     const base = mixedInput(60_000, 40_000, 30_000, 100, 2500, 3)

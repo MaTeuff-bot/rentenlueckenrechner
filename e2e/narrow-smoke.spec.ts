@@ -7,7 +7,8 @@ test('narrow smoke retains fund-only bridge forecast without overflow', async ({
   await freshLoad(page);
   await setupFundOnlyBridge(page);
   await expectForecast(page);
-  await expect(page.getByText('Benötigtes Kapital zum Rentenbeginn', { exact: false })).toBeVisible();
+  await expect(page.getByText('Median-Kapital zum Rentenbeginn', { exact: false })).toBeVisible();
+  await expect(page.getByText('Benötigtes Kapital zum Rentenbeginn', { exact: false })).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
 });

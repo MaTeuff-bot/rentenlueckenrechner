@@ -200,7 +200,7 @@ export type PensionYearTaxAssessment = {
  * (Abgeltung fertig, scope declaration). The setup is a validated PensionTaxSetup
  * by construction (createPensionTaxSetup) and is reused across all years of a
  * ledger build without re-parsing — mirroring the shared validated tax template
- * of the capital-income search; only the varying yearly inputs are parsed. */
+ * of the within-year funding solver; only the varying yearly inputs are parsed. */
 export function assessPensionYearTax(
   setup: PensionTaxSetup,
   input: z.input<typeof pensionYearInputSchema>,

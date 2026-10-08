@@ -76,9 +76,8 @@ export function cashOnlyInput(patch: Partial<RentenlueckeInput> = {}): Rentenlue
 export const completedCoverage = () => ({ bridge: { common: { kind: 'none' as const }, bridgeOnly: { kind: 'none' as const } }, pension: { common: { kind: 'none' as const } } })
 
 // Scale opening capital AND the detailed portfolio (values + pooled fund cost)
-// proportionally, preserving per-euro cost history like the ledger's
-// required-capital candidate(). Spreading currentCapital alone would desync the
-// portfolio total and invalidate the probe.
+// proportionally, preserving per-euro cost history. Spreading currentCapital
+// alone would desync the portfolio total and invalidate the probe.
 export function withScaledCapital(input: RentenlueckeInput, capital: number): RentenlueckeInput {
   const buckets = (input.estimatorPortfolio ?? []) as { value: number }[]
   const total = buckets.reduce((sum, b) => sum + b.value, 0)
