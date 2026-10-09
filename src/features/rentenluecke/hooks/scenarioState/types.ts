@@ -1,6 +1,7 @@
 import type { PortfolioBucket } from '../../model/portfolioBuckets'
 import type { RentenlueckeInput, RetirementIncomeStream } from '../../model/types'
 import type { PortfolioEstimatorSettings } from '../../model/capitalIncome/portfolioEstimator'
+import type { AllocationDraft } from '../../model/capitalIncome/allocationEvent'
 
 export type ScenarioState = {
   insuranceCoverageAnswers: import('../../model/insuranceCoverage').InsuranceCoverageAnswers
@@ -10,6 +11,9 @@ export type ScenarioState = {
   retirementIncomeStreams: RetirementIncomeStream[]
   portfolioBuckets: PortfolioBucket[]
   portfolioEstimatorSettings?: PortfolioEstimatorSettings
+  /** Optional one-time allocation at Arbeitsende. Absent means disabled; no
+   * migration, reset notice, or acknowledgment is attached to this field. */
+  allocationAtRetirement?: AllocationDraft
   historical: {
     inflationSourceId: string
     simulations?: number

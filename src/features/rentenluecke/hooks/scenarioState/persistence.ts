@@ -42,8 +42,15 @@ const input = z.object({
 })
 const children = z.discriminatedUnion('kind', [z.object({ kind: z.literal('missing') }), z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('children'), rows: z.array(z.object({ id: z.string(), year: optionalNumber })).min(1).refine(rows => new Set(rows.map(row => row.id)).size === rows.length) })])
+const allocationDraftSchema = z.object({
+  enabled: z.boolean(),
+  accepted: z.boolean(),
+  fixedTargets: z.array(z.object({ bucketId: z.string(), amountToday: draftNumber })),
+  remainderWeights: z.record(z.string(), draftNumber),
+}).optional()
 const persistedScenarioSchema = z.object({ version: z.literal(15), input, portfolioBuckets: portfolio, retirementIncomeStreams: z.array(stream),
   insuranceCoverageAnswers: insuranceCoverageSchema, childrenAnswer: children, explicitInsuranceTransition: optionalNumber, historical: z.object({ inflationSourceId: z.string(), simulations: optionalNumber, cashMode: z.string().optional(), cashPlanningRate: optionalNumber, cashRealRate: optionalNumber, cashPlanningRateConfirmed: z.boolean().optional() }),
+  allocationAtRetirement: allocationDraftSchema,
 })
 export function loadInitialState(): ScenarioState {
   if (typeof localStorage === 'undefined') return createDefaultState()
@@ -153,7 +160,10 @@ export function serializeScenarioState(state: ScenarioState): string {
   } else if (legacySettings !== undefined) {
     storedInput.retirementInsurance = { capitalEstimator: legacySettings } as unknown as typeof storedInput.retirementInsurance
   }
-  return JSON.stringify({ ...rest, input: storedInput, version: 15, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
+  // The engine spec on input.allocationAtRetirement is recomputed from the draft
+  // on load; only the draft itself is persisted (absent means disabled).
+  delete (storedInput as Record<string, unknown>).allocationAtRetirement
+  return JSON.stringify({ ...rest, allocationAtRetirement: state.allocationAtRetirement, input: storedInput, version: 15, childrenAnswer: state.childrenAnswer ?? { kind: 'missing' } }, (_key, value) =>
     typeof value === 'number' && !Number.isFinite(value) ? { draftNumber: String(value) } : value)
 }
 export function parsePersistedScenarioState(stored: string | null): ScenarioState {
@@ -179,7 +189,9 @@ export function parsePersistedScenarioState(stored: string | null): ScenarioStat
     const insuranceWithoutEstimator = { ...(persistedInsurance ?? {}) } as Record<string, unknown>
     delete insuranceWithoutEstimator.capitalEstimator
     const strippedInsurance = persistedInsurance ? { ...insuranceWithoutEstimator } as unknown as typeof persistedInsurance : undefined
-    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, portfolioEstimatorSettings: legacySettings, input: withDeterministicPortfolioReturn({ ...state.input, lifeTableSex: persistedLifeTableSex,
+    const { allocationAtRetirement: _engineSpec, ...parsedInput } = state.input as typeof state.input & { allocationAtRetirement?: unknown }
+    void _engineSpec
+    return { insuranceCoverageAnswers: state.insuranceCoverageAnswers, childrenAnswer: state.childrenAnswer, explicitInsuranceTransition: state.explicitInsuranceTransition, portfolioBuckets: state.portfolioBuckets, retirementIncomeStreams: state.retirementIncomeStreams, historical: state.historical, portfolioEstimatorSettings: legacySettings, allocationAtRetirement: state.allocationAtRetirement, input: withDeterministicPortfolioReturn({ ...parsedInput, lifeTableSex: persistedLifeTableSex,
       retirementIncomeStreams: state.retirementIncomeStreams, currentCapital: calculatePortfolioBucketTotal(state.portfolioBuckets),
       retirementInsurance: strippedInsurance ? { ...applyCoverage(strippedInsurance, state.insuranceCoverageAnswers),
         pensionAge: timelineBoundary(state.retirementIncomeStreams, state.explicitInsuranceTransition), ...childrenEngineFields(state.childrenAnswer),

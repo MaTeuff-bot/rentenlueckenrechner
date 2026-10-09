@@ -49,6 +49,16 @@ export function RentenlueckeCalculator() {
     updateField,
     updateLifeTableSex,
     updateRetirementInsurance,
+    allocationAtRetirement,
+    prefillAllocationAtRetirement,
+    updateAllocationFixedTarget,
+    updateAllocationRemainderWeight,
+    removeAllocationTarget,
+    moveAllocationFixedTarget,
+    removeAllocationFixedTarget,
+    acceptAllocationAtRetirement,
+    resetAllocationAtRetirement,
+    setAllocationAtRetirementEnabled,
     updatePortfolioBucket,
     addPortfolioBucket,
     removePortfolioBucket,
@@ -107,6 +117,16 @@ export function RentenlueckeCalculator() {
           portfolioEstimatorReadiness={portfolioEstimatorReadiness}
           onPortfolioEstimatorSettingsChange={updatePortfolioEstimatorSettings}
           onPortfolioBucketChange={updatePortfolioBucket}
+          allocationAtRetirement={allocationAtRetirement}
+          onPrefillAllocationAtRetirement={prefillAllocationAtRetirement}
+          onAcceptAllocationAtRetirement={acceptAllocationAtRetirement}
+          onResetAllocationAtRetirement={resetAllocationAtRetirement}
+          onToggleAllocationAtRetirement={setAllocationAtRetirementEnabled}
+          onAllocationFixedTargetChange={updateAllocationFixedTarget}
+          onAllocationRemainderWeightChange={updateAllocationRemainderWeight}
+          onRemoveAllocationTarget={removeAllocationTarget}
+          onMoveAllocationFixedTarget={moveAllocationFixedTarget}
+          onRemoveAllocationFixedTarget={removeAllocationFixedTarget}
           onPortfolioBucketAdd={addPortfolioBucket}
           onPortfolioBucketRemove={removePortfolioBucket}
           onRetirementIncomeStreamChange={updateRetirementIncomeStream}

@@ -383,40 +383,38 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
   it('creates fund Vorabpauschale pending in year 1 and receives it in year 2', () => {
     const result = simulateScenarioWithReturnPath(input, [], undefined, bucketPath)
     const vp = result.rows[0].capitalAssessment!.pendingVorabpauschale
-    // Old holdings: min(60,000×0.7×0.032, 3,600) = 1,344 (full-year factor). Annual
-    // rebalancing to the initial 60/40 weights sells fund (63,600 vs target 62,160)
-    // and the retained-pending convention scales the old-holding VP by the retained
-    // share; verified engine value 1,323.1625… (regression pin, exact formula in
-    // insuranceEstimator.maintainAllocation). The pin sits below the pre-bank-interest
-    // 1,323.7132 value because the interest-inclusive accumulation tax is funded
-    // from a slightly larger sale, retaining marginally less VP.
-    expect(vp).toBeMoneyClose(1_323.1625766809689)
-    expect(result.rows[1].capitalAssessment!.receivedVorabpauschale).toBeMoneyClose(1_323.1625766809689)
+    // Drift performs no annual trades, so the old-holding VP is retained in full:
+    // min(60,000×0.7×0.032, 3,600) = 1,344 (full-year factor, no contributions, so
+    // no December purchase VP). The pre-arbeitsende annual-restoration pin
+    // (1,323.1625…, retained-share scaling after the 60/40 rebalancing sale) is
+    // intentionally superseded: yearly target restoration no longer exists.
+    expect(vp).toBeMoneyClose(1_344)
+    expect(result.rows[1].capitalAssessment!.receivedVorabpauschale).toBeMoneyClose(1_344)
   })
 
   it('assesses and funds Kapitalertragsteuer on withdrawal gains plus Vorabpauschale', () => {
-    // First retirement year (age 67): the pension tax joins the same committed
-    // sale, so funding the ~261 pension tax realizes more gains than the
-    // pension-ignorant base (was 6,328.366 -> 4,429.856 x0.7 + 839.445 interest
-    // = 5,269.301 taxable): jointly funded taxable 5,336.048; allowance 1,000
-    // -> base 4,336.048; tax 4,336.048 x 0.25 x 1.055 = 1,143.633. The larger
-    // sale slightly raises the insurance assessment (KV/PV 5,093.173/1,054.262
-    // Sonderausgaben), lowering the pension tax to 261 (was 263 pension-ignorant).
-    // Required withdrawal = 6,000 gap + insurance + 1,143.633 capital tax + 261
-    // pension tax = 13,552.068 gap. Tier-3 regression pins after the joint-funding
-    // fix (no feasible hand calculation for the fixed point; gap/paid/closing
-    // identities are verified by the joint-funding suite).
+    // First retirement year (age 67) under drift: the accumulation year closed at
+    // the drifted 64,200/40,800 (no 60/40 restoration), so the bank interest is
+    // 40,800 x 0.02 = 816 and only the funding sale realizes gains. The pension
+    // tax joins the same committed sale (joint-funding fixed point; gap/paid/
+    // closing identities are verified by the joint-funding suite and by
+    // expectLedgerConservation below): jointly funded taxable 4,926.663;
+    // allowance 1,000 -> tax 1,035.657. Required withdrawal = 6,000 gap +
+    // insurance + 1,035.657 capital tax + 275 pension tax = 13,374.168 gap.
+    // The pre-arbeitsende restoration pins (interest 839.445, taxable 5,336.048,
+    // tax 1,143.633, pension tax 261, gap 13,552.068) are intentionally
+    // superseded with the removal of annual target restoration.
     const result = simulateScenario(input, 0.02)
     const first = result.retirementRows[0]
-    expect(first.capitalAssessment!.bankInterest).toBeMoneyClose(839.4450777952111)
-    expect(first.taxableWithdrawal).toBeMoneyClose(5336.048177575691)
+    expect(first.capitalAssessment!.bankInterest).toBeMoneyClose(816)
+    expect(first.taxableWithdrawal).toBeMoneyClose(4926.663430249398)
     expect(first.sparerpauschbetragApplied).toBeMoneyClose(1_000)
-    expect(first.capitalIncomeTax).toBeMoneyClose(1143.6327068355884)
+    expect(first.capitalIncomeTax).toBeMoneyClose(1035.6574797282785)
     expect(first.pensionTaxBase).toBeMoneyClose(20_280)
-    expect(first.pensionIncomeTax).toBeMoneyClose(261)
-    expect(first.retirementIncomeNet).toBeMoneyClose(17591.565123596985)
+    expect(first.pensionIncomeTax).toBeMoneyClose(275)
+    expect(first.retirementIncomeNet).toBeMoneyClose(17661.488996798875)
     expect(first.netGapWithdrawal).toBeMoneyClose(6_000)
-    expect(first.gapWithdrawal).toBeMoneyClose(13552.067583238604)
+    expect(first.gapWithdrawal).toBeMoneyClose(13374.168482929406)
     // Every retirement year is taxed with a fresh annual allowance (scaled by inflation;
     // factor 1 here, so 1,000); accumulation Umschichtung rows carry the same fields.
     for (const row of result.retirementRows) {
@@ -431,9 +429,12 @@ describe('reference scenario S4: automatic capital-income estimator', () => {
     }
     expectLedgerConservation(result.rows)
     // Forward ledger funds gap + both taxes through the taxed joint path, where each
-    // pension-tax share is funded by the gain-realizing sale itself. The accumulation
-    // year funds 69.365 tax (projected 104,930.635 instead of 105,000).
-    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(104930.63472440137)
+    // pension-tax share is funded by the gain-realizing sale itself. The drift
+    // accumulation year realizes no rebalancing gain and its 800 bank interest
+    // stays below the 1,000 allowance, so it funds no tax: the projected capital
+    // is the full 105,000 (the pre-arbeitsende 104,930.635 pin included the
+    // restoration-funded 69.365 accumulation tax).
+    expect(result.summary.projectedCapitalAtRetirement).toBeMoneyClose(105000)
   })
 
   it('matches deterministic and reference bootstrap paths and reproduces seeded runs', () => {

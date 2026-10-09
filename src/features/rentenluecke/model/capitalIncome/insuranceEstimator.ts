@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { SPARERPAUSCHBETRAG_SINGLE } from '../tax/capitalIncomeTax'
 import { assessCore } from '../tax/pureCore'
+import { marginalTargetsForAdditionalWealth, resolveAllocationTargets } from './allocationEvent'
 
 // Insurance capital-income accounting API. See docs/insurance-capital-estimator.md for scope and ordering.
 const money = z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -119,7 +120,15 @@ export function withdrawProportionally(state: EstimatorState, requested: number)
 
 const yearSchema = z.object({
   projectedBasisRate: signed, // Required, even for bank-only paths. No UI assumption.
-  buckets: z.array(z.object({ id: z.string().min(1), totalReturnRate: signed.min(-1), grossBankReturnRate: signed.optional(), targetWeight: z.number().min(0).max(1).optional(), contribution: money })),
+  buckets: z.array(z.object({ id: z.string().min(1), totalReturnRate: signed.min(-1), grossBankReturnRate: signed.optional(), contribution: money })),
+  // Optional one-time allocation at the end of the first retirement year. Absent
+  // means disabled: holdings drift with starting-share savings and proportional
+  // withdrawals. Fixed targets are today's euros scaled by inflationFactor.
+  allocationEvent: z.object({
+    fixedTargets: z.array(z.object({ bucketId: z.string().min(1), amountToday: money })),
+    remainderWeights: z.record(z.string(), z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER)).optional(),
+    inflationFactor: z.number().finite().positive(),
+  }).optional(),
   spendingLessOtherIncome: signed,
   expenseAllowance: money.default(51),
   provenDeductibleAnnualExpenses: money.optional(),
@@ -218,19 +227,43 @@ export function simulateEstimatorYear(
     fundAcquisitionCost: beforeSale.fundAcquisitionCost + fundContribution,
     pendingVorabpauschale: fullPending,
   })
-  const targets = p.buckets.map(b => b.targetWeight)
-  const rebalance = targets.some(w => w !== undefined)
-  if (rebalance && (targets.some(w => w === undefined) || Math.abs(targets.reduce<number>((s, w) => s + (w ?? 0), 0) - 1) > 1e-9))
-    throw new Error('Allocation maintenance requires all target weights summing to one')
-  // Trades after proportional funding restore the existing fixed-weight return economics.
-  // Release pooled cost/assessed VP for actual fund sales; purchases add euro cost.
-  const maintainAllocation = (sale: ReturnType<typeof withdrawProportionally>) => {
-    const total = sale.state.buckets.reduce((s, b) => s + b.value, 0)
+  // One-time allocation event (or none). The event resolver needs declared
+  // supported destinations only; the estimator bucket schema already restricts
+  // eligibility to accumulating equity funds and ordinary bank deposits, so an
+  // unknown destination id is the only remaining declaration error here.
+  const event = p.allocationEvent ?? null
+  if (event) {
+    for (const fixed of event.fixedTargets) {
+      if (!opening.buckets.some(b => b.id === fixed.bucketId))
+        throw new Error(`Festbetragsziel „${fixed.bucketId}“ verweist auf eine unbekannte Anlage.`)
+    }
+    for (const id of Object.keys(event.remainderWeights ?? {})) {
+      if (!opening.buckets.some(b => b.id === id))
+        throw new Error(`Restanteil „${id}“ verweist auf eine unbekannte Anlage.`)
+    }
+  }
+  const allocationViews = opening.buckets.map(b => ({ id: b.id, eligibility: b.eligibility }))
+  // Post-funding settlement shared by every trial. Drift (no event) keeps
+  // post-sale holdings and places a trial deposit proportionally to current
+  // holdings (equally when that total is zero). The event allocates the net
+  // base B = post-sale holdings + trial deposit via the fixed-priority /
+  // remainder resolver T(B). Release pooled cost/assessed VP for actual fund
+  // sales only; purchases add euro cost plus December pending VP (receipt next
+  // year, no current-year return on new money).
+  const maintainAllocation = (sale: ReturnType<typeof withdrawProportionally>, trialDeposit: number) => {
+    const postSaleTotal = sale.state.buckets.reduce((s, b) => s + b.value, 0)
+    const base = money.parse(postSaleTotal + trialDeposit)
+    const resolved = event
+      ? resolveAllocationTargets({ netWealth: base, inflationFactor: event.inflationFactor,
+          buckets: allocationViews, fixedTargets: event.fixedTargets, remainderWeights: event.remainderWeights })
+      : sale.state.buckets.map(b => ({ id: b.id,
+          target: b.value + (postSaleTotal > 0 ? trialDeposit * b.value / postSaleTotal : trialDeposit / sale.state.buckets.length) }))
+    const targetsById = new Map(resolved.map(r => [r.id, r.target]))
     const fundValue = sale.state.buckets.filter(b => b.eligibility === 'accumulating-equity-fund').reduce((s, b) => s + b.value, 0)
     let fundSales = 0, fundPurchases = 0, pending = 0
     const buckets = sale.state.buckets.map(b => {
       const m = p.buckets.find(m => m.id === b.id)!
-      const target = rebalance ? total * m.targetWeight! : b.value
+      const target = money.parse(targetsById.get(b.id) ?? 0)
       if (b.eligibility === 'accumulating-equity-fund') {
         fundSales += Math.max(0, b.value - target)
         const purchase = Math.max(0, target - b.value)
@@ -252,16 +285,24 @@ export function simulateEstimatorYear(
         pendingVorabpauschale: pending }),
     }
   }
-  const assessmentForSale = (sale: ReturnType<typeof withdrawProportionally>, movement = maintainAllocation(sale)) =>
+  const assessmentForSale = (sale: ReturnType<typeof withdrawProportionally>, movement = maintainAllocation(sale, 0)) =>
     assessCapitalIncome({ bankInterest, receivedVorabpauschale,
       adjustedFundSaleGain: sale.adjustedFundSaleGain + movement.adjustedFundSaleGain, openingSimulatedLoss: opening.simulatedLossCarryforward,
       expenseAllowance: p.expenseAllowance,
       provenDeductibleAnnualExpenses: p.provenDeductibleAnnualExpenses })
   assessmentForSale(withdrawProportionally(beforeSale, 0))
   assessmentForSale(withdrawProportionally(beforeSale, available))
-  const trial = (withdrawal: number) => {
-    const sale = withdrawProportionally(beforeSale, withdrawal)
-    const movement = maintainAllocation(sale)
+  // Signed annual cashflow trial. H is post-return wealth; paid = min(H, max(0, y))
+  // is the actual proportional sale (never negative) and S = max(0, -y) the
+  // incoming surplus deposit supplied from annual income only. Allocation targets
+  // resolve against the net base T(H - paid + S), combining the funding sale and
+  // the event trades in one assessment: received VP and bank interest once,
+  // opening loss/allowances once, one shared capital-tax/KV/PV/pension callback.
+  const trial = (y: number) => {
+    const paid = Math.min(available, Math.max(0, y))
+    const deposit = Math.max(0, -y)
+    const sale = withdrawProportionally(beforeSale, paid)
+    const movement = maintainAllocation(sale, deposit)
     const assessment = assessmentForSale(sale, movement)
     const insurance = burdenSchema.parse(insuranceForAnnualAssessment(assessment.annualAssessment))
     // Abgeltungsteuer joins the same funding fixed point as insurance: the sale that
@@ -281,8 +322,15 @@ export function simulateEstimatorYear(
       true,
       bankInterest) : null
     const extra = additionalRequirementForTrial ? money.parse(additionalRequirementForTrial(insurance, tax)) : 0
-    const required = money.parse(Math.max(0, p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0) + extra))
-    return { sale, movement, assessment, insurance, tax, required, residual: withdrawal - required }
+    // Genuine signed need N (may be negative when income covers spending and all
+    // modeled charges). The funded requirement stays max(0, N) for display and
+    // for the ordinary year-end surplus lineage. The event-year trial solves the
+    // signed residual y - N so the genuine surplus S = max(0, -y) enters the
+    // allocation base T(H - paid + S) inside the shared assessment — never as a
+    // post-hoc purchase that would first route through T(H) and overtax the surplus.
+    const genuineNeed = p.spendingLessOtherIncome + money.parse(insurance.kv + insurance.pv) + (tax ? tax.capitalIncomeTax : 0) + extra
+    const required = money.parse(Math.max(0, genuineNeed))
+    return { sale, movement, assessment, insurance, tax, required, genuineNeed, paid, deposit, residual: event ? y - genuineNeed : y - required }
   }
   // Bracketed solver: no contractivity assumption. Report discontinuous or otherwise
   // unsolved callbacks instead of silently accepting an arbitrary final iteration.
@@ -290,7 +338,19 @@ export function simulateEstimatorYear(
   // rounding candidate (statutory floors can prevent exact equality): commit that
   // high-side trial once and conserve the excess via same-year repurchase below.
   // Shortfall keeps a valid closing state; nonconverged keeps closingState null.
-  let low = 0
+  // Bracketed solver over the signed cashflow: low admits an income-funded
+  // deposit trial, high is post-return wealth H (full sale, minimal allocation
+  // base). No global monotonicity is proven — in particular a negative high-side
+  // residual in the event year does NOT prove that no smaller root exists (fewer
+  // funding sales can mean fewer event-trade taxes, so a smaller y may validate).
+  // The search only commits a directly validated residual or a bounded
+  // pension-rounding candidate; otherwise it reports demonstrable shortfall vs
+  // numerical nonconvergence honestly. A finite kink scan is an attempt, never a
+  // global proof.
+  // No -H clamp on low: an income surplus may exceed current holdings, and
+  // clamping would corrupt the event-year bracket for surplus > H.
+  const isEventYear = event !== null
+  let low = Math.min(0, p.spendingLessOtherIncome)
   let high = available
   let result = trial(low)
   let lowResidual = result.residual
@@ -298,58 +358,112 @@ export function simulateEstimatorYear(
   let highResidual!: number
   let iterations = 1
   let status: 'converged' | 'shortfall' | 'nonconverged' = 'nonconverged'
+  const runBracketSearch = () => {
+    for (; iterations <= p.maxIterations; iterations += 1) {
+      // Bounded interpolation accelerates ordinary piecewise-linear contribution
+      // callbacks. Periodic bisection retains bracket progress at kinks.
+      const interpolated = low - lowResidual * (high - low) / (highResidual - lowResidual)
+      const middle = iterations % 4 === 1 || !Number.isFinite(interpolated) || interpolated <= low || interpolated >= high
+        ? low + (high - low) / 2 : interpolated
+      result = trial(middle)
+      if (Math.abs(result.residual) <= p.tolerance) { status = 'converged'; break }
+      if (result.residual < 0) { low = middle; lowResidual = result.residual }
+      else { high = middle; highResidual = result.residual; highResult = result }
+    }
+    iterations = Math.min(iterations, p.maxIterations)
+    if (status === 'nonconverged' && highResidual >= 0 && highResidual <= fundedExcessBound + p.tolerance) {
+      result = highResult
+      status = 'converged'
+    }
+  }
   if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
   else {
     result = trial(high)
     highResult = result
     highResidual = result.residual
-    if (result.residual < -p.tolerance) status = 'shortfall'
-    else if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
-    else {
-      for (iterations = 1; iterations <= p.maxIterations; iterations += 1) {
-        // Bounded interpolation accelerates ordinary piecewise-linear contribution
-        // callbacks. Periodic bisection retains bracket progress at kinks.
-        const interpolated = low - lowResidual * (high - low) / (highResidual - lowResidual)
-        const middle = iterations % 4 === 1 || !Number.isFinite(interpolated) || interpolated <= low || interpolated >= high
-          ? low + (high - low) / 2 : interpolated
-        result = trial(middle)
-        if (Math.abs(result.residual) <= p.tolerance) { status = 'converged'; break }
-        if (result.residual < 0) { low = middle; lowResidual = result.residual }
-        else { high = middle; highResidual = result.residual; highResult = result }
+    if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
+    else if (!isEventYear && result.residual < -p.tolerance) status = 'shortfall'
+    else if (isEventYear && result.residual < -p.tolerance) {
+      // Event year with a negative high-side residual: scan the fixed-target
+      // kink levels B = cumulative nominal fixed amounts (y = H - B) for a
+      // directly validated root before judging fundability.
+      const kinkLevels: number[] = []
+      {
+        let cumulative = 0
+        for (const fixed of event!.fixedTargets) {
+          cumulative += fixed.amountToday * event!.inflationFactor
+          const candidate = available - cumulative
+          if (Number.isFinite(candidate) && candidate > low && candidate < high) kinkLevels.push(candidate)
+        }
       }
-      iterations = Math.min(iterations, p.maxIterations)
-      if (status === 'nonconverged' && highResidual >= 0 && highResidual <= fundedExcessBound + p.tolerance) {
-        result = highResult
-        status = 'converged'
+      for (const candidate of kinkLevels) {
+        iterations += 1
+        const kinkTrial = trial(candidate)
+        if (Math.abs(kinkTrial.residual) <= p.tolerance) { result = kinkTrial; status = 'converged'; break }
+      }
+      if (status === 'nonconverged') {
+        // Demonstrable shortfall only: even with zero charges the unavoidable
+        // spending/income gap already exceeds holdings. Anything else is a
+        // numerical nonconvergence diagnostic, not a manufactured insolvency.
+        if (p.spendingLessOtherIncome > available + p.tolerance) status = 'shortfall'
+        else runBracketSearch()
       }
     }
+    else runBracketSearch()
   }
-  const excess = status === 'converged' ? Math.max(0, result.residual) : 0
-  const needsRepurchase = status === 'converged' && excess > p.tolerance
-  if (needsRepurchase && excess > fundedExcessBound + p.tolerance)
+  // Commit: B = H - paid + S is the settled allocation base. In the event year
+  // the signed solve converges at y ≈ N, so a genuine surplus arrives as the
+  // trial deposit S = max(0, -y) inside the shared assessment — allocated once
+  // via T(B) with one combined funding/event tax, VP, KV/PV and pension funding
+  // sale. No post-hoc surplus purchase exists (routing the surplus through T(H)
+  // first would sell fund holdings the signed base T(H + S) never sells, and
+  // would overtax the surplus). Ordinary years converge at y ≈ max(0, N) with a
+  // zero trial deposit and keep the established year-end surplus lineage outside
+  // this settlement. The only extra above the base is the bounded rounding
+  // excess E = max(0, y - N) (event) or max(0, y - max(0, N)) (ordinary),
+  // confined to the individually justified pension-rounding bound and conserved
+  // as marginal purchases T(B + E) - T(B) (event resolver, including partially
+  // funded fixed priorities) or proportionally to current holdings (drift) —
+  // purchases only, actual fund cost plus one December VP each, true zero-NAV guard.
+  const base = status === 'converged' ? money.parse(available - result.sale.paid + result.deposit) : 0
+  const eventSurplus = status === 'converged' && event ? money.parse(result.deposit) : 0
+  const roundingExcess = status === 'converged' ? Math.max(0, result.residual) : 0
+  if (status === 'converged' && roundingExcess > p.tolerance && roundingExcess > fundedExcessBound + p.tolerance)
     throw new Error('Finanzierungsüberschuss außerhalb der belegten Rundungsgrenze')
-  let repurchaseFundCost = 0
-  let repurchasePending = 0
-  let repurchaseBuckets: typeof result.movement.state.buckets | null = null
-  if (needsRepurchase) {
-    const movementTotal = result.movement.state.buckets.reduce((s, b) => s + b.value, 0)
-    const targets = p.buckets.map(b => b.targetWeight)
-    const hasTargets = targets.every(w => w !== undefined)
-      && Math.abs((targets as number[]).reduce((s, w) => s + (w ?? 0), 0) - 1) <= 1e-9
-    const weightsById = new Map<string, number>()
-    if (hasTargets) {
-      for (const m of p.buckets) weightsById.set(m.id, m.targetWeight!)
-    } else {
-      for (const b of result.movement.state.buckets)
-        weightsById.set(b.id, movementTotal > 0 ? b.value / movementTotal : 0)
+  const additional = status === 'converged' ? money.parse(roundingExcess) : 0
+  let marginalFundCost = 0
+  let marginalPending = 0
+  let marginalBuckets: typeof result.movement.state.buckets | null = null
+  if (status === 'converged' && additional > p.tolerance) {
+    const marginals = event
+      ? marginalTargetsForAdditionalWealth({ netWealth: base, baseWealth: base, additionalWealth: additional,
+          inflationFactor: event.inflationFactor, buckets: allocationViews,
+          fixedTargets: event.fixedTargets, remainderWeights: event.remainderWeights })
+        .map(m => ({ id: m.id, additional: m.additional }))
+      : (() => {
+        const total = result.movement.state.buckets.reduce((s, b) => s + b.value, 0)
+        return result.movement.state.buckets.map(b => ({ id: b.id,
+          additional: total > 0 ? additional * b.value / total : additional / result.movement.state.buckets.length }))
+      })()
+    // Exact conservation: marginal targets sum to the additional amount;
+    // sub-epsilon float dust settles on the largest share.
+    const dust = additional - marginals.reduce((s, m) => s + m.additional, 0)
+    if (Math.abs(dust) > 1e-6) throw new Error('Umschichtungsaufteilung erhält den Zusatzbetrag nicht.')
+    if (dust !== 0) {
+      let largest = 0
+      for (let i = 1; i < marginals.length; i++) {
+        if (marginals[i].additional > marginals[largest].additional) largest = i
+      }
+      marginals[largest].additional += dust
+      if (marginals[largest].additional < 0) throw new Error('Umschichtungsaufteilung erhält den Zusatzbetrag nicht.')
     }
-    repurchaseBuckets = result.movement.state.buckets.map(b => {
-      const share = excess * (weightsById.get(b.id) ?? 0)
+    marginalBuckets = result.movement.state.buckets.map(b => {
+      const share = marginals.find(m => m.id === b.id)?.additional ?? 0
       if (b.eligibility === 'accumulating-equity-fund' && share > 0) {
-        repurchaseFundCost += share
+        marginalFundCost += share
         const r = p.buckets.find(m => m.id === b.id)!.totalReturnRate
         if (r === -1) throw new Error('Cannot purchase a fund at zero NAV')
-        repurchasePending += calculateVorabpauschale({
+        marginalPending += calculateVorabpauschale({
           startValue: share / (1 + r), endValue: share,
           projectedBasisRate: p.projectedBasisRate, acquisitionMonth: 12,
         })
@@ -357,9 +471,9 @@ export function simulateEstimatorYear(
       return { ...b, value: b.value + share }
     })
   }
-  const movementBuckets = repurchaseBuckets ?? result.movement.state.buckets
-  const movementFundCost = result.movement.state.fundAcquisitionCost + repurchaseFundCost
-  const movementPending = result.movement.state.pendingVorabpauschale + repurchasePending
+  const movementBuckets = marginalBuckets ?? result.movement.state.buckets
+  const movementFundCost = result.movement.state.fundAcquisitionCost + marginalFundCost
+  const movementPending = result.movement.state.pendingVorabpauschale + marginalPending
   const pendingVorabpauschale = money.parse(movementPending + contributionVorabpauschale)
   const closing = stateSchema.parse({ ...result.movement.state,
     buckets: movementBuckets.map(b => ({ ...b,
@@ -380,6 +494,12 @@ export function simulateEstimatorYear(
     requiredWithdrawal: result.required, paidWithdrawal: result.sale.paid,
     unfundedWithdrawal: Math.max(0, result.required - result.sale.paid),
     closingCapital: closing.buckets.reduce((sum, b) => sum + b.value, 0),
-    excessRepurchase: needsRepurchase ? excess : 0,
+    excessRepurchase: status === 'converged' && roundingExcess > p.tolerance ? roundingExcess : 0,
+    // Signed funding lineage: genuine need N, trial deposit S (carries the
+    // event-year genuine surplus inside the signed trial; zero at every
+    // converged ordinary trial), and the bounded rounding excess conserved as
+    // marginal purchases above.
+    genuineNeed: result.genuineNeed, trialDeposit: result.deposit,
+    eventSurplusDeposit: eventSurplus, roundingExcess,
   }
 }

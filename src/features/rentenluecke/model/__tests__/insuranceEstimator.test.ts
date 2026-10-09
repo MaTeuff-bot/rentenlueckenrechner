@@ -6,6 +6,8 @@ import { assessCapitalIncome, calculateVorabpauschale, createEstimatorState,
   type EstimatorYearInput } from '../capitalIncome/insuranceEstimator'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { assessCore } from '../tax/pureCore'
+import { assessPensionYearTaxValues, createPensionTaxSetup, incomeTax32a2026 } from '../tax/incomeTax'
+import { marginalTargetsForAdditionalWealth } from '../capitalIncome/allocationEvent'
 
 const fund = (value: number, id = 'fund'): EstimatorBucket => ({ id, value, eligibility: 'accumulating-equity-fund' })
 const bank = (value: number, id = 'bank'): EstimatorBucket => ({ id, value, eligibility: 'ordinary-bank-deposit' })
@@ -377,37 +379,44 @@ describe('aggregate and intermediate monetary range regression', () => {
   })
 })
 
-describe('accumulation Umschichtung tax (slice 1b)', () => {
+describe('drift without annual trades (no target restoration)', () => {
   it('leaves small rebalancing gains untaxed below the scaled allowance (hand-computed)', () => {
     // Fund 1,000 (cost 500) + bank 1,000, no VP history, basis 0 → VP 0.
-    // Fund +100% → 2,000; bank 0% → 1,000; total 3,000; targets 50/50 → fund sale 500.
-    // Movement gain: 500 − 500×(500/2,000) = 500 − 125 = 375.
-    // Tax base: 375 × 0.7 = 262.5 < 1,000 → tax 0, no funding sale.
+    // Fund +100% → 2,000; bank 0% → 1,000; total 3,000. Drift performs no
+    // trades, so no gains are realized: movement and sale gains are both 0.
+    // Tax base 0 < 1,000 → tax 0, no funding sale.
     const s = initial([fund(1000), bank(1000)], 500)
     const r = simulateEstimatorYear(s, year(s, {
       projectedBasisRate: 0,
       spendingLessOtherIncome: 0,
       withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
       buckets: [
-        { id: 'fund', totalReturnRate: 1, contribution: 0, targetWeight: 0.5 },
-        { id: 'bank', totalReturnRate: 0, contribution: 0, targetWeight: 0.5 },
+        { id: 'fund', totalReturnRate: 1, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
       ],
     }), noInsurance)
     expect(r.status).toBe('converged')
-    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(375, 9)
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(0, 9)
+    expect(r.movement.fundSales).toBeCloseTo(0, 9)
+    expect(r.movement.fundPurchases).toBeCloseTo(0, 9)
     expect(r.sale.adjustedFundSaleGain).toBeCloseTo(0, 9)
-    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(262.5, 9)
-    expect(r.withdrawalTax!.sparerpauschbetragApplied).toBeCloseTo(262.5, 9)
+    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(0, 9)
+    expect(r.withdrawalTax!.sparerpauschbetragApplied).toBeCloseTo(0, 9)
     expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
     expect(r.paidWithdrawal).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(2_000, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(1_000, 9)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(500, 9)
     expect(r.closingCapital).toBeCloseTo(3_000, 9)
     expect(r.closingCapital).toBeCloseTo(r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal, 9)
   })
 
-  it('funds large rebalancing gains through the same tax path with a scaled allowance', () => {
-    // Fund 60,000 (cost 30,000) + bank 40,000; fund +50%, bank +2%; targets 60/40.
-    // The converged trial funds the tax itself, so the sale gain joins the movement gain.
-    // Tax identity (same assessCore path): taxable = (sale + movement + VP) × 0.7.
+  it('taxes only interest and funding-sale gains with a scaled allowance (drift, hand-computed)', () => {
+    // Fund 60,000 (cost 30,000) + bank 40,000; fund +50%, bank +2%; drift.
+    // No movement gains exist; the only assessable income is the once-credited
+    // gross bank interest (bank +2% on 40,000 = 800, unexempted).
+    // Tax identity (same assessCore path): taxable = (sale + 0 + VP) × 0.7.
+    // 800 < 1,050 allowance → tax 0, no funding sale.
     const s = initial([fund(60000), bank(40000)], 30000)
     const allowance = scaledSparerpauschbetrag(1.05)
     expect(allowance).toBeCloseTo(1_050, 9)
@@ -416,15 +425,117 @@ describe('accumulation Umschichtung tax (slice 1b)', () => {
       spendingLessOtherIncome: 0,
       withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: allowance },
       buckets: [
-        { id: 'fund', totalReturnRate: 0.5, contribution: 0, targetWeight: 0.6 },
-        { id: 'bank', totalReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+        { id: 'fund', totalReturnRate: 0.5, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.02, contribution: 0 },
       ],
     }), noInsurance)
     expect(r.status).toBe('converged')
-    expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThan(0)
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(0, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
     // Same-path check: engine tax equals hand-applied assessCore on the realized
     // gains plus the once-credited gross bank interest (bank +2% on 40,000 = 800,
     // unexempted, in the single shared assessment).
+    expect(r.bankInterest).toBeCloseTo(800, 9)
+    const expected = assessCore(
+      r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
+      r.receivedVorabpauschale, 0, allowance, true, r.bankInterest)
+    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(expected.taxableWithdrawal, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
+    expect(r.paidWithdrawal).toBe(0)
+    expect(r.requiredWithdrawal).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal, 9)
+  })
+
+  it('offsets an opening loss before the scaled allowance without any trades (drift)', () => {
+    // Drift realizes nothing, so the 800 interest meets the 4,000 opening loss
+    // first: taxable base 0, tax 0, closing loss 3,200 carried forward once.
+    const s = { ...initial([fund(60000), bank(40000)], 30000), simulatedLossCarryforward: 4_000 }
+    const allowance = scaledSparerpauschbetrag(1.05)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 4_000, allowanceAvailable: allowance },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.5, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.02, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(0, 9)
+    expect(r.bankInterest).toBeCloseTo(800, 9)
+    const expected = assessCore(
+      r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
+      r.receivedVorabpauschale, 4_000, allowance, true, r.bankInterest)
+    expect(r.withdrawalTax!.taxableBase).toBeCloseTo(expected.taxableBase, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.withdrawalTax!.closingLossCarryforward).toBeCloseTo(3_200, 9)
+    expect(r.closingState!.simulatedLossCarryforward).toBeCloseTo(3_200, 9)
+  })
+})
+
+describe('one-time allocation event (Arbeitsende settlement)', () => {
+  it('realizes the 50/50 remainder trade with pooled cost release (hand-computed)', () => {
+    // Same setup as the drift case above, but the event allocates the 3,000 net
+    // base 50/50: fund sale 500; cost released 500×(500/2,000) = 125;
+    // movement gain 500 − 125 − 0 = 375. Tax base 375 × 0.7 = 262.5 < 1,000
+    // → tax 0, no funding sale.
+    const s = initial([fund(1000), bank(1000)], 500)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: 1, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.movement.fundSales).toBeCloseTo(500, 9)
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(375, 9)
+    expect(r.sale.adjustedFundSaleGain).toBeCloseTo(0, 9)
+    expect(r.withdrawalTax!.taxableWithdrawal).toBeCloseTo(262.5, 9)
+    expect(r.withdrawalTax!.sparerpauschbetragApplied).toBeCloseTo(262.5, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.paidWithdrawal).toBe(0)
+    expect(r.eventSurplusDeposit).toBe(0)
+    expect(r.roundingExcess).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(1_500, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(1_500, 9)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(500 - 125, 9)
+    expect(r.closingCapital).toBeCloseTo(3_000, 9)
+  })
+
+  it('funds large event gains through the same tax path with a scaled allowance', () => {
+    // Fund 60,000 (cost 30,000) + bank 40,000; fund +50%, bank +2%; event 60/40.
+    // Post-return 90,000/40,800 (H = 130,800). The converged trial funds the tax
+    // itself (paid = tax), so the event base shrinks to B = H - paid and the sale
+    // pins are the funding fixed point, verified identity by identity:
+    // paid = tax = 1,459.7878; funding sale gain = paid x 60,000/130,800 = 669.6274;
+    // event fund sale = 11,520 - paid x (90,000/130,800 - 0.6) = 11,391.4315;
+    // cost released = (30,000 - funding release) x sale/post-sale-fund = 3,797.1438;
+    // movement gain = 7,594.2877; taxable = (669.6274 + 7,594.2877) x 0.7 + 800
+    // bank interest = 6,584.7406; tax = (6,584.7406 - 1,050) x 0.25 x 1.055.
+    const s = initial([fund(60000), bank(40000)], 30000)
+    const allowance = scaledSparerpauschbetrag(1.05)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: allowance },
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.6, bank: 0.4 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.5, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.02, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.movement.fundSales).toBeCloseTo(11_391.431530450369, 6)
+    expect(r.movement.costReleased).toBeCloseTo(3_797.143843483456, 6)
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(7_594.287686966913, 6)
+    expect(r.sale.adjustedFundSaleGain).toBeCloseTo(669.6274455710156, 6)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThan(0)
     expect(r.bankInterest).toBeCloseTo(800, 9)
     const expected = assessCore(
       r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
@@ -438,25 +549,379 @@ describe('accumulation Umschichtung tax (slice 1b)', () => {
       r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal, 9)
   })
 
-  it('offsets an opening loss before the scaled allowance on rebalancing gains', () => {
-    const s = { ...initial([fund(60000), bank(40000)], 30000), simulatedLossCarryforward: 4_000 }
-    const allowance = scaledSparerpauschbetrag(1.05)
+  it('fills fixed priorities sequentially and splits the rest by weight (hand-computed)', () => {
+    // Net base 3,000; fixed 2,000 today's euros to bank (priority 1, factor 1),
+    // remainder 1,000 by weights fund 0.25 / bank 0.75: fund 250, bank 2,750.
+    // Bank moves are principal shifts (no gain); fund sale 2,000−250 = 1,750
+    // releases cost 500×(1,750/2,000) = 437.5 → gain 1,312.5.
+    // Tax base 1,312.5 × 0.7 = 918.75 < 1,000 → tax 0.
+    const s = initial([fund(1000), bank(1000)], 500)
     const r = simulateEstimatorYear(s, year(s, {
       projectedBasisRate: 0,
       spendingLessOtherIncome: 0,
-      withdrawalTax: { openingLossCarryforward: 4_000, allowanceAvailable: allowance },
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      allocationEvent: { fixedTargets: [{ bucketId: 'bank', amountToday: 2000 }], remainderWeights: { fund: 0.25, bank: 0.75 }, inflationFactor: 1 },
       buckets: [
-        { id: 'fund', totalReturnRate: 0.5, contribution: 0, targetWeight: 0.6 },
-        { id: 'bank', totalReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+        { id: 'fund', totalReturnRate: 1, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
       ],
     }), noInsurance)
     expect(r.status).toBe('converged')
-    expect(r.bankInterest).toBeCloseTo(800, 9)
+    expect(r.movement.adjustedFundSaleGain).toBeCloseTo(1_312.5, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(250, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(2_750, 9)
+    expect(r.closingCapital).toBeCloseTo(3_000, 9)
+  })
+
+  it('rejects an actual impossible purchase at zero NAV but resolves zero targets', () => {
+    // Collapsed fund (return −1, value 0): allocating a positive remainder to it
+    // is an impossible purchase and throws truthfully. A zero remainder share
+    // resolves zero targets without throwing.
+    const s = initial([fund(1000), bank(1000)], 500)
+    const buckets = [
+      { id: 'fund', totalReturnRate: -1, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, contribution: 0 },
+    ]
+    expect(() => simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+    const zeroShare = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0, bank: 1 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)
+    expect(zeroShare.status).toBe('converged')
+    expect(zeroShare.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(zeroShare.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(1_000, 9)
+  })
+})
+
+describe('signed event-year solve (surplus inside the trial, never post-hoc)', () => {
+  // Hand-derived regression: fund 60,000 (cost 0, full embedded gain) + bank
+  // 40,000, zero returns, other income 36,000, spending 0, target 50/50.
+  // Signed need N = -36,000, so the trial converges at y = -36,000 with the
+  // genuine surplus as the trial deposit: base B = 100,000 + 36,000 = 136,000,
+  // targets 68,000/68,000 — the fund grows 60,000 -> 68,000 (purchase only).
+  // The rejected post-hoc route solved T(100,000) = 50,000/50,000 first (fund
+  // sale 10,000, taxed embedded gain), then bought back 18,000: same 68,000
+  // landing split but a phantom taxed sale plus an overtaxed surplus.
+  const surplusEvent = {
+    projectedBasisRate: 0.02,
+    spendingLessOtherIncome: -36000,
+    withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+    allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+    buckets: [
+      { id: 'fund', totalReturnRate: 0, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, contribution: 0 },
+    ],
+  }
+  it('funds the surplus through T(H + S) with no phantom fund sale', () => {
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, year(s, surplusEvent), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.genuineNeed).toBeCloseTo(-36000, 9)
+    expect(r.trialDeposit).toBeCloseTo(36000, 9)
+    expect(r.eventSurplusDeposit).toBeCloseTo(36000, 9)
+    expect(r.roundingExcess).toBe(0)
+    expect(r.paidWithdrawal).toBe(0)
+    expect(r.requiredWithdrawal).toBe(0)
+    // No sale anywhere: neither the funding leg nor the event leg sells fund.
+    expect(r.sale.fundProceeds).toBe(0)
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.movement.fundPurchases).toBeCloseTo(8000, 9)
+    // Embedded gain stays unrealized, so the shared assessment taxes nothing.
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(68000, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(68000, 9)
+    expect(r.closingCapital).toBeCloseTo(136000, 9)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(8000, 9)
+    // December purchases earn no current-year return and accrue no VP without gains.
+    expect(r.pendingVorabpauschale).toBe(0)
+    // Cash conservation: closing = opening + return + contribution - paid + S + E.
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 9)
+  })
+  it('carries VP, opening loss, KV/PV and pension extras exactly once', () => {
+    // Variant with fund +5%: H = 103,000, base 139,000 -> 69,500/69,500, still
+    // purchase-only (post-sale fund 63,000 < 69,500). The January holding VP and
+    // the December purchase VP accrue once each for next year.
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, year(s, {
+      ...surplusEvent,
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.05, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(69500, 6)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(69500, 6)
+    const holdingVp = calculateVorabpauschale({ startValue: 60000, endValue: 63000, projectedBasisRate: 0.02, acquisitionMonth: 1 })
+    const purchaseVp = calculateVorabpauschale({ startValue: 6500 / 1.05, endValue: 6500, projectedBasisRate: 0.02, acquisitionMonth: 12 })
+    expect(r.pendingVorabpauschale).toBeCloseTo(holdingVp + purchaseVp, 9)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(6500, 9)
+    // Opening loss with no realized gains is carried through untouched (never
+    // consumed twice, never dropped). The loss lives on the estimator state for
+    // the assessment carryforward; the withdrawal-tax input mirrors the ledger's
+    // single-source wiring into the shared capital-tax core.
+    const lossState = { ...initial([fund(60000), bank(40000)], 0), simulatedLossCarryforward: 5000 }
+    const loss = simulateEstimatorYear(lossState, year(lossState, {
+      ...surplusEvent,
+      withdrawalTax: { openingLossCarryforward: 5000, allowanceAvailable: scaledSparerpauschbetrag(1) },
+    }), noInsurance)
+    expect(loss.status).toBe('converged')
+    expect(loss.assessment.closingSimulatedLoss).toBe(5000)
+    expect(loss.closingCapital).toBeCloseTo(136000, 9)
+    // KV/PV enter the signed need once: N = -36,000 + 1,800 = -34,200.
+    const kvpv = simulateEstimatorYear(s, year(s, surplusEvent), () => ({ kv: 1200, pv: 600 }))
+    expect(kvpv.status).toBe('converged')
+    expect(kvpv.genuineNeed).toBeCloseTo(-34200, 9)
+    expect(kvpv.trialDeposit).toBeCloseTo(34200, 9)
+    expect(kvpv.movement.fundSales).toBe(0)
+    expect(kvpv.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(67100, 6)
+    expect(kvpv.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(67100, 6)
+    // Pension extra enters once: N = -36,000 + 800 = -35,200.
+    const pension = simulateEstimatorYear(s, year(s, surplusEvent), noInsurance,
+      { additionalRequirementForTrial: () => 800 })
+    expect(pension.status).toBe('converged')
+    expect(pension.genuineNeed).toBeCloseTo(-35200, 9)
+    expect(pension.trialDeposit).toBeCloseTo(35200, 9)
+    expect(pension.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(67600, 6)
+  })
+  it('funds an income surplus larger than holdings (no -H clamp)', () => {
+    // Income 150,000 against H = 100,000: low = -150,000 (not clamped to
+    // -100,000), base 250,000 -> 125,000/125,000 with no fund sale and no tax.
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, year(s, { ...surplusEvent, spendingLessOtherIncome: -150000 }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.trialDeposit).toBeCloseTo(150000, 9)
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(125000, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(125000, 9)
+    expect(r.closingCapital).toBeCloseTo(250000, 9)
+  })
+  it('solves a positive signed need with one shared tax, loss and allowance', () => {
+    // Spending 20,000, cost 0, loss 5,000, allowance 1,000, 50/50 from 60/40:
+    // total fund sales = 0.5y + 10,000, so the root funds spending plus its own
+    // tax. The committed tax must equal a single assessCore over the combined
+    // funding + event gains with one loss offset and one allowance.
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, year(s, {
+      ...surplusEvent,
+      spendingLessOtherIncome: 20000,
+      withdrawalTax: { openingLossCarryforward: 5000, allowanceAvailable: scaledSparerpauschbetrag(1) },
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(Math.abs(r.residual)).toBeLessThanOrEqual(0.000001)
+    expect(r.paidWithdrawal).toBeGreaterThan(20000)
+    expect(r.genuineNeed).toBeCloseTo(20000 + r.withdrawalTax!.capitalIncomeTax, 6)
     const expected = assessCore(
       r.sale.adjustedFundSaleGain + r.movement.adjustedFundSaleGain,
-      r.receivedVorabpauschale, 4_000, allowance, true, r.bankInterest)
-    expect(r.withdrawalTax!.taxableBase).toBeCloseTo(expected.taxableBase, 9)
+      r.receivedVorabpauschale, 5000, scaledSparerpauschbetrag(1), true, r.bankInterest)
     expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(expected.capitalIncomeTax, 9)
-    expect(r.withdrawalTax!.capitalIncomeTax).toBeGreaterThanOrEqual(0)
+    // Joint funding identity: every sold fund euro is either the funding leg
+    // (60% of paid) or the event rebalancing leg (10,000 - 10% of paid).
+    expect(r.sale.fundProceeds + r.movement.fundSales).toBeCloseTo(0.5 * r.paidWithdrawal + 10000, 6)
+    // 50/50 landing split of the settled base plus the (here zero) rounding:
+    // closing halves match because contributions are zero.
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBeCloseTo(r.closingCapital / 2, 6)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(r.closingCapital / 2, 6)
+    expect(r.closingCapital).toBeCloseTo(100000 - r.paidWithdrawal + r.roundingExcess, 6)
+  })
+})
+
+describe('event-year solver honesty (no high-negative shortfall proof)', () => {
+  // Threshold KV burden on the shared assessment: 200,000 once the assessment
+  // reaches 30,000. The assessment is post-Teilfreistellung/post-allowance, so
+  // the full-sale assessment is 60,000 x 0.7 - 51 = 41,949 (11,949 margin) and
+  // the half-sale assessment is 30,000 x 0.7 - 51 = 20,949 (9,051 margin).
+  const thresholdInsurance = (assessment: number) => assessment >= 30000 ? { kv: 200000, pv: 0 } : { kv: 0, pv: 0 }
+  const honestSetup = (overrides: Partial<EstimatorYearInput> = {}): EstimatorYearInput => {
+    const s = initial([fund(60000), bank(40000)], 0)
+    return year(s, {
+      projectedBasisRate: 0.02,
+      spendingLessOtherIncome: 10000,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.6, bank: 0.4 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+      ...overrides,
+    })
+  }
+  it('validates a smaller root in the event year where ordinary logic sees only shortfall', () => {
+    const s = initial([fund(60000), bank(40000)], 0)
+    const event = simulateEstimatorYear(s, honestSetup(), thresholdInsurance)
+    expect(event.status).toBe('converged')
+    expect(Math.abs(event.residual)).toBeLessThanOrEqual(0.000001)
+    // The validated root funds ~10k spending plus its own small sale tax with a
+    // far smaller sale than full holdings — despite the negative high trial.
+    expect(event.paidWithdrawal).toBeGreaterThan(0)
+    expect(event.paidWithdrawal).toBeLessThan(50000)
+    expect(event.closingCapital).toBeCloseTo(100000 - event.paidWithdrawal + event.roundingExcess, 6)
+    expect(event.closingState!.buckets.find(b => b.id === 'fund')!.value)
+      .toBeCloseTo(0.6 * (100000 - event.paidWithdrawal + event.roundingExcess), 4)
+    // Same callback without the event: low trial already needs 10k, the full
+    // sale trips the 200k burden, high residual deeply negative -> shortfall
+    // with a committable full-sale state and preserved unpaid liabilities.
+    const plain = simulateEstimatorYear(s, honestSetup({ allocationEvent: undefined }), thresholdInsurance)
+    expect(plain.status).toBe('shortfall')
+    expect(plain.closingState).not.toBeNull()
+    expect(plain.paidWithdrawal).toBeCloseTo(100000, 9)
+    expect(plain.unfundedWithdrawal).toBeGreaterThan(0)
+  })
+  it('reports demonstrable shortfall only when the gap alone exceeds holdings', () => {
+    // Spending 120,000 against H = 100,000: even with zero charges the need
+    // exceeds holdings, so shortfall with preserved unpaid liabilities.
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, honestSetup({ spendingLessOtherIncome: 120000 }), thresholdInsurance)
+    expect(r.status).toBe('shortfall')
+    expect(r.closingState).not.toBeNull()
+    expect(r.paidWithdrawal).toBeCloseTo(100000, 9)
+    expect(r.unfundedWithdrawal).toBeGreaterThan(0)
+  })
+  it('reports nonconvergence (not insolvency) when no root validates without proof', () => {
+    // A constant 200,000 extra makes every trial unfundable, but the
+    // lower-bound proof (10,000 gap vs 100,000 holdings) cannot show it, so the
+    // honest outcome is the nonconverged diagnostic with no committable state.
+    const s = initial([fund(60000), bank(40000)], 0)
+    const r = simulateEstimatorYear(s, honestSetup(), noInsurance,
+      { additionalRequirementForTrial: () => 200000 })
+    expect(r.status).toBe('nonconverged')
+    expect(r.closingState).toBeNull()
+  })
+})
+
+describe('pension-rounding excess across partially funded fixed priorities', () => {
+  // Spending 99,999.50 against H = 100,000 with zero charges by construction
+  // (full cost basis, zero returns, zero VP gains, zero interest, zero
+  // insurance/extra): the high trial overfunds by exactly 0.50 EUR, inside
+  // fundedExcessBound = 2. With a controlled loop budget of 1 the search cannot
+  // validate directly, so the production bounded-candidate branch commits the
+  // high-side trial and conserves the 0.50 excess as marginal purchases
+  // T(0 + E) - T(0): the first fixed priority (bank 30,000, partially funded)
+  // absorbs it all. The twin with the full loop budget converges to the exact
+  // root instead (E near zero) and lands on the same 0.50 bank repurchase.
+  const roundingInput = (maxIterations: number) => {
+    const s = initial([fund(60000), bank(40000)], 60000)
+    return { state: s, input: year(s, {
+      projectedBasisRate: 0.02,
+      spendingLessOtherIncome: 99999.5,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      allocationEvent: { fixedTargets: [{ bucketId: 'bank', amountToday: 30000 }, { bucketId: 'fund', amountToday: 40000 }],
+        remainderWeights: { bank: 1 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+      maxIterations,
+    }) }
+  }
+  it('commits the bounded high-side candidate and routes it to the partial fixed priority', () => {
+    const { state, input } = roundingInput(1)
+    const r = simulateEstimatorYear(state, input, noInsurance, { fundedExcessBound: 2 })
+    expect(r.status).toBe('converged')
+    expect(r.iterations).toBe(1)
+    expect(r.genuineNeed).toBeCloseTo(99999.5, 9)
+    expect(r.paidWithdrawal).toBeCloseTo(100000, 9)
+    expect(r.unfundedWithdrawal).toBe(0)
+    // The bounded excess is exactly the high-side overfunding.
+    expect(r.roundingExcess).toBeCloseTo(0.5, 9)
+    expect(r.excessRepurchase).toBeCloseTo(0.5, 9)
+    expect(r.trialDeposit).toBe(0)
+    // Settled base zero; the marginal T(0.5) - T(0) lands fully on the first
+    // (partially funded) fixed priority, matching the pure helper exactly.
+    const views = [{ id: 'fund', eligibility: 'accumulating-equity-fund' as const }, { id: 'bank', eligibility: 'ordinary-bank-deposit' as const }]
+    const marginals = marginalTargetsForAdditionalWealth({ netWealth: 0, baseWealth: 0,
+      additionalWealth: 0.5, inflationFactor: 1, buckets: views,
+      fixedTargets: input.allocationEvent!.fixedTargets, remainderWeights: { bank: 1 } })
+    expect(marginals.find(m => m.id === 'bank')!.additional).toBeCloseTo(0.5, 9)
+    expect(marginals.find(m => m.id === 'fund')!.additional).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(0.5, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(0.5, 9)
+    // Purchases only, bank leg: no euro cost, no December VP, loss untouched.
+    expect(r.closingState!.fundAcquisitionCost).toBe(0)
+    expect(r.pendingVorabpauschale).toBe(0)
+    expect(r.assessment.closingSimulatedLoss).toBe(0)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBe(0)
+  })
+  it('reaches the same landing through the exact root with a full loop budget', () => {
+    const { state, input } = roundingInput(100)
+    const r = simulateEstimatorYear(state, input, noInsurance, { fundedExcessBound: 2 })
+    expect(r.status).toBe('converged')
+    expect(Math.abs(r.residual)).toBeLessThanOrEqual(0.000001)
+    // Directly validated: the excess is dust, the paid sale stops 0.50 short
+    // of full holdings, and the settled base itself carries the 0.50.
+    expect(r.roundingExcess).toBeLessThanOrEqual(0.000001)
+    expect(r.paidWithdrawal).toBeCloseTo(99999.5, 3)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(0.5, 3)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(0.5, 3)
+  })
+  it('conserves a statutory pension-floor excess on a partially funded fund priority with cost and December VP', () => {
+    // Genuine statutory feedback (not a constant 800 or zero-charge plumbing):
+    // GRV 24,000 with the 2027 84.5% setup has its 1-EUR floor edge at kv 7822/7824
+    // (tax 1 vs 0 at factor 1). Fixed-kv twins converge at assessments 7458.83
+    // (kv 7822, tax 1716.97) and 7459.31 (kv 7824, tax 1717.10). The test-double
+    // insurance leg steps DOWN across 7459 (7824 below, 7822 above), so totals are
+    // 7824+0=7824 below and 7822+1=7823 above: a genuine -1 EUR downward jump in
+    // N at the threshold with no exact root. Spending 8000 against H = 103,000
+    // (fund 60,000 at +5% plus bank 40,000, zero cost basis) settles at base
+    // ~85459.64 below the first fixed priority (fund 86,000), so the fund leg is
+    // only partially funded; the bounded floor excess (<= 2 nominal,
+    // fundedExcessBound = 2) is conserved as fund marginal purchases with real
+    // euro cost and one December VP each.
+    const setup = createPensionTaxSetup({ scope: 'grv-single-domestic-post-2023-no-other-income', startYear: 2027, firstYearGrvGross: 24000 })
+    expect(assessPensionYearTaxValues(setup, 24000, 7822, 0, 1).pensionIncomeTax).toBe(1)
+    expect(assessPensionYearTaxValues(setup, 24000, 7824, 0, 1).pensionIncomeTax).toBe(0)
+    expect(incomeTax32a2026(12355)).toBe(0)
+    expect(incomeTax32a2026(12356)).toBe(1)
+    const s = initial([fund(60000), bank(40000)], 0)
+    const pensionFloorExtra = (insurance: { kv: number; pv: number }) =>
+      assessPensionYearTaxValues(setup, 24000, insurance.kv, insurance.pv, 1).pensionIncomeTax
+    const steppingInsurance = (assessment: number) => (assessment > 7459 ? { kv: 7822, pv: 0 } : { kv: 7824, pv: 0 })
+    const input = year(s, {
+      projectedBasisRate: 0.02,
+      spendingLessOtherIncome: 8000,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: scaledSparerpauschbetrag(1) },
+      allocationEvent: { fixedTargets: [{ bucketId: 'fund', amountToday: 86000 }, { bucketId: 'bank', amountToday: 40000 }],
+        remainderWeights: { fund: 1 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: 0.05, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    })
+    const r = simulateEstimatorYear(s, input, steppingInsurance, { additionalRequirementForTrial: pensionFloorExtra, fundedExcessBound: 2 })
+    expect(r.status).toBe('converged')
+    expect(r.roundingExcess).toBeGreaterThan(0.000001)
+    expect(r.roundingExcess).toBeLessThanOrEqual(2.000001)
+    expect(r.excessRepurchase).toBeCloseTo(r.roundingExcess, 9)
+    // Partially funded fund priority absorbs the marginal: fund close exceeds the
+    // settled base share by the fund marginal, cost and December VP are real.
+    const views = [{ id: 'fund', eligibility: 'accumulating-equity-fund' as const }, { id: 'bank', eligibility: 'ordinary-bank-deposit' as const }]
+    const base = r.openingCapital + r.investmentReturn - r.paidWithdrawal + r.trialDeposit
+    const marginals = marginalTargetsForAdditionalWealth({ netWealth: base, baseWealth: base,
+      additionalWealth: r.roundingExcess, inflationFactor: 1, buckets: views,
+      fixedTargets: input.allocationEvent!.fixedTargets, remainderWeights: { fund: 1 } })
+    const fundMarginal = marginals.find(m => m.id === 'fund')!.additional
+    expect(fundMarginal).toBeCloseTo(r.roundingExcess, 6)
+    expect(marginals.find(m => m.id === 'bank')!.additional).toBeCloseTo(0, 9)
+    if (r.roundingExcess > 0.000001) {
+      expect(r.closingState!.fundAcquisitionCost).toBeGreaterThan(0)
+      const expectedVP = calculateVorabpauschale({ startValue: fundMarginal / 1.05, endValue: fundMarginal, projectedBasisRate: 0.02, acquisitionMonth: 12 })
+      expect(r.pendingVorabpauschale).toBeGreaterThanOrEqual(expectedVP - 1e-9)
+      expect(r.closingCapital).toBeCloseTo(base + r.contribution + r.roundingExcess + r.contribution * 0, 6)
+    }
+    expect(r.closingCapital).toBeCloseTo(r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 6)
   })
 })

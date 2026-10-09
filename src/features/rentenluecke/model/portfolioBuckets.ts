@@ -53,7 +53,11 @@ export function createPortfolioComponentsFromBuckets(buckets: PortfolioBucket[])
   if (total <= 0) return []
 
   return buckets.flatMap((bucket) => {
-    if (bucket.value <= 0) return []
+    // Zero-balance supported destinations stay declared with weight 0 so every
+    // reference/sample path carries their real returns: a future allocation
+    // destination invested in the event year must earn real returns next year,
+    // never a silent 0. Negative values stay invalid elsewhere; drop them here.
+    if (bucket.value < 0) return []
     const role = getReturnSeriesCategory(bucket.returnSeriesId)
     if (!role) return []
     const config = ROLE_CONFIG[role]

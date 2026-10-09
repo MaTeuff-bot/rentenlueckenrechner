@@ -72,7 +72,7 @@ reference-scenario and invariant suites pin the new numbers.
 - Tax on capital income *outside* realized sales/VP/gross bank interest (unrealized gains, thesaurierung
   without sale; dividends are not supported holdings anyway — accumulating funds
   and bank deposits only).
-- Accumulation-phase tax (Umschichtung gains AND bank interest) is always modeled in the detailed portfolio ledger (mandatory in every insurance mode); there is no manual withdrawal-only approximation.
+- Accumulation-phase tax (one-time allocation-event gains AND bank interest) is always modeled in the detailed portfolio ledger (mandatory in every insurance mode); there is no manual withdrawal-only approximation. Annual target-restoration trades no longer exist: outside the one-time Arbeitsende event, drift realizes no rebalancing gains.
 - Quarterly prepayments, Steuerbescheid timing, or discounting of the tax to a
   different year than its assessment.
 - No Krypto, Termingeschäfte, REIT special rules, or foreign withholding tax.

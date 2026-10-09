@@ -5,6 +5,7 @@ import type { RentenlueckeInput } from './types'
 import type { PortfolioBucket } from './portfolioBuckets'
 import { getReturnSeriesCategory } from './historicalReturns'
 import type { ChildrenAnswer } from './childrenAnswer'
+import { validateAllocationDraft, type AllocationDraft } from './capitalIncome/allocationEvent'
 export type FlowSection = 'zeitplan' | 'ausgaben' | 'einkommen' | 'vermoegen' | 'versicherung' | 'ergebnis' | 'annahmen'
 export type ScenarioIssue = { code: string; fieldPath: string; fieldId: string; section: FlowSection; kind: 'missing' | 'invalid'; message: string }
 const numericMissing = (v: unknown) => v === undefined || (typeof v === 'number' && Number.isNaN(v))
@@ -22,6 +23,12 @@ function route(path: (string | number)[], input: RentenlueckeInput, children: Ch
   if (root === 'estimatorPortfolio') {
     const names: Record<string, string> = { annualCostRate: 'cost', returnSeriesId: 'source', id: 'name' }
     return [`portfolio-${names[String(field)] ?? field}-${buckets[Number(key)]?.id}`, 'vermoegen']
+  }
+  if (root === 'allocationAtRetirement') {
+    if (key === undefined) return ['allocation-enabled', 'vermoegen']
+    if (key === 'fixedTargets') return [`allocation-fixed-${buckets[Number(field)]?.id ?? field}`, 'vermoegen']
+    if (key === 'remainderWeights') return [`allocation-weight-${String(field)}`, 'vermoegen']
+    return ['allocation-enabled', 'vermoegen']
   }
   if (root === 'retirementInsurance') {
     if (key === 'pensionAge') return [input.retirementIncomeStreams?.some(s => s.kind === 'gesetzliche-rente') ? `retirement-income-start-${controllingPensionStream(input.retirementIncomeStreams)!.id}` : 'insurance-transition', 'zeitplan']
@@ -50,7 +57,7 @@ export function cashPlanningPathForRawMode(cashMode: string | undefined): (strin
   return ['historical', 'cashMode']
 }
 
-export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers, cashPlanningIssue?: string | null, cashMode?: string): ScenarioIssue[] {
+export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswer, buckets: PortfolioBucket[], schemaError: ZodError | undefined, insuranceMessages: string[], portfolioError: string | null, allocationError: string | null, coverage?: InsuranceCoverageAnswers, cashPlanningIssue?: string | null, cashMode?: string, allocationDraft?: AllocationDraft): ScenarioIssue[] {
   const issues: ScenarioIssue[] = []
   const add = (path: (string | number)[], message: string, kind: ScenarioIssue['kind'], code: string) => {
     const [fieldId, section] = route(path, input, children, buckets)
@@ -114,6 +121,23 @@ export function scenarioIssues(input: RentenlueckeInput, children: ChildrenAnswe
   }
   if (cashPlanningIssue) {
     add(cashPlanningPathForRawMode(cashMode), cashPlanningIssue, 'missing', 'cashPlanningRate.missing')
+  }
+  // Optional one-time allocation at Arbeitsende: absent/disabled drafts never
+  // block. An enabled draft blocks the forecast until it is explicitly accepted
+  // and every destination is repaired (deleted/reclassified targets stay
+  // preserved as dangling choices, never silently dropped or redistributed).
+  if (allocationDraft?.enabled) {
+    const validation = validateAllocationDraft(buckets, allocationDraft)
+    if (!allocationDraft.accepted) {
+      issues.push({ code: 'allocation.unaccepted', fieldPath: 'allocationAtRetirement',
+        fieldId: 'allocation-accept', section: 'vermoegen', kind: 'missing',
+        message: 'Einmalige Umschichtung zum Arbeitsende: vorbefüllte Ziele ausdrücklich übernehmen oder zurücksetzen/deaktivieren.' })
+    }
+    for (const fieldIssue of validation.fieldIssues) {
+      issues.push({ code: `allocation.invalid.${fieldIssue.fieldId}`, fieldPath: 'allocationAtRetirement',
+        fieldId: fieldIssue.fieldId, section: 'vermoegen', kind: 'invalid',
+        message: `Einmalige Umschichtung zum Arbeitsende: ${fieldIssue.message}` })
+    }
   }
   return issues
 }
