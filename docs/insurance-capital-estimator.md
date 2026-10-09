@@ -137,14 +137,18 @@ Rate products are validated before statutory caps can hide out-of-range intermed
    tax/loss/allowance/insurance) and only when required is zero without
    shortfall outside accumulation. Income may pay the trial capital tax while no
    sale occurs: it is not additionally debited from holdings. The surplus is
-   split proportionally to CURRENT post-funding holdings (not target weights);
+   split proportionally to CURRENT post-funding holdings (drift, never restored
+   target weights);
    only when that total is zero, equally across all declared supported buckets
    including zero values (zero-NAV purchases rejected, never inventing units).
+   In the allocation event year this ordinary poststep is disabled: the genuine
+   surplus joins the one-time allocation base once instead.
    Fund shares add pooled acquisition cost plus December pending VP via
    `calculateVorabpauschale(start=share/(1+r), end=share, month=12)` (receipt
    next year); bank shares add principal only. New money earns no return this
-   year. This is separate from the bounded pension-rounding excessRepurchase to
-   target weights. The already-committed contributions follow the same December-purchase
+   year. This is separate from the bounded pension-rounding excessRepurchase,
+   which is conserved as same-year repurchases (drift: proportional to current
+   holdings; event year: marginal allocation purchases). The already-committed contributions follow the same December-purchase
    convention (fund cost, December VP, no same-year return, unavailable for the
    earlier funding step), matching the existing accumulation
    return-before-contribution convention. A year can therefore show a funding
@@ -207,18 +211,31 @@ that insurance is billed immediately on a sale, or reproduce §5(2)'s evidenced-
 rules. Monthly smoothing, phase splits, evidence timing and current vs past billing
 are disclosed by integration as annual planning conventions, not represented as legal rules.
 
-## Fixed-weight return reconciliation and search
+## Drift baseline and one-time allocation at Arbeitsende
 
-The existing return model maintains initial component weights each year. Integration
-makes the necessary movements explicit after proportional spending/insurance funding
-and before end-year contributions, preserving that return and savings arithmetic.
-Overweight funds sell; underweight funds buy. Fund sales release their proportional
-share of pooled euro cost and assessed VP and recognize gains. Purchases add euro
-cost; bank principal transfers are not income. Fund-to-fund sales also recognize gains.
-Pending VP is calculated on retained units and December purchases per bucket, so
-opposite fund returns cannot cancel each other's gain caps. Contributions follow the
-same fixed weights and earn no current-year return. These movements implement the
-existing allocation-maintenance economics, not a new selectable tax/rebalancing policy.
+Holdings drift every year: starting-share savings, proportional funding
+withdrawals, and current-holdings year-end surplus. No annual trade restores
+target weights (the former `maintainAllocation` restoration is removed
+globally). Fund sales release their proportional share of pooled euro cost and
+assessed VP and recognize gains. Purchases add euro cost; bank principal
+transfers are not income. Pending VP is calculated on retained units and
+December purchases per bucket, so opposite fund returns cannot cancel each
+other's gain caps. Contributions follow starting shares and earn no
+current-year return.
+
+Once, at the end of the first retirement year (Arbeitsende), an optional
+default-off event may allocate the net remaining wealth: old holdings earn
+that year's returns and jointly fund annual spending plus all modeled charges
+first; the net base is then split by fixed today's-euro priorities (sequential,
+inflation-scaled) and accepted nonnegative remainder weights (same bucket may
+receive both; undefined/all-zero weights split equally across all declared
+supported buckets including zero-balance destinations). The new allocation
+earns returns from the next year. The genuine after-charges surplus of the
+event year joins the allocation base once (the ordinary year-end surplus
+poststep is disabled that year); the bounded pension-rounding excess is
+conserved as marginal purchases `T(B+E) − T(B)`. Pure resolver:
+`model/capitalIncome/allocationEvent.ts`; engine spec only when enabled,
+explicitly accepted, and free of dangling destinations.
 
 The funding callback includes both proportional financing-sale gains and allocation-sale
 gains when computing total own KV/PV. Bank interest stays inside total return, assessment

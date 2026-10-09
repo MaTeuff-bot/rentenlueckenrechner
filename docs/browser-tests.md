@@ -42,6 +42,30 @@ Journeys (all on Chromium unless noted):
    rejection via real controls (bank + synthetic cash). Asserts the
    `Negative bank return` error and absent forecast; no bank success is claimed.
 7. `e2e/narrow-smoke.spec.ts` — narrow-viewport smoke of journey 1 (project `narrow`).
+8. `e2e/arbeitsende-allocation.spec.ts` — four independent fresh guided journeys for the
+   one-time allocation at Arbeitsende on a fresh equity + deposit setup at
+   default N1000 with a visibly bounded horizon (Planung bis Alter 69, four
+   retirement rows; default 90s test / 20s expect / 30s forecast budgets, no
+   `test.slow` or custom poll overrides).
+   (a) Event engages: nonzero fixed targets (20000/5000 today's euros) plus
+   distinct remainder weights (20/80) with a visible priority reorder
+   (exact engine order, `Priorität N`), explicit accept + enable, analytic
+   off/on differences exceeding display rounding (`|lifetime tax diff| > 100`
+   and `|first-retirement End diff| > 100`; a large reallocation realizes
+   event-year trade taxes, so the Ends differ instead of matching; exact
+   total conservation is pinned at engine level), all-retirement-row ledger
+   identity `|End-(Start+Rendite+Einzahlung-Entnahme+Überschuss+NichtGedeckt)| ≤ 350`
+   (main columns round to 100 €, details exact; 5 × 50 € rounding + dust),
+   continuity `|Start(n)-Ende(n-1)| ≤ 100`, and tax/KV/PV/pension lineage
+   `|Nettoentnahme-(Entnahme-KV-PV-Kapitalsteuer-GRV Steuer)| ≤ 350` without
+   double counting. (b) Reload retains exact fixed/weight inputs, priority
+   order, portfolio/timeplan/cash inputs, numeric lifetime-tax total and the
+   first-retirement event row. (c) A deleted destination while enabled dangles
+   and blocks; disabling while invalid restores the drift forecast preserving
+   choices, re-enabling blocks again. (d) Repair plus re-accept re-engages the event
+   at repaired numerics (the removed-leg mix cannot repeat exactly), then reset
+   clears to prefill and restores drift. No storage
+   seeding, no engine injection.
 
 Shared helpers live in `e2e/fixtures.ts` with explicit readiness answers
 derived from `model/capitalIncome/setup.ts`,

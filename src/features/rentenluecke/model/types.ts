@@ -26,6 +26,7 @@ export type RetirementIncomeStream = {
 
 export type RentenlueckeInput = {
   estimatorPortfolio?: import('zod').infer<typeof import('./capitalIncome/schema').estimatorPortfolioSchema>
+  allocationAtRetirement?: import('./capitalIncome/allocationEvent').AllocationAtRetirement
   currentAge: number
   retirementAge: number
   planningAge: number

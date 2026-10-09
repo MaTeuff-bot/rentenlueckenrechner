@@ -56,7 +56,7 @@ describe('portfolio buckets', () => {
     expect(validatePortfolioBuckets([{ ...buckets[2], name: '', value: 0 }])).toBeTruthy()
   })
 
-  it('creates one component per positive bucket with fallback labels and role source ids', () => {
+  it('creates one component per bucket, zero balances declared at weight zero', () => {
     expect(createPortfolioComponentsFromBuckets([
       { ...buckets[0], id: 'world', name: ' World ETF ', value: 60, annualCostRate: 0.0022 },
       { ...buckets[0], id: 'small-cap', name: 'Small Cap', value: 10 },
@@ -68,6 +68,9 @@ describe('portfolio buckets', () => {
       { id: 'small-cap', label: 'Small Cap', role: 'equity', weight: 0.1, returnSeriesId: 'synthetic-equity-assumption-v1', annualCostRate: 0 },
       { id: 'bonds', label: 'Anleihen', role: 'bond', weight: 0.2, returnSeriesId: 'synthetic-bonds-assumption-v1', annualCostRate: 0 },
       { id: 'cash', label: 'Reserve', role: 'cash', weight: 0.1, returnSeriesId: 'synthetic-cash-assumption-v1', annualCostRate: 0 },
+      // Zero-balance declared destinations stay listed at weight 0 so
+      // reference/sample paths carry their real returns.
+      { id: 'empty', label: 'Leer', role: 'cash', weight: 0, returnSeriesId: 'synthetic-cash-assumption-v1', annualCostRate: 0 },
     ])
   })
 

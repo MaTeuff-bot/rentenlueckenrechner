@@ -292,7 +292,7 @@ describe('tagesgeld legacy cash sources need redecision', () => {
           expenseAllowance: 51,
           spendingLessOtherIncome: 0,
           withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: 1_000 },
-          buckets: [{ id: 'bank', totalReturnRate: -0.01, grossBankReturnRate: -0.01, contribution: 0, targetWeight: 1 }],
+          buckets: [{ id: 'bank', totalReturnRate: -0.01, grossBankReturnRate: -0.01, contribution: 0 }],
         },
         () => ({ kv: 0, pv: 0 }),
       ),

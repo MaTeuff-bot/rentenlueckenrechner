@@ -15,7 +15,11 @@ export function expectedBucketReturns(input: RentenlueckeInput, settings: Histor
   }))
 }
 export function sampledBucketReturns(components: PortfolioComponent[], source: InflationSourceOption, years: number[], rng: () => number, cashPlanningRate?: number, cashRealRate?: number): BucketReturnPath {
-  return years.map(y => components.filter(c => c.weight !== 0).map(c => {
+  // Every declared component — including zero-weight future allocation
+  // destinations — carries its real sampled return. Dropping zero-weight
+  // entries would leave the ledger without a rate (silent 0 forever, even
+  // after the event invests there). Never invent a 0 return.
+  return years.map(y => components.map(c => {
     const gross = resolveComponentNominalReturn(c, y, resolveInflationForSampledYear(source, y), rng, cashPlanningRate, cashRealRate)
     return { id: c.id, totalReturnRate: applySourceCostTreatment(gross, c.returnSeriesId, c.annualCostRate), grossBankReturnRate: gross }
   }))

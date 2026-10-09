@@ -139,8 +139,8 @@ describe('estimator joint hook (generic, no incomeTax import)', () => {
     const input = { projectedBasisRate: 0.032, spendingLessOtherIncome: 20000,
       withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: 1000 },
       buckets: [
-        { id: 'fund', totalReturnRate: 0.05, contribution: 0, targetWeight: 0.6 },
-        { id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+        { id: 'fund', totalReturnRate: 0.05, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02, contribution: 0 },
       ] }
     const insurance = (assessment: number) => ({ kv: assessment * 0.1, pv: assessment * 0.02 })
     const absent = simulateEstimatorYear(s, input, insurance)
@@ -157,8 +157,8 @@ describe('estimator joint hook (generic, no incomeTax import)', () => {
     const s = createEstimatorState({ buckets: [fund(60000), bank(40000)], fundAcquisitionCost: 30000, ...scope() })
     const r = simulateEstimatorYear(s, { projectedBasisRate: 0.032, spendingLessOtherIncome: -50000,
       buckets: [
-        { id: 'fund', totalReturnRate: 0.05, contribution: 0, targetWeight: 0.6 },
-        { id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02, contribution: 0, targetWeight: 0.4 },
+        { id: 'fund', totalReturnRate: 0.05, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.02, grossBankReturnRate: 0.02, contribution: 0 },
       ] }, () => ({ kv: 100, pv: 50 }),
       { additionalRequirementForTrial: () => 800, fundedExcessBound: 1 })
     expect(r.status).toBe('converged')
@@ -175,8 +175,8 @@ describe('estimator joint hook (generic, no incomeTax import)', () => {
     // exact root: residual- = -0.52, residual+ = +0.48, excess ~= 0.48.
     const s = createEstimatorState({ buckets: [fund(60000), bank(40000)], fundAcquisitionCost: 36000, ...scope() })
     const buckets = [
-      { id: 'fund', totalReturnRate: 0, contribution: 0, targetWeight: 0.6 },
-      { id: 'bank', totalReturnRate: 0, grossBankReturnRate: 0, contribution: 0, targetWeight: 0.4 },
+      { id: 'fund', totalReturnRate: 0, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, grossBankReturnRate: 0, contribution: 0 },
     ]
     const insuranceFor = (assessment: number) => ({ kv: Math.max(0, assessment * 0.5), pv: 0 })
     const hook = (insurance: { kv: number }) => (insurance.kv >= 5000 ? 0 : 1)
@@ -208,8 +208,8 @@ describe('estimator joint hook (generic, no incomeTax import)', () => {
     // null state); bound 1.1 accepts it with conservation.
     const s = createEstimatorState({ buckets: [fund(60000), bank(40000)], fundAcquisitionCost: 36000, ...scope() })
     const buckets = [
-      { id: 'fund', totalReturnRate: 0, contribution: 0, targetWeight: 0.6 },
-      { id: 'bank', totalReturnRate: 0, grossBankReturnRate: 0, contribution: 0, targetWeight: 0.4 },
+      { id: 'fund', totalReturnRate: 0, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, grossBankReturnRate: 0, contribution: 0 },
     ]
     const insuranceFor = (assessment: number) => ({ kv: Math.max(0, assessment * 0.5), pv: 0 })
     const hook = (insurance: { kv: number }) => (insurance.kv >= 5000 ? 0 : 1.1)
@@ -253,8 +253,8 @@ describe('estimator joint hook (generic, no incomeTax import)', () => {
     const r = simulateEstimatorYear(s, { projectedBasisRate: 0.032, spendingLessOtherIncome: 10000,
       withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: 1000 },
       buckets: [
-        { id: 'fund', totalReturnRate: 0.03, contribution: 0, targetWeight: 0.5 },
-        { id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.01, contribution: 0, targetWeight: 0.5 },
+        { id: 'fund', totalReturnRate: 0.03, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.01, grossBankReturnRate: 0.01, contribution: 0 },
       ] }, () => ({ kv: 1800, pv: 240 }),
       { additionalRequirementForTrial: () => 400, fundedExcessBound: 1 })
     expect(r.status).toBe('converged')

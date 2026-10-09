@@ -169,46 +169,45 @@ describe('authoritative contribution ledger', () => {
   })
   it('keeps rental cash separate from its pre-tax assessment and never adds capital basis as cash', () => {
     // Mandatory: the capital assessment is modeled from the detailed portfolio
-    // (first-year 803.95 annual from 800 bank interest plus small fund income net
-    // of the 51 expense allowance → 66.996/mo), never from a legacy monthly
+    // (drift: 800 bank interest, no rebalancing gains, net of the 51 expense
+    // allowance → 749 annual → 62.4167/mo), never from a legacy monthly
     // estimate. Legacy capitalMonthlyToday values are tolerated on load but have
-    // no engine meaning.
+    // no engine meaning. (Pre-arbeitsende restoration pin 66.996/mo included a
+    // small rebalancing fund income; drift realizes none.)
     const input = insuredInput({ retirementIncomeStreams: [pension({ amountMonthlyToday: 4000 }), pension({ id: 'occupation', kind: 'betriebsrente', amountMonthlyToday: 1000 }), pension({ id: 'rent', kind: 'rental-income', amountMonthlyToday: 600, effectiveDeductionRate: 0.25, rentalAssessmentMonthlyToday: 600 })], retirementInsurance: automaticInsurance({ pension: { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 600, drvSubsidy: 'confirmed' } }) })
     const row = simulateScenario(input, 0.02).retirementRows[0]
     expect(row.retirementIncomeGross / 12).toBe(5600)
-    expect(row.portfolioContributionBase / 12).toBeCloseTo(66.99610591900311, 8)
-    // Shared ceiling 5,812.5: pensions 5,000 + other (600 rental + 66.996 capital)
-    // = 5,666.996 below the ceiling, so no capping. KV: 4,000×17.5 % + 1,000×17.5 %
-    // + 666.996×16.9 % (reduced) = 987.722; minus 350 DRV subsidy → own 637.722.
-    // PV: 5,666.996×3.6 % = 204.012. Assessment only, no added cashflow.
-    expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5666.996105919003, pvAssessmentMonthly: 5666.996105919003, drvSubsidyMonthly: 350 })
-    expect(row.healthInsurance / 12).toBeCloseTo(637.7223419003116, 8)
-    expect(row.careInsurance / 12).toBeCloseTo(204.0118598130841, 8)
+    expect(row.portfolioContributionBase / 12).toBeCloseTo(62.416666666666664, 8)
+    // Shared ceiling 5,812.5: pensions 5,000 + other (600 rental + 62.4167 capital)
+    // = 5,662.4167 below the ceiling, so no capping. KV: 4,000×17.5 % + 1,000×17.5 %
+    // + 662.4167×16.9 % (reduced) = 986.948; minus 350 DRV subsidy → own 636.948.
+    // PV: 5,662.4167×3.6 % = 203.847. Assessment only, no added cashflow.
+    expect(row.insurance).toMatchObject({ kvAssessmentMonthly: 5662.416666666667, pvAssessmentMonthly: 5662.416666666667, drvSubsidyMonthly: 350 })
+    expect(row.healthInsurance / 12).toBeCloseTo(636.9484166666666, 8)
+    expect(row.careInsurance / 12).toBeCloseTo(203.847, 8)
     // Slice 2: only the GRV face gross (48,000; Betriebsrente and rental income are
     // out of scope) enters the base. Rentenbeginn 2026 → 84 %; freibetrag 7,680;
-    // taxable 40,320. zvE = 40,320 − 102 − (7,652.668 + 2,448.142) own KV/PV =
-    // 30,117.19 → §32a pin 4,250 (higher than the legacy-600 zvE because the
-    // smaller modeled assessment lowers Sonderausgaben).
+    // taxable 40,320. The slightly lower own KV/PV Sonderausgaben raise the zvE,
+    // so the §32a pin is 4,253 (was 4,250 with restoration).
     expect(row.pensionTaxBase).toBeCloseTo(40_320, 8)
-    expect(row.pensionIncomeTax).toBeCloseTo(4_250, 8)
-    expect(row.retirementIncomeNet / 12).toBeCloseTo(4254.099131619939, 8)
+    expect(row.pensionIncomeTax).toBeCloseTo(4_253, 8)
+    expect(row.retirementIncomeNet / 12).toBeCloseTo(4254.787916666667, 8)
   })
   it('preserves negative available cash and funds insurance once even with zero income', () => {
-    // Mandatory: the bridge-voluntary assessment is modeled (year 1: 1,556.91
-    // annual from 800 bank interest plus fund income net of allowance → 129.74/mo,
-    // still below the 1,318.33 voluntary minimum, so KV/PV stay at the minimum:
-    // 1,318.33×16.9 % = 222.798/mo, 1,318.33×3.6 % = 47.460/mo).
+    // Mandatory: the bridge-voluntary assessment is modeled (drift year 1:
+    // 1,515.99 annual from the funding sale only, no rebalancing gains →
+    // 126.33/mo, still below the 1,318.33 voluntary minimum, so KV/PV stay at
+    // the minimum: 1,318.33×16.9 % = 222.798/mo, 1,318.33×3.6 % = 47.460/mo).
     const input = insuredInput({ currentAge: 65, retirementAge: 65, planningAge: 67, retirementIncomeStreams: [] })
     const result = simulateScenario(input, 0.02)
     const row = result.retirementRows[0]
     expect(row.retirementIncomeGross).toBe(0)
-    expect(row.portfolioContributionBase / 12).toBeCloseTo(129.74227132076868, 8)
+    expect(row.portfolioContributionBase / 12).toBeCloseTo(126.33281831324325, 8)
     expect(row.retirementIncomeNet / 12).toBeCloseTo(-270.25765, 8)
-    // The gap carries the capital tax on the modeled assessment (160.34 year 1:
-    // taxable 1,607.91, allowance-covered down to the pin) on top of spending +
-    // insurance: 24,000 + 3,243.09 + 160.34 = 27,403.43.
-    expect(row.capitalIncomeTax).toBeCloseTo(160.33553873023286, 8)
-    expect(row.gapWithdrawal).toBeCloseTo(27403.427338730235, 8)
+    // The gap carries the capital tax on the modeled assessment (149.54 year 1)
+    // on top of spending + insurance: 24,000 + 3,243.09 + 149.54 = 27,392.64.
+    expect(row.capitalIncomeTax).toBeCloseTo(149.5446199614149, 8)
+    expect(row.gapWithdrawal).toBeCloseTo(27392.636419961415, 8)
     expect(Number.isFinite(result.summary.projectedCapitalAtRetirement)).toBe(true)
     expect(result.summary.survivesUntilPlanningAge).toBe(result.retirementRows.every((row) => !row.depleted))
   })
@@ -266,18 +265,19 @@ describe('authoritative contribution ledger', () => {
     const row = simulateScenario(insuredInput({ retirementInsurance: i }), 0.02).retirementRows[0]
     expect(row.healthInsurance / 12).toBeCloseTo(189)
     expect(row.careInsurance / 12).toBeCloseTo(80)
-    // Mandatory: the modeled voluntary assessment (76.60/mo) replaces the legacy
-    // zero estimate. KV own = 2,000×(0.16+0.029) + 76.6022×(0.15+0.029) − 189
-    // subsidy = 202.712; PV = 2,076.6022×0.04 = 83.064. Same method as KVdR, only
+    // Mandatory: the modeled voluntary assessment (72.19/mo under drift; the
+    // restoration pin 76.60/mo included rebalancing gains) replaces the legacy
+    // zero estimate. KV own = 2,000×(0.16+0.029) + 72.1856×(0.15+0.029) − 189
+    // subsidy = 201.921; PV = 2,072.1856×0.04 = 82.887. Same method as KVdR, only
     // the contribution-induced assessment differs; no double deduction.
     // Tier-3 regression pins after the joint-funding fix: the assessment now
     // includes the pension-tax share of the committed sale (was 74.84/mo
     // pension-ignorant).
     i.pension = { status: 'voluntary', circumstances: 'standard', capitalMonthlyToday: 0, drvSubsidy: 'confirmed' }
     const voluntary = simulateScenario(insuredInput({ retirementInsurance: i }), 0.02).retirementRows[0]
-    expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(76.60219084063776, 8)
-    expect(voluntary.healthInsurance / 12).toBeCloseTo(202.71179216047415, 8)
-    expect(voluntary.careInsurance / 12).toBeCloseTo(83.0640876336255, 8)
+    expect(voluntary.portfolioContributionBase / 12).toBeCloseTo(72.18564235907255, 8)
+    expect(voluntary.healthInsurance / 12).toBeCloseTo(201.921229982274, 8)
+    expect(voluntary.careInsurance / 12).toBeCloseTo(82.8874256943629, 8)
     i.pension = { ...i.pension, manual: true, kvMonthlyToday: 0, pvMonthlyToday: 7 }
     const manual = simulateScenario(insuredInput({ retirementInsurance: i, annualInflationRate: 0.1 }), 0.02).retirementRows[1]
     expect(manual.healthInsurance).toBe(0)

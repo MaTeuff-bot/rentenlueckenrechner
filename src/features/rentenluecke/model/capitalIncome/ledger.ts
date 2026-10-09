@@ -1,4 +1,5 @@
 import { calculateVorabpauschale, createEstimatorState, simulateEstimatorYear, type EstimatorState } from './insuranceEstimator'
+import { isSupportedAllocationEligibility, type AllocationAtRetirement } from './allocationEvent'
 import { scaledSparerpauschbetrag } from '../tax/capitalIncomeTax'
 import { calculateRetirementIncomeForYear, grvPensionGrossForYear } from '../retirementIncomeStreams'
 import { assessPensionYearTaxValues, resolvePensionTaxSetup } from '../tax/incomeTax'
@@ -7,6 +8,27 @@ import { deriveSummary } from '../deriveSummary'
 import type { AnnualInflationResolver, NormalizedScenario, SimulationResult, YearlyPeriodRow } from '../types'
 import { createPortfolioComponentsFromBuckets } from '../portfolioBuckets'
 import { expectedBucketReturns } from './returns'
+
+
+/** Engine guard for accepted allocation specs: every destination must exist and
+ * stay supported (fund or deposit). Dangling choices throw instead of being
+ * silently dropped, reweighted, or ignored; the UI blocks them earlier. */
+function validateAllocationEventSpec(
+  buckets: readonly { id: string; holding?: string }[],
+  spec: AllocationAtRetirement,
+): void {
+  const byId = new Map(buckets.map(b => [b.id, b]))
+  for (const fixed of spec.fixedTargets) {
+    const bucket = byId.get(fixed.bucketId)
+    if (!bucket || !isSupportedAllocationEligibility(bucket.holding))
+      throw new Error(`Umschichtung zum Arbeitsende: Festbetragsziel „${fixed.bucketId}“ verweist auf eine entfernte oder nicht unterstützte Anlage.`)
+  }
+  for (const id of Object.keys(spec.remainderWeights ?? {})) {
+    const bucket = byId.get(id)
+    if (!bucket || !isSupportedAllocationEligibility(bucket.holding))
+      throw new Error(`Umschichtung zum Arbeitsende: Restanteil „${id}“ verweist auf eine entfernte oder nicht unterstützte Anlage.`)
+  }
+}
 
 export type BucketReturn = { id: string; totalReturnRate: number; grossBankReturnRate?: number }
 export type BucketReturnPath = BucketReturn[][]
@@ -75,14 +97,36 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
       }
       : undefined
     const spendingLessOtherIncome = desiredSpending - (incomeBefore ? incomeBefore.gross - incomeBefore.otherDeductions : 0)
+    // Optional one-time allocation at the end of the first retirement year
+    // (Arbeitsende): old holdings earn this year's returns and jointly fund the
+    // annual spending plus all modeled charges first; the net remaining wealth
+    // is then allocated once. The new allocation earns returns from next year.
+    // All other years drift: starting-share savings, proportional withdrawals,
+    // current-holdings surplus. Accumulation contribution in the event year is
+    // zero by construction (retirement year); no scheduler exists.
+    const allocationSpec = input.allocationAtRetirement
+    const isAllocationEventYear = !accumulation && index === scenario.yearsToRetirement
+      && allocationSpec?.enabled === true && allocationSpec.accepted === true
+    const allocationEvent = isAllocationEventYear ? {
+      fixedTargets: allocationSpec.fixedTargets.map(t => ({ bucketId: t.bucketId, amountToday: t.amountToday })),
+      remainderWeights: allocationSpec.remainderWeights,
+      inflationFactor,
+    } : undefined
+    if (allocationSpec && (allocationSpec.enabled || allocationSpec.accepted)) {
+      validateAllocationEventSpec(buckets, allocationSpec)
+    }
     const result = simulateEstimatorYear(state, {
       projectedBasisRate: setup.projectedBasisRate, expenseAllowance: 51 * inflationFactor,
       spendingLessOtherIncome,
       withdrawalTax: { openingLossCarryforward: state.simulatedLossCarryforward, allowanceAvailable },
+      allocationEvent,
       buckets: buckets.map((b, n) => {
+        // Every declared bucket needs its real rate — including zero-balance
+        // future allocation destinations. A missing rate throws instead of
+        // silently compounding 0 forever, even after the event invests there.
         const r = rates.find(r => r.id === b.id)
-        if (!r && b.value > 0) throw new Error(`Fehlender Renditepfad: ${b.name}`)
-        return { id: b.id, totalReturnRate: r?.totalReturnRate ?? 0, grossBankReturnRate: b.holding === 'ordinary-bank-deposit' ? r?.grossBankReturnRate : undefined, contribution: contribution * weights[n], targetWeight: weights[n] }
+        if (!r) throw new Error(`Fehlender Renditepfad: ${b.name}`)
+        return { id: b.id, totalReturnRate: r.totalReturnRate, grossBankReturnRate: b.holding === 'ordinary-bank-deposit' ? r.grossBankReturnRate : undefined, contribution: contribution * weights[n] }
       }),
     }, assessment => accumulation ? { kv: 0, pv: 0 } : incomeFor(assessment), jointOptions)
     if (!result.closingState) throw new Error(`Kapitalbasis: numerischer Finanzierungsfehler im Alter ${age}; Restabweichung ${result.residual} €.`)
@@ -113,7 +157,10 @@ function buildCapitalLedger(scenario: NormalizedScenario, path?: BucketReturnPat
     // bank shares add principal only. No current-year return on new money.
     // Loss/allowance/VP/tax/insurance are committed once, never reconsumed.
     // Separate from the bounded pension-rounding excessRepurchase above.
-    const canReinvest = !accumulation && result.status !== 'shortfall' && result.requiredWithdrawal === 0 && surplusIncome > 0
+    // The ordinary year-end surplus lineage is disabled in the allocation event
+    // year: its genuine surplus is already folded into the allocation base once
+    // by the estimator settlement above, so reinvesting again would credit it twice.
+    const canReinvest = !accumulation && !isAllocationEventYear && result.status !== 'shortfall' && result.requiredWithdrawal === 0 && surplusIncome > 0
     const surplusReinvested = canReinvest ? surplusIncome : 0
     let committedClosingState = result.closingState!
     let committedPending = result.pendingVorabpauschale

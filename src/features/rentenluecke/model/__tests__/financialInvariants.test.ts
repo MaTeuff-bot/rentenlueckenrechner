@@ -416,14 +416,15 @@ describe('withdrawal-tax funding: gap + Kapitalertragsteuer conservation', () =>
 })
 
 describe('accumulation Umschichtung tax: conservation with inflation-scaled allowance (slice 1b)', () => {
-  it('taxes large rebalancing gains in accumulation and funds them from the portfolio', () => {
+  it('funds no accumulation tax when drift realizes no gains and interest stays below the allowance', () => {
     // Estimator ledger, 1 accumulation + 3 retirement years; 5% inflation path;
-    // fund +50% / bank +2% every year to force Umschichtung sales above the allowance.
-    // Accumulation year 0 (factor 1.0 → allowance 1,000):
-    // funding-sale gain 676.159 + rebalancing gain 7,593.452 = 8,269.611;
-    // ×0.7 = 5,788.728 + bank interest 800 (no exemption) = 6,588.728;
-    // − 1,000 = 5,588.728 base; tax 5,588.728 × 0.25 × 1.055 = 1,474.027.
-    // The gains moved with the interest-inclusive funding sale (tier-3 pins).
+    // fund +50% / bank +2% every year. Drift performs no annual trades, so the
+    // accumulation year realizes nothing: H = 90,000 + 40,800 = 130,800, and the
+    // 800 bank interest stays below the 1,000 allowance (factor 1.0) → tax 0,
+    // no sale, closing 130,800. Taxable = 0 × 0.7 + 800; allowance applied 800.
+    // (The pre-arbeitsende restoration pins — funding-sale gain 676.159 +
+    // rebalancing gain 7,593.452, taxable 6,588.728, tax 1,474.027 — are
+    // intentionally superseded with the removal of annual target restoration.)
     const input = prepare(estimatorScenario())
     const bucketPath = Array.from({ length: 4 }, () => [
       { id: 'fund', totalReturnRate: 0.5 },
@@ -433,9 +434,10 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
     const acc = result.accumulationRows[0]
     expect(acc.inflationFactor).toBeMoneyClose(1)
     expect(acc.capitalAssessment!.bankInterest).toBeMoneyClose(800)
-    expect(acc.capitalIncomeTax).toBeMoneyClose(1474.0268854937112)
-    expect(acc.taxableWithdrawal).toBeMoneyClose(6588.727527938242)
-    expect(acc.sparerpauschbetragApplied).toBeMoneyClose(1_000)
+    expect(acc.capitalAssessment!.movement.fundSales).toBeMoneyClose(0)
+    expect(acc.capitalIncomeTax).toBe(0)
+    expect(acc.taxableWithdrawal).toBeMoneyClose(800)
+    expect(acc.sparerpauschbetragApplied).toBeMoneyClose(800)
     expect(acc.gapWithdrawal).toBeMoneyClose(0)
     // Funding: the single paid sale covers the tax (gap and insurance are zero).
     expect(acc.capitalAssessment!.paidWithdrawal).toBeMoneyClose(acc.capitalIncomeTax!)
@@ -451,7 +453,9 @@ describe('accumulation Umschichtung tax: conservation with inflation-scaled allo
       expect(row.inflationFactor).toBeMoneyClose(factors[n])
       expect(row.sparerpauschbetragApplied).toBeMoneyClose(1_000 * factors[n])
     })
-    expect(result.retirementRows[0].capitalIncomeTax).toBeMoneyClose(3919.88543962223)
+    // First retirement year funds the gap from drifted holdings (no rebalancing
+    // gains, only the funding sale): tax 1,842.972 (was 3,919.885 with restoration).
+    expect(result.retirementRows[0].capitalIncomeTax).toBeMoneyClose(1842.972072754946)
     // Single-source loss: each retirement tax recomputes from the chained estimator
     // loss (accumulation closing → retirement opening) through the same core path,
     // including that year's once-credited gross bank interest.

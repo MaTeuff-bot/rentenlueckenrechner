@@ -43,6 +43,8 @@ import { SavingsSection } from './InputPanel/BasicInputSections'
 import { RetirementIncomeStreamsSection } from './InputPanel/RetirementIncomeStreamsSection'
 import { InflationSourceCard, ReturnSourceCard } from './InputPanel/SourceDetailsCard'
 import { PortfolioBucketSection } from './InputPanel/PortfolioBucketSection'
+import { AllocationAtRetirementSection } from './InputPanel/AllocationAtRetirementSection'
+import type { AllocationDraft } from '../model/capitalIncome/allocationEvent'
 import { EtfProfileCatalog } from './InputPanel/EtfProfileCatalog'
 import { findReturnSeriesOption, isHistoricalSource, isSyntheticSource, shortInflationLabel } from './InputPanel/sourceDisplay'
 
@@ -73,6 +75,16 @@ type InputPanelProps = {
   portfolioEstimatorSettings?: PortfolioEstimatorSettings
   portfolioEstimatorReadiness?: PortfolioEstimatorReadiness
   onPortfolioEstimatorSettingsChange?: (settings: PortfolioEstimatorSettings | undefined) => void
+  allocationAtRetirement?: AllocationDraft
+  onPrefillAllocationAtRetirement?: () => void
+  onAcceptAllocationAtRetirement?: () => void
+  onResetAllocationAtRetirement?: () => void
+  onToggleAllocationAtRetirement?: (enabled: boolean) => void
+  onAllocationFixedTargetChange?: (bucketId: string, amountToday: number) => void
+  onAllocationRemainderWeightChange?: (bucketId: string, weight: number) => void
+  onRemoveAllocationTarget?: (bucketId: string) => void
+  onMoveAllocationFixedTarget?: (bucketId: string, direction: -1 | 1) => void
+  onRemoveAllocationFixedTarget?: (bucketId: string) => void
   onChange: (field: InputFieldName, value: number) => void
   onLifeTableSexChange?: (value: LifeTableSex) => void
   onPortfolioBucketChange: (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => void
@@ -112,6 +124,16 @@ export function InputPanel({
   portfolioEstimatorSettings,
   portfolioEstimatorReadiness: portfolioReadinessProp,
   onPortfolioEstimatorSettingsChange,
+  allocationAtRetirement,
+  onPrefillAllocationAtRetirement,
+  onAcceptAllocationAtRetirement,
+  onResetAllocationAtRetirement,
+  onToggleAllocationAtRetirement,
+  onAllocationFixedTargetChange,
+  onAllocationRemainderWeightChange,
+  onRemoveAllocationTarget,
+  onMoveAllocationFixedTarget,
+  onRemoveAllocationFixedTarget,
   onPortfolioBucketChange,
   onPortfolioBucketAdd,
   onPortfolioBucketRemove,
@@ -274,6 +296,20 @@ export function InputPanel({
             onRemove={onPortfolioBucketRemove}
           />
           <CapitalEstimatorSetup settings={portfolioEstimatorSettings} readiness={portfolioReadiness} needsAutomatic={needsAutomaticEstimator} onSettingsChange={onPortfolioEstimatorSettingsChange ?? (() => {})} onJumpToInsurance={jumpToInsuranceBlock} />
+
+          <AllocationAtRetirementSection
+            buckets={portfolioBuckets}
+            draft={allocationAtRetirement}
+            onPrefill={onPrefillAllocationAtRetirement ?? (() => {})}
+            onAccept={onAcceptAllocationAtRetirement ?? (() => {})}
+            onReset={onResetAllocationAtRetirement ?? (() => {})}
+            onToggleEnabled={onToggleAllocationAtRetirement ?? (() => {})}
+            onFixedChange={onAllocationFixedTargetChange ?? (() => {})}
+            onWeightChange={onAllocationRemainderWeightChange ?? (() => {})}
+            onRemoveTarget={onRemoveAllocationTarget ?? (() => {})}
+            onMoveFixedTarget={onMoveAllocationFixedTarget ?? (() => {})}
+            onRemoveFixedTarget={onRemoveAllocationFixedTarget ?? (() => {})}
+          />
 
           </section>
         </div>

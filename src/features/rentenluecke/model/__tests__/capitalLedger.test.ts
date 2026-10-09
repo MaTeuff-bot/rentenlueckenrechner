@@ -88,8 +88,13 @@ describe('integrated capital assessment ledger', () => {
     expect(simulateCapitalLedgerPath(normalizeInput(input), returns, () => 0).rows).toEqual(result.rows)
   })
   it('rejects allocation purchases at zero NAV explicitly without mutating the input', () => {
+    // A -100% fund year kills the fund in accumulation; the accepted event then
+    // tries to buy the dead fund at zero NAV in the first retirement year and
+    // must throw instead of inventing units. Drift alone never purchases.
     const input = estimatorInput()
     input.monthlyContributionToday = 0
+    input.allocationAtRetirement = { enabled: true, accepted: true, fixedTargets: [],
+      remainderWeights: { fund: 0.5, bank: 0.5 } }
     const snapshot = structuredClone(input)
     expect(() => simulateScenarioWithReturnPath(input, [], undefined, path(input, -1, 0))).toThrow(/Allokationskauf/)
     expect(input).toEqual(snapshot)
@@ -119,15 +124,22 @@ describe('integrated capital assessment ledger', () => {
     const input = estimatorInput()
     const r = simulateScenarioWithReturnPath(input, Array(5).fill(.068), undefined, path(input))
     expect(r.rows[0].investmentReturn).toBeCloseTo(6800)
-    // The accumulation year funds the interest-inclusive Umschichtung tax from the
-    // portfolio: 800 bank interest joins the exempted rebalancing gain, so the paid
-    // sale (tax 149.645) leaves closing below the pre-tax 108,000 (tier-3 pins).
+    // Drift realizes no rebalancing gain: the 800 bank interest stays below the
+    // 1,000 allowance, so the accumulation year funds no tax and sells nothing;
+    // closing is the full 106,800 + 1,200 starting-share contribution = 108,000.
+    // Taxable = 0 x 0.7 + 800 interest; allowance applied 800; tax 0. The
+    // retained old-holding VP (min(60,000 x 0.7 x 0.032, 6,000) = 1,344) plus the
+    // December VP on the 720 starting-share fund contribution
+    // (min(720/1.1 x 0.7 x 0.032, 720 - 720/1.1)/12 = 1.2218) is received in year 2.
     expect(r.rows[0].capitalAssessment!.bankInterest).toBeCloseTo(800)
-    expect(r.rows[0].capitalIncomeTax).toBeCloseTo(149.6446661216122)
-    expect(r.rows[0].taxableWithdrawal).toBeCloseTo(1567.3731416933165)
-    expect(r.rows[0].closingCapital).toBeCloseTo(107850.35533387838)
-    expect(r.rows[0].capitalAssessment!.movement.fundSales).toBeCloseTo(1917.3097588113014)
-    expect(r.rows[0].capitalAssessment!.movement.costReleased).toBeCloseTo(871.504435823319)
+    expect(r.rows[0].capitalIncomeTax).toBe(0)
+    expect(r.rows[0].taxableWithdrawal).toBeCloseTo(800)
+    expect(r.rows[0].sparerpauschbetragApplied).toBeCloseTo(800)
+    expect(r.rows[0].closingCapital).toBeCloseTo(108000)
+    expect(r.rows[0].capitalAssessment!.movement.fundSales).toBeCloseTo(0)
+    expect(r.rows[0].capitalAssessment!.movement.fundPurchases).toBeCloseTo(0)
+    expect(r.rows[0].capitalAssessment!.movement.costReleased).toBeCloseTo(0)
+    expect(r.rows[0].capitalAssessment!.pendingVorabpauschale).toBeCloseTo(1345.2218181818182, 8)
     expect(r.rows[1].capitalAssessment!.receivedVorabpauschale).toBeGreaterThan(0)
     for (const row of r.rows) {
       expect(row.closingCapital).toBeCloseTo(row.openingCapital + row.investmentReturn + row.contribution - row.capitalAssessment!.paidWithdrawal + (row.surplusReinvested ?? 0), 5)
@@ -236,38 +248,109 @@ describe('integrated capital assessment ledger', () => {
     expect(result.retirementRows[0].unfundedWithdrawal).toBeGreaterThan(0)
     expect(result.retirementRows[0].capitalAssessment!.status).toBe('shortfall')
   })
-  it('accounts for bank-to-fund purchases and separate assessed/pending VP without inventing income', () => {
+  it('drifts without annual trades: no rebalancing purchases, contributions keep starting shares', () => {
+    // Hand-derived drift: opening f=100/b=100. Returns f -20% -> 80, b 0% -> 100
+    // (H=180). Spending 0, no insurance/tax -> required 0, paid 0, deposit 0.
+    // Drift targets stay 80/100: no fund sales, no purchases, no gain. Cost keeps
+    // the pooled 80 plus the 10 starting-share fund contribution = 90. December
+    // VP on the 10 contribution at r=-0.2 is max(0, min(...)) = 0 (loss path).
+    // Closing 90/110 = 200 conserves H + contributions (20).
     const state = createEstimatorState({ buckets: [
       { id: 'f', value: 100, eligibility: 'accumulating-equity-fund' }, { id: 'b', value: 100, eligibility: 'ordinary-bank-deposit' },
     ], fundAcquisitionCost: 80, scope: 'single-person-domestic-private-post-2017-no-special-events', lossHistory: 'confirmed-none-and-no-external-offsets' })
     const r = simulateEstimatorYear(state, { projectedBasisRate: .032, spendingLessOtherIncome: 0, buckets: [
-      { id: 'f', totalReturnRate: -.2, contribution: 10, targetWeight: .5 }, { id: 'b', totalReturnRate: 0, contribution: 10, targetWeight: .5 },
+      { id: 'f', totalReturnRate: -.2, contribution: 10 }, { id: 'b', totalReturnRate: 0, contribution: 10 },
     ] }, () => ({ kv: 0, pv: 0 }))
+    expect(r.status).toBe('converged')
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.movement.fundPurchases).toBe(0)
+    expect(r.movement.costReleased).toBe(0)
+    expect(r.movement.adjustedFundSaleGain).toBe(0)
+    expect(r.closingState!.fundAcquisitionCost).toBe(90)
+    expect(r.closingState!.pendingVorabpauschale).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'f')!.value).toBe(90)
+    expect(r.closingState!.buckets.find(b => b.id === 'b')!.value).toBe(110)
+    expect(r.closingCapital).toBe(200)
+  })
+  it('event twin: a 50/50 allocation event rebalances the same year once (old-restoration pins)', () => {
+    // Same fixture with a one-time 50/50 event: B = 180 -> targets 90/90, so the
+    // fund buys 10 once (bank sale, untracked principal). Movement cost 80 + 10 =
+    // 90, plus the 10 starting-share fund contribution -> 100. Closing 100/100 =
+    // 200. This reproduces the pre-arbeitsende annual-restoration pins exactly,
+    // now as an explicit one-time event instead of a yearly trade.
+    const state = createEstimatorState({ buckets: [
+      { id: 'f', value: 100, eligibility: 'accumulating-equity-fund' }, { id: 'b', value: 100, eligibility: 'ordinary-bank-deposit' },
+    ], fundAcquisitionCost: 80, scope: 'single-person-domestic-private-post-2017-no-special-events', lossHistory: 'confirmed-none-and-no-external-offsets' })
+    const r = simulateEstimatorYear(state, { projectedBasisRate: .032, spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [], remainderWeights: { f: 0.5, b: 0.5 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'f', totalReturnRate: -.2, contribution: 10 }, { id: 'b', totalReturnRate: 0, contribution: 10 },
+      ] }, () => ({ kv: 0, pv: 0 }))
+    expect(r.status).toBe('converged')
+    expect(r.movement.fundSales).toBe(0)
     expect(r.movement.fundPurchases).toBe(10)
     expect(r.movement.adjustedFundSaleGain).toBe(0)
     expect(r.closingState!.fundAcquisitionCost).toBe(100)
     expect(r.closingState!.pendingVorabpauschale).toBe(0)
     expect(r.closingCapital).toBe(200)
   })
-  it('recognizes fund-to-fund allocation sales while preserving pooled cost and separate VP balances', () => {
+  it('drifts fund-to-fund years with no sales while preserving pooled cost and VP balances', () => {
+    // Hand-derived drift twin of the event test below: opening up=100/down=100,
+    // cost 160, assessed 20, pending 10. Returns +20%/-20% -> 120/80 (H=200).
+    // Spending 0 -> paid 0. Drift keeps 120/80: fundSales 0, costReleased 0,
+    // adjustmentReleased 0. Received VP 10, no sale gain: annual assessment =
+    // (10 + 0) * 0.7 - 0 expense = 7. Assessed closes 20 + 10 - 0 = 30. Kept
+    // pending = up VP 2.24 (min(100*0.7*0.032, 20)) fully retained = 2.24.
+    // Closing capital 200 conserves H (no contributions).
     const opening = { ...createEstimatorState({ buckets: [
       { id: 'up', value: 100, eligibility: 'accumulating-equity-fund' },
       { id: 'down', value: 100, eligibility: 'accumulating-equity-fund' },
     ], fundAcquisitionCost: 160, scope: 'single-person-domestic-private-post-2017-no-special-events', lossHistory: 'confirmed-none-and-no-external-offsets' }),
     assessedVorabpauschalen: 20, pendingVorabpauschale: 10 }
     const result = simulateEstimatorYear(opening, { projectedBasisRate: .032, expenseAllowance: 0, spendingLessOtherIncome: 0,
-      buckets: [{ id: 'up', totalReturnRate: .2, contribution: 0, targetWeight: .5 },
-        { id: 'down', totalReturnRate: -.2, contribution: 0, targetWeight: .5 }],
+      buckets: [{ id: 'up', totalReturnRate: .2, contribution: 0 },
+        { id: 'down', totalReturnRate: -.2, contribution: 0 }],
     }, () => ({ kv: 0, pv: 0 }))
-    expect(result.movement.fundSales).toBeCloseTo(20)
-    expect(result.movement.fundPurchases).toBeCloseTo(20)
-    expect(result.movement.costReleased).toBeCloseTo(16)
-    expect(result.movement.adjustmentReleased).toBeCloseTo(3)
-    expect(result.assessment.annualAssessment).toBeCloseTo(7.7)
-    expect(result.closingState!.fundAcquisitionCost).toBeCloseTo(164)
-    expect(result.closingState!.assessedVorabpauschalen).toBeCloseTo(27)
-    expect(result.pendingVorabpauschale).toBeCloseTo(2.24 * 100 / 120)
+    expect(result.status).toBe('converged')
+    expect(result.movement.fundSales).toBeCloseTo(0)
+    expect(result.movement.fundPurchases).toBeCloseTo(0)
+    expect(result.movement.costReleased).toBeCloseTo(0)
+    expect(result.movement.adjustmentReleased).toBeCloseTo(0)
+    expect(result.assessment.annualAssessment).toBeCloseTo(7)
+    expect(result.closingState!.fundAcquisitionCost).toBeCloseTo(160)
+    expect(result.closingState!.assessedVorabpauschalen).toBeCloseTo(30)
+    expect(result.pendingVorabpauschale).toBeCloseTo(2.24)
     expect(result.closingCapital).toBeCloseTo(200)
     expect(opening.assessedVorabpauschalen).toBe(20)
+  })
+  it('event twin: a 50/50 allocation event realizes the fund-to-fund sale once (old-restoration pins)', () => {
+    // Same fixture with a one-time 50/50 event: B = 200 -> targets 100/100, so
+    // up sells 20 and down buys 20 once. Fraction 20/200 = 0.1 releases cost 16
+    // and adjustment 3 (assessed base 20 + received 10 = 30). Sale gain
+    // 20 - 16 - 3 = 1; annual assessment (10 + 1) * 0.7 = 7.7. Assessed closes
+    // 30 - 3 = 27. Kept pending 2.24 * 100/120 (retained-share VP) plus zero
+    // December VP on the loss-path purchase. Cost closes 160 - 16 + 20 = 164,
+    // capital 200. These are the pre-arbeitsende annual-restoration pins,
+    // recomputed here as an explicit one-time event.
+    const eventOpening = { ...createEstimatorState({ buckets: [
+      { id: 'up', value: 100, eligibility: 'accumulating-equity-fund' },
+      { id: 'down', value: 100, eligibility: 'accumulating-equity-fund' },
+    ], fundAcquisitionCost: 160, scope: 'single-person-domestic-private-post-2017-no-special-events', lossHistory: 'confirmed-none-and-no-external-offsets' }),
+    assessedVorabpauschalen: 20, pendingVorabpauschale: 10 }
+    const eventResult = simulateEstimatorYear(eventOpening, { projectedBasisRate: .032, expenseAllowance: 0, spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [], remainderWeights: { up: 0.5, down: 0.5 }, inflationFactor: 1 },
+      buckets: [{ id: 'up', totalReturnRate: .2, contribution: 0 },
+        { id: 'down', totalReturnRate: -.2, contribution: 0 }],
+    }, () => ({ kv: 0, pv: 0 }))
+    expect(eventResult.movement.fundSales).toBeCloseTo(20)
+    expect(eventResult.movement.fundPurchases).toBeCloseTo(20)
+    expect(eventResult.movement.costReleased).toBeCloseTo(16)
+    expect(eventResult.movement.adjustmentReleased).toBeCloseTo(3)
+    expect(eventResult.assessment.annualAssessment).toBeCloseTo(7.7)
+    expect(eventResult.closingState!.fundAcquisitionCost).toBeCloseTo(164)
+    expect(eventResult.closingState!.assessedVorabpauschalen).toBeCloseTo(27)
+    expect(eventResult.pendingVorabpauschale).toBeCloseTo(2.24 * 100 / 120)
+    expect(eventResult.closingCapital).toBeCloseTo(200)
+    expect(eventOpening.assessedVorabpauschalen).toBe(20)
   })
 })

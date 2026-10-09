@@ -32,7 +32,8 @@ Embedded sub-ledgers (each with its own doc):
 | Capital-income estimator | buckets, returns, income, phase | `capitalAssessment`, retirement income adjustments |
 | **Kapitalertragsteuer (slice 1, implemented + PR1 bank interest)** | `gapWithdrawal`, estimator state (holdings, acquisition cost, VP, once-credited gross `bankInterest`, loss carryforward), `inflationFactor` | `capitalIncomeTax`, `taxableWithdrawal`, `sparerpauschbetragApplied`, `netGapWithdrawal` (all derived from the same assessment result; no separate recomputation) |
 | Rentenbesteuerung (slice 2) | GRV gross, frozen Rentenfreibetrag, KV/PV Sonderausgaben, `inflationFactor` | `pensionIncomeTax`, `pensionTaxBase`, net recalc (`retirementIncome(Net)`, `gapWithdrawal`, `surplusIncome`) — [snapshot](rentenbesteuerung-rules-2026.md) |
-| Retirement-surplus reinvestment (implemented) | committed signed need (`spendingLessOtherIncome` + own KV/PV + `capitalIncomeTax` + `pensionIncomeTax`), post-funding holdings, bucket returns, `projectedBasisRate` | `surplusIncome` (corrected after-all-charges surplus), optional `surplusReinvested`, updated `capitalAssessment.closingState` (buckets + pooled cost + pending VP), `closingCapital(Today)`; no recomputation of tax/loss/allowance/insurance |
+| Retirement-surplus reinvestment (implemented) | committed signed need (`spendingLessOtherIncome` + own KV/PV + `capitalIncomeTax` + `pensionIncomeTax`), post-funding holdings, bucket returns, `projectedBasisRate` | `surplusIncome` (corrected after-all-charges surplus), optional `surplusReinvested`, updated `capitalAssessment.closingState` (buckets + pooled cost + pending VP), `closingCapital(Today)`; no recomputation of tax/loss/allowance/insurance; disabled in the allocation event year (surplus joins the one-time base once) |
+| One-time allocation at Arbeitsende (implemented, optional, default off) | enabled + accepted + clean draft (`allocationAtRetirement`), event-year inflation factor | end of first retirement year only: settled targets via `model/capitalIncome/allocationEvent.ts` (`capitalAssessment.movement` fund sales/purchases, pooled cost/VP release, `eventSurplusDeposit`, `roundingExcess` marginal purchases); new allocation effective next year; all other years drift |
 
 ## Conventions for adding a feature
 
@@ -48,9 +49,12 @@ Embedded sub-ledgers (each with its own doc):
 
 Pending-VP receipt → apply bucket returns once (credit `bankInterest` once from
 gross yield) → joint solver trial with shared loss/allowance, KV/PV + capital tax
-+ pension-tax extra → commit `required/paid` (immutable trial) → only if
-`!accumulation`, committed `surplusIncome > 0`, `requiredWithdrawal == 0` and not
-`shortfall`: reinvest `surplus = max(0, -signedNeed)` year-end proportionally to
++ pension-tax extra → commit `required/paid` (immutable trial) → at the end of the
+first retirement year, if an accepted allocation is enabled: settle the one-time
+targets from the net base (fixed today's-euro priorities, then remainder weights;
+genuine surplus folded in once; bounded rounding excess as marginal purchases) →
+only if `!accumulation`, NOT the event year, committed `surplusIncome > 0`,
+`requiredWithdrawal == 0` and not `shortfall`: reinvest `surplus = max(0, -signedNeed)` year-end proportionally to
 CURRENT holdings (equal across declared supported buckets only when total zero;
 fund shares add cost + December pending VP, bank shares add principal, no
 current-year return), adding its December pending VP to the committed balance.
