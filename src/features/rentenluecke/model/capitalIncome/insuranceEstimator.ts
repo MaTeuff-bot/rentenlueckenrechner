@@ -424,15 +424,6 @@ export function simulateEstimatorYear(
     levels.sort((a, b) => a - b)
     return levels
   }
-  const throwIfSettledRequiresImpossiblePurchase = (): void => {
-    // Real grounds only: the committed settlement itself requires a positive
-    // fund purchase at zero NAV. A failed discarded hypothetical trial is not
-    // proof the actual target is impossible, so discarded zero-NAV diagnostics
-    // never throw here. Committed impossibilities throw directly from
-    // maintainAllocation (settled base), the contribution guard, or the marginal
-    // excess guard. All stored `result` outcomes are feasible trials, hence no
-    // throw on discarded-trial diagnostics. No monotonicity or global proof.
-  }
   if (lowAttempt.feasible && Math.abs(lowAttempt.outcome.residual) <= p.tolerance) status = 'converged'
   else {
     const highAttempt = tryTrial(high)
@@ -539,7 +530,6 @@ export function simulateEstimatorYear(
         }
       }
     }
-    if (lowResidual !== null) throwIfSettledRequiresImpossiblePurchase()
   }
   // Commit: B = H - paid + S is the settled allocation base. In the event year
   // the signed solve converges at y ≈ N, so a genuine surplus arrives as the

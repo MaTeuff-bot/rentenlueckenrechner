@@ -59,9 +59,9 @@ These are independently calculated **2026 adaptations**, not purported verbatim 
 
 Boundary fixtures cover 197.74/197.75/197.76 (PV jumps only above threshold); multiple 100-euro Betriebsrenten (one KV allowance leaves 2.25); minimum/ceiling below/equal/above; pension subsidy ceiling; minimum top-up beside a small pension; inflation scaling; parenthood, twins, 0–6 children, age-out, insured age 22/23/24 and 1939/1940 births; manual replacement and missing-versus-zero.
 
-## Decisions and obligations for PR B
+## Decisions and obligations for PR B (historical integration record)
 
-1. Keep the yearly ledger authoritative. Call this engine once per person and applicable phase/year segment from common simulation code; reuse the result for deterministic, capital-search and bootstrap paths. Cards/charts must read those ledger values.
+1. Keep the yearly ledger authoritative. Call this engine once per person and applicable phase/year segment from common simulation code; reuse the result for the deterministic reference ledger and the bootstrap/synthetic forward ledgers. Cards/charts must read those ledger values.
 2. Select phase explicitly from pension commencement, separately from stopping work. Prefill commencement from earliest statutory pension stream, retain independent editing and mismatch validation. Pass explicit status; unknown must visibly say conservative voluntary assumption, **not** a guaranteed worst case. This module does not resolve partial-year phase durations; the common ledger must weight the applicable monthly results consistently.
 3. Collect gross pensions and pre-tax assessment estimates without reversing net amounts. Cashflow before insurance is supplied by the common ledger, including spendable income and other deductions, excluding KV/PV and DRV subsidy. Deduct `ownKvMonthly` and `ownPvMonthly` once. Participation is not extra income; voluntary subsidy already reduces own burden. Never add `capitalAssessmentMonthly` to cashflow.
 4. Keep separate bridge/pension capital estimates; index them and all monetary thresholds with each simulation path. Gather all required inputs even if a high pension currently fills the ceiling. No capital estimator in PR A/B.
@@ -70,7 +70,7 @@ Boundary fixtures cover 197.74/197.75/197.76 (PV jumps only above threshold); mu
 7. PR B owns UI, app-only scenario reset notice, phase/missing-state integration, ledger annualisation, and cross-mode/browser/persistence tests. No activation or storage change is part of PR A.
 
 
-## PR B integration decisions
+## PR B integration decisions (historical record)
 
 - `insuranceSetupIssues` checks phase-wide income categories, ordinary pension confirmations, and declared insurance circumstances before normalization. Missing ordinary data blocks the forecast; an unsupported income or circumstance requires whole-phase manual own KV/PV after subsidies, including years before a later unsupported receipt. Ordinary KVdR rental income may remain net. Private pensions and employment remain outside this implementation's classification scope, not inherently contributory or legally exceptional.
 - Explicit pension commencement is initially prefilled from the earliest statutory stream, is independently editable, and must match that stream. A commencement before the current age is valid for an already receiving pensioner. Contributions apply only to the modeled post-work phase; accumulation income/insurance is outside this calculator. Row start age determines phase and stream activation (inclusive start, exclusive end); there are no partial-year segments.
