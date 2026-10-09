@@ -600,6 +600,134 @@ describe('one-time allocation event (Arbeitsende settlement)', () => {
     expect(zeroShare.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(1_000, 9)
   })
 })
+describe('zero-NAV discarded-trial tolerance (actual purchase only)', () => {
+  it('settles an exhausted all-funded no-purchase root despite a discarded T(H) envelope', () => {
+    // Parent probe: fund 100 + bank 100 (cost 100), fund -100% collapses to 0
+    // so H = 100. Spending 100, 50/50 remainder, basis 0, no insurance or extra:
+    // H = 100, N = 100, y = 100, paid 100, S 0, B 0, T(0) = 0 is the genuine
+    // valid all-funded exhausted no-purchase root. The discarded T(H) = 50/50
+    // envelope would need a 50 fund purchase at zero NAV and must not preclude
+    // the root; no units, basis or VP are invented on discarded trials.
+    const s = initial([fund(100), bank(100)], 100)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 100,
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: -1, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.genuineNeed).toBeCloseTo(100, 9)
+    expect(r.paidWithdrawal).toBeCloseTo(100, 9)
+    expect(r.trialDeposit).toBe(0)
+    expect(r.eventSurplusDeposit).toBe(0)
+    expect(r.roundingExcess).toBe(0)
+    expect(r.movement.fundPurchases).toBe(0)
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(0, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBe(0)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(100, 9)
+    expect(r.pendingVorabpauschale).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 9)
+  })
+  it('reports a genuine deficit shortfall with unpaid tax despite a discarded T(H) trial', () => {
+    // Same collapse with bank interest: fund 100 -> 0, bank 100 at +50% (gross
+    // 50 interest) so H = 150. Spending 200 with zero allowance forces a small
+    // capital tax on the 50 interest (taxable 50, tax 13.1875), so
+    // N = 213.1875 > H = 150 is a demonstrable deficit. The discarded T(H)
+    // trial needs a 75 fund purchase at zero NAV; the settled full-sale base
+    // B = 0 needs none. Shortfall keeps the valid exhausted close with the tax
+    // partly unpaid (unfunded = N - H), never a zero-NAV throw.
+    const s = initial([fund(100), bank(100)], 100)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 200,
+      withdrawalTax: { openingLossCarryforward: 0, allowanceAvailable: 0 },
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets: [
+        { id: 'fund', totalReturnRate: -1, contribution: 0 },
+        { id: 'bank', totalReturnRate: 0.5, grossBankReturnRate: 0.5, contribution: 0 },
+      ],
+    }), noInsurance)
+    expect(r.status).toBe('shortfall')
+    expect(r.bankInterest).toBeCloseTo(50, 9)
+    expect(r.withdrawalTax!.capitalIncomeTax).toBeCloseTo(13.1875, 9)
+    expect(r.genuineNeed).toBeCloseTo(213.1875, 6)
+    expect(r.paidWithdrawal).toBeCloseTo(150, 9)
+    expect(r.unfundedWithdrawal).toBeCloseTo(63.1875, 6)
+    expect(r.closingCapital).toBeCloseTo(0, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBe(0)
+  })
+  it('settles exhausted fixed-priority bases without buying the dead fund', () => {
+    // H = 100 (fund 0 + bank 100), spending 100 exhausts to B = 0. Both mixes
+    // would need a dead-fund purchase at the discarded base H = 100 but need
+    // none at the settled base 0, so both converge with no purchase.
+    const buckets = [
+      { id: 'fund', totalReturnRate: -1, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, contribution: 0 },
+    ]
+    const bankFixed = simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 100,
+      allocationEvent: { fixedTargets: [{ bucketId: 'bank', amountToday: 80 }], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)
+    expect(bankFixed.status).toBe('converged')
+    expect(bankFixed.paidWithdrawal).toBeCloseTo(100, 9)
+    expect(bankFixed.movement.fundPurchases).toBe(0)
+    expect(bankFixed.closingCapital).toBeCloseTo(0, 9)
+    const fundFixed = simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 100,
+      allocationEvent: { fixedTargets: [{ bucketId: 'fund', amountToday: 80 }], remainderWeights: { bank: 1 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)
+    expect(fundFixed.status).toBe('converged')
+    expect(fundFixed.paidWithdrawal).toBeCloseTo(100, 9)
+    expect(fundFixed.movement.fundPurchases).toBe(0)
+    expect(fundFixed.closingCapital).toBeCloseTo(0, 9)
+  })
+  it('still rejects a settled positive fund target at zero NAV', () => {
+    // Spending 0 leaves H = 1000 (bank 1000) to allocate: T(1000) needs a 500
+    // fund purchase at zero NAV, so the settled root itself is impossible and
+    // must throw. The fixed-priority twin (80 to the dead fund) is likewise an
+    // actual impossible settled purchase, not a discarded trial.
+    const buckets = [
+      { id: 'fund', totalReturnRate: -1, contribution: 0 },
+      { id: 'bank', totalReturnRate: 0, contribution: 0 },
+    ]
+    expect(() => simulateEstimatorYear(initial([fund(1000), bank(1000)], 500), year(initial([fund(1000), bank(1000)], 500), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+    expect(() => simulateEstimatorYear(initial([fund(1000), bank(1000)], 500), year(initial([fund(1000), bank(1000)], 500), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      allocationEvent: { fixedTargets: [{ bucketId: 'fund', amountToday: 80 }], remainderWeights: { bank: 1 }, inflationFactor: 1 },
+      buckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+  })
+  it('still rejects ordinary fund contributions at zero NAV', () => {
+    // End-year savings into the collapsed fund are actual settled purchases,
+    // never discarded trials, so they keep the truthful guard.
+    const s = initial([fund(100), bank(100)], 50)
+    expect(() => simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      buckets: [
+        { id: 'fund', totalReturnRate: -1, contribution: 10 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    }), noInsurance)).toThrow(/zero NAV/)
+  })
+})
 
 describe('signed event-year solve (surplus inside the trial, never post-hoc)', () => {
   // Hand-derived regression: fund 60,000 (cost 0, full embedded gain) + bank
@@ -923,5 +1051,167 @@ describe('pension-rounding excess across partially funded fixed priorities', () 
       expect(r.closingCapital).toBeCloseTo(base + r.contribution + r.roundingExcess + r.contribution * 0, 6)
     }
     expect(r.closingCapital).toBeCloseTo(r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 6)
+  })
+})
+
+describe('zero-NAV partial bank-first recovery (low-infeasible bracket)', () => {
+  const partialBuckets = [
+    { id: 'fund', totalReturnRate: -1, contribution: 0 },
+    { id: 'bank', totalReturnRate: 0, contribution: 0 },
+  ]
+  const partialEvent = { fixedTargets: [{ bucketId: 'bank', amountToday: 80 }], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 }
+  it('settles partial bank-first fixed spending50 interior without buying the dead fund', () => {
+    const s = initial([fund(100), bank(100)], 100)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 50,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.genuineNeed).toBeCloseTo(50, 9)
+    expect(r.paidWithdrawal).toBeCloseTo(50, 9)
+    expect(r.trialDeposit).toBe(0)
+    expect(r.roundingExcess).toBe(0)
+    expect(r.movement.fundPurchases).toBe(0)
+    expect(r.movement.fundSales).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(50, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(50, 9)
+    expect(r.closingState!.fundAcquisitionCost).toBeCloseTo(100, 9)
+    expect(r.pendingVorabpauschale).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 9)
+  })
+  it('settles partial bank-first fixed spending20 boundary without buying the dead fund', () => {
+    const s = initial([fund(100), bank(100)], 100)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 20,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.genuineNeed).toBeCloseTo(20, 9)
+    expect(r.paidWithdrawal).toBeCloseTo(20, 9)
+    expect(r.trialDeposit).toBe(0)
+    expect(r.roundingExcess).toBe(0)
+    expect(r.movement.fundPurchases).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(80, 9)
+    expect(r.closingState!.buckets.find(b => b.id === 'fund')!.value).toBe(0)
+    expect(r.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(80, 9)
+    expect(r.closingCapital).toBeCloseTo(
+      r.openingCapital + r.investmentReturn + r.contribution - r.paidWithdrawal + r.trialDeposit + r.roundingExcess, 9)
+  })
+  it('settles positive incoming need charges with boundary at B=80', () => {
+    const charged = initial([fund(100), bank(100)], 100)
+    const withKv = simulateEstimatorYear(charged, year(charged, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 20,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), () => ({ kv: 10, pv: 0 }))
+    expect(withKv.status).toBe('converged')
+    expect(withKv.genuineNeed).toBeCloseTo(30, 9)
+    expect(withKv.paidWithdrawal).toBeCloseTo(30, 9)
+    expect(withKv.movement.fundPurchases).toBe(0)
+    expect(withKv.closingCapital).toBeCloseTo(70, 9)
+    expect(withKv.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(70, 9)
+    const boundary = initial([fund(100), bank(100)], 100)
+    const atBoundary = simulateEstimatorYear(boundary, year(boundary, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: -10,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), () => ({ kv: 30, pv: 0 }))
+    expect(atBoundary.status).toBe('converged')
+    expect(atBoundary.genuineNeed).toBeCloseTo(20, 9)
+    expect(atBoundary.paidWithdrawal).toBeCloseTo(20, 9)
+    expect(atBoundary.movement.fundPurchases).toBe(0)
+    expect(atBoundary.closingCapital).toBeCloseTo(80, 9)
+    expect(atBoundary.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(80, 9)
+  })
+  it('handles mixed multiple bank/fund priorities by order', () => {
+    const bankFirst = simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 50,
+      allocationEvent: { fixedTargets: [{ bucketId: 'bank', amountToday: 80 }, { bucketId: 'fund', amountToday: 20 }], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets: partialBuckets,
+    }), noInsurance)
+    expect(bankFirst.status).toBe('converged')
+    expect(bankFirst.paidWithdrawal).toBeCloseTo(50, 9)
+    expect(bankFirst.movement.fundPurchases).toBe(0)
+    expect(bankFirst.closingCapital).toBeCloseTo(50, 9)
+    expect(() => simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 50,
+      allocationEvent: { fixedTargets: [{ bucketId: 'fund', amountToday: 20 }, { bucketId: 'bank', amountToday: 80 }], remainderWeights: { bank: 1 }, inflationFactor: 1 },
+      buckets: partialBuckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+    expect(() => simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 10,
+      allocationEvent: { fixedTargets: [{ bucketId: 'bank', amountToday: 80 }, { bucketId: 'fund', amountToday: 20 }], remainderWeights: { fund: 0.5, bank: 0.5 }, inflationFactor: 1 },
+      buckets: partialBuckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+  })
+  it('still rejects an actually impossible positive fund target at zero NAV', () => {
+    expect(() => simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+    expect(() => simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 5,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), noInsurance)).toThrow(/zero NAV/)
+  })
+  it('preserves the actual contribution guard at zero NAV', () => {
+    const s = initial([fund(100), bank(100)], 50)
+    expect(() => simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 0,
+      buckets: [
+        { id: 'fund', totalReturnRate: -1, contribution: 10 },
+        { id: 'bank', totalReturnRate: 0, contribution: 0 },
+      ],
+    }), noInsurance)).toThrow(/zero NAV/)
+  })
+  it('preserves ordinary surplus settlement at zero NAV without an event', () => {
+    const s = initial([fund(100), bank(100)], 100)
+    const r = simulateEstimatorYear(s, year(s, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: -10,
+      buckets: partialBuckets,
+    }), noInsurance)
+    expect(r.status).toBe('converged')
+    expect(r.genuineNeed).toBeCloseTo(-10, 9)
+    expect(r.paidWithdrawal).toBe(0)
+    expect(r.movement.fundPurchases).toBe(0)
+    expect(r.closingCapital).toBeCloseTo(100, 9)
+  })
+  it('preserves marginal rounding guards at zero NAV', () => {
+    const bankState = initial([fund(100), bank(100)], 100)
+    const bankRounding = simulateEstimatorYear(bankState, year(bankState, {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 99.5,
+      maxIterations: 1,
+      allocationEvent: partialEvent,
+      buckets: partialBuckets,
+    }), noInsurance, { fundedExcessBound: 2 })
+    expect(bankRounding.status).toBe('converged')
+    expect(bankRounding.roundingExcess).toBeCloseTo(0.5, 9)
+    expect(bankRounding.movement.fundPurchases).toBe(0)
+    expect(bankRounding.closingState!.buckets.find(b => b.id === 'bank')!.value).toBeCloseTo(0.5, 9)
+    expect(() => simulateEstimatorYear(initial([fund(100), bank(100)], 100), year(initial([fund(100), bank(100)], 100), {
+      projectedBasisRate: 0,
+      spendingLessOtherIncome: 99.5,
+      maxIterations: 1,
+      allocationEvent: { fixedTargets: [{ bucketId: 'fund', amountToday: 80 }], remainderWeights: { bank: 1 }, inflationFactor: 1 },
+      buckets: partialBuckets,
+    }), noInsurance, { fundedExcessBound: 2 })).toThrow(/zero NAV/)
   })
 })

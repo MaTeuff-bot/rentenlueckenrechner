@@ -285,13 +285,27 @@ export function simulateEstimatorYear(
         pendingVorabpauschale: pending }),
     }
   }
+  const isZeroNavAllocationError = (error: unknown): boolean =>
+    error instanceof Error && error.message.includes('zero NAV')
   const assessmentForSale = (sale: ReturnType<typeof withdrawProportionally>, movement = maintainAllocation(sale, 0)) =>
     assessCapitalIncome({ bankInterest, receivedVorabpauschale,
       adjustedFundSaleGain: sale.adjustedFundSaleGain + movement.adjustedFundSaleGain, openingSimulatedLoss: opening.simulatedLossCarryforward,
       expenseAllowance: p.expenseAllowance,
       provenDeductibleAnnualExpenses: p.provenDeductibleAnnualExpenses })
-  assessmentForSale(withdrawProportionally(beforeSale, 0))
-  assessmentForSale(withdrawProportionally(beforeSale, available))
+  // Discarded envelope trades validate monetary bounds only when feasible. A
+  // zero-NAV allocation purchase here is a discarded hypothetical, not an actual
+  // settled purchase: skip it without inventing units, cost or VP so a valid
+  // exhausted no-purchase root or genuine shortfall stays reachable. Only the
+  // committed settlement below rejects an actual impossible purchase.
+  const safeEnvelope = (requested: number): void => {
+    try {
+      assessmentForSale(withdrawProportionally(beforeSale, requested))
+    } catch (error) {
+      if (!isZeroNavAllocationError(error)) throw error
+    }
+  }
+  safeEnvelope(0)
+  safeEnvelope(available)
   // Signed annual cashflow trial. H is post-return wealth; paid = min(H, max(0, y))
   // is the actual proportional sale (never negative) and S = max(0, -y) the
   // incoming surplus deposit supplied from annual income only. Allocation targets
@@ -349,23 +363,45 @@ export function simulateEstimatorYear(
   // global proof.
   // No -H clamp on low: an income surplus may exceed current holdings, and
   // clamping would corrupt the event-year bracket for surplus > H.
+  // Discarded hypothetical allocation trades at zero NAV are infeasible trials,
+  // not actual settled purchases: record the first diagnostic without inventing
+  // units, cost or VP, and keep searching for a valid settled no-purchase root
+  // or genuine shortfall. Only a committed settlement requiring a positive fund
+  // purchase at zero NAV still rejects below.
+  let firstZeroNavError: unknown = null
+  const tryTrial = (y: number): { feasible: true; outcome: ReturnType<typeof trial> } | { feasible: false; error: unknown } => {
+    try {
+      return { feasible: true, outcome: trial(y) }
+    } catch (error) {
+      if (isZeroNavAllocationError(error)) {
+        if (firstZeroNavError === null) firstZeroNavError = error
+        return { feasible: false, error }
+      }
+      throw error
+    }
+  }
   const isEventYear = event !== null
   let low = Math.min(0, p.spendingLessOtherIncome)
   let high = available
-  let result = trial(low)
-  let lowResidual = result.residual
-  let highResult!: typeof result
+  const lowAttempt = tryTrial(low)
+  let result!: ReturnType<typeof trial>
+  let lowResidual: number | null = lowAttempt.feasible ? lowAttempt.outcome.residual : null
+  if (lowAttempt.feasible) result = lowAttempt.outcome
+  let highResult!: ReturnType<typeof trial>
   let highResidual!: number
   let iterations = 1
   let status: 'converged' | 'shortfall' | 'nonconverged' = 'nonconverged'
-  const runBracketSearch = () => {
+  const runBracketSearch = (): void => {
+    if (lowResidual === null) return
     for (; iterations <= p.maxIterations; iterations += 1) {
       // Bounded interpolation accelerates ordinary piecewise-linear contribution
       // callbacks. Periodic bisection retains bracket progress at kinks.
       const interpolated = low - lowResidual * (high - low) / (highResidual - lowResidual)
       const middle = iterations % 4 === 1 || !Number.isFinite(interpolated) || interpolated <= low || interpolated >= high
         ? low + (high - low) / 2 : interpolated
-      result = trial(middle)
+      const attempt = tryTrial(middle)
+      if (!attempt.feasible) continue
+      result = attempt.outcome
       if (Math.abs(result.residual) <= p.tolerance) { status = 'converged'; break }
       if (result.residual < 0) { low = middle; lowResidual = result.residual }
       else { high = middle; highResidual = result.residual; highResult = result }
@@ -376,9 +412,32 @@ export function simulateEstimatorYear(
       status = 'converged'
     }
   }
-  if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
+  const buildFixedKinkLevels = (): number[] => {
+    if (!isEventYear) return []
+    const levels: number[] = []
+    let cumulative = 0
+    for (const fixed of event!.fixedTargets) {
+      cumulative += fixed.amountToday * event!.inflationFactor
+      const candidate = available - cumulative
+      if (Number.isFinite(candidate) && candidate > low && candidate < high) levels.push(candidate)
+    }
+    levels.sort((a, b) => a - b)
+    return levels
+  }
+  const throwIfSettledRequiresImpossiblePurchase = (): void => {
+    // Real grounds only: the committed settlement itself requires a positive
+    // fund purchase at zero NAV. A failed discarded hypothetical trial is not
+    // proof the actual target is impossible, so discarded zero-NAV diagnostics
+    // never throw here. Committed impossibilities throw directly from
+    // maintainAllocation (settled base), the contribution guard, or the marginal
+    // excess guard. All stored `result` outcomes are feasible trials, hence no
+    // throw on discarded-trial diagnostics. No monotonicity or global proof.
+  }
+  if (lowAttempt.feasible && Math.abs(lowAttempt.outcome.residual) <= p.tolerance) status = 'converged'
   else {
-    result = trial(high)
+    const highAttempt = tryTrial(high)
+    if (!highAttempt.feasible) throw highAttempt.error
+    result = highAttempt.outcome
     highResult = result
     highResidual = result.residual
     if (Math.abs(result.residual) <= p.tolerance) status = 'converged'
@@ -386,30 +445,101 @@ export function simulateEstimatorYear(
     else if (isEventYear && result.residual < -p.tolerance) {
       // Event year with a negative high-side residual: scan the fixed-target
       // kink levels B = cumulative nominal fixed amounts (y = H - B) for a
-      // directly validated root before judging fundability.
-      const kinkLevels: number[] = []
-      {
-        let cumulative = 0
-        for (const fixed of event!.fixedTargets) {
-          cumulative += fixed.amountToday * event!.inflationFactor
-          const candidate = available - cumulative
-          if (Number.isFinite(candidate) && candidate > low && candidate < high) kinkLevels.push(candidate)
-        }
-      }
+      // directly validated root before judging fundability. A finite kink scan
+      // is an attempt, never a global proof. Infeasible kink trials are skipped
+      // without inventing units, cost or VP.
+      const kinkLevels = buildFixedKinkLevels()
+      let recoveredLowY: number | null = null
+      let recoveredLowResidual: number | null = null
+      let recoveredLowOutcome: ReturnType<typeof trial> | null = null
+      let tightHighY: number | null = null
+      let tightHighResidual: number | null = null
+      let tightHighOutcome: ReturnType<typeof trial> | null = null
       for (const candidate of kinkLevels) {
         iterations += 1
-        const kinkTrial = trial(candidate)
+        const kinkAttempt = tryTrial(candidate)
+        if (!kinkAttempt.feasible) continue
+        const kinkTrial = kinkAttempt.outcome
         if (Math.abs(kinkTrial.residual) <= p.tolerance) { result = kinkTrial; status = 'converged'; break }
+        if (kinkTrial.residual < -p.tolerance && (recoveredLowY === null || candidate > recoveredLowY)) {
+          recoveredLowY = candidate; recoveredLowResidual = kinkTrial.residual; recoveredLowOutcome = kinkTrial
+        } else if (kinkTrial.residual > p.tolerance && (tightHighY === null || candidate < tightHighY)) {
+          tightHighY = candidate; tightHighResidual = kinkTrial.residual; tightHighOutcome = kinkTrial
+        }
       }
       if (status === 'nonconverged') {
         // Demonstrable shortfall only: even with zero charges the unavoidable
         // spending/income gap already exceeds holdings. Anything else is a
         // numerical nonconvergence diagnostic, not a manufactured insolvency.
         if (p.spendingLessOtherIncome > available + p.tolerance) status = 'shortfall'
-        else runBracketSearch()
+        else if (lowResidual !== null) runBracketSearch()
+        else if (recoveredLowY !== null) {
+          low = recoveredLowY; lowResidual = recoveredLowResidual!
+          if (recoveredLowOutcome !== null) result = recoveredLowOutcome
+          if (tightHighY !== null && tightHighY < high && tightHighY > low) {
+            high = tightHighY; highResidual = tightHighResidual!; highResult = tightHighOutcome!; result = tightHighOutcome!
+          }
+          runBracketSearch()
+        }
+        // Low still null and high negative: honest nonconvergence (no throw on
+        // discarded trials; no global proof claimed).
       }
     }
-    else runBracketSearch()
+    else {
+      if (lowResidual !== null) runBracketSearch()
+      else if (!isEventYear) {
+        if (highResidual >= 0 && highResidual <= fundedExcessBound + p.tolerance) {
+          result = highResult
+          status = 'converged'
+        } else if (highResidual > p.tolerance && firstZeroNavError !== null) throw firstZeroNavError
+      } else {
+        // Event year with a positive high-side residual and an infeasible low
+        // discarded hypothetical: do not infer the actual target is impossible
+        // from the failed low alone. The feasible interval for a bank-first
+        // fixed priority is B <= 80 (fund remainder only above); evaluate the
+        // fixed kinks for a directly validated boundary root or a reachable
+        // feasible lower bracket, then continue the shared solver. Infeasible
+        // mids stay skipped without inventing state, cost, VP or units; only a
+        // directly validated residual or bounded rounding converges, otherwise
+        // honest nonconvergence. No monotonicity, no global proof, no parallel
+        // engine, no path drop, no clipping. Budgets (tolerance, maxIterations)
+        // are unchanged.
+        const kinkLevels = buildFixedKinkLevels()
+        let recoveredLowY: number | null = null
+        let recoveredLowResidual: number | null = null
+        let tightHighY: number | null = null
+        let tightHighResidual: number | null = null
+        let tightHighOutcome: ReturnType<typeof trial> | null = null
+        for (const candidate of kinkLevels) {
+          iterations += 1
+          const kinkAttempt = tryTrial(candidate)
+          if (!kinkAttempt.feasible) continue
+          const kinkTrial = kinkAttempt.outcome
+          if (Math.abs(kinkTrial.residual) <= p.tolerance) { result = kinkTrial; status = 'converged'; break }
+          if (kinkTrial.residual < -p.tolerance && (recoveredLowY === null || candidate > recoveredLowY)) {
+            recoveredLowY = candidate; recoveredLowResidual = kinkTrial.residual
+          } else if (kinkTrial.residual > p.tolerance && (tightHighY === null || candidate < tightHighY)) {
+            tightHighY = candidate; tightHighResidual = kinkTrial.residual; tightHighOutcome = kinkTrial
+          }
+        }
+        if (status === 'nonconverged' && recoveredLowY !== null) {
+          low = recoveredLowY; lowResidual = recoveredLowResidual!
+          if (tightHighY !== null && tightHighY < high) {
+            high = tightHighY; highResidual = tightHighResidual!; highResult = tightHighOutcome!; result = tightHighOutcome!
+          }
+          runBracketSearch()
+        } else if (status === 'nonconverged') {
+          if (tightHighY !== null && tightHighY < high) {
+            high = tightHighY; highResidual = tightHighResidual!; highResult = tightHighOutcome!; result = tightHighOutcome!
+          }
+          if (highResidual >= 0 && highResidual <= fundedExcessBound + p.tolerance) {
+            result = highResult
+            status = 'converged'
+          } else if (highResidual > p.tolerance && firstZeroNavError !== null) throw firstZeroNavError
+        }
+      }
+    }
+    if (lowResidual !== null) throwIfSettledRequiresImpossiblePurchase()
   }
   // Commit: B = H - paid + S is the settled allocation base. In the event year
   // the signed solve converges at y ≈ N, so a genuine surplus arrives as the

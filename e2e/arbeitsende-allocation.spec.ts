@@ -241,9 +241,6 @@ test('arbeitsende event engages with reordered fixed priorities and conserves le
   console.log(`arbeitsende joint driftKv=${driftFirst.kv} driftPv=${driftFirst.pv} driftCap=${driftFirst.capTaxDetail} driftPen=${driftFirst.pensionDetail} joint=${jointDrift} eventKv=${eventFirst.kv} eventPv=${eventFirst.pv} eventCap=${eventFirst.capTaxDetail} eventPen=${eventFirst.pensionDetail} joint=${jointEvent} endDiff=${endDiffSigned}`);
   expect(Number.isFinite(jointDrift)).toBe(true);
   expect(Number.isFinite(jointEvent)).toBe(true);
-  // The event-year OLD (opening) returns are the same off/on, so the closing
-  // difference is fully carried by the funded gap, surplus, unfunded and the joint
-  // charges above — verified by the signed conservation and the per-row lineage.
   const snap = await readYearlySnapshot(page);
   const startIdx = columnIndex(snap.headers, (entry) => entry.trim() === 'Startkapital');
   const returnIdx = columnIndex(snap.headers, (entry) => entry.trim() === 'Rendite');
