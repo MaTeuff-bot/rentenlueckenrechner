@@ -14,6 +14,7 @@ import {
   needsCoverageExpansion,
   requestCoverageExpansion,
   revealAndFocusTarget,
+  scrollAnchorForTarget,
   stickyClearanceForHeight,
   updateStickyTabsClearance,
   installStickyTabsClearance,
@@ -318,6 +319,41 @@ describe('targeted coverage expansion', () => {
     })
     expect(onCoverageChange).not.toHaveBeenCalled()
     expect(document.querySelectorAll('.insurance-block')).toHaveLength(4)
+  })
+})
+
+describe('contextual scroll anchor', () => {
+  it('uses the labelled field wrapper for inputs but keeps focus on the control', () => {
+    document.body.innerHTML =
+      '<label class="field"><span class="field-label">Nominaler Tagesgeld-Planungszins p.a.</span><input id="anchored-input" value="" /></label>'
+    const target = document.getElementById('anchored-input')!
+    const anchor = scrollAnchorForTarget(target)
+    expect(anchor).toBe(target.closest('.field'))
+    const spy = vi.mocked(Element.prototype.scrollIntoView)
+    spy.mockClear()
+    const result = revealAndFocusTarget('anchored-input')
+    expect(result.status).toBe('found')
+    expect(document.activeElement).toBe(target)
+    expect(spy).toHaveBeenCalled()
+    const contexts = (spy as unknown as { mock: { contexts: unknown[] } }).mock.contexts ?? []
+    if (contexts.length > 0) expect(contexts[contexts.length - 1]).toBe(anchor)
+  })
+
+  it('keeps block and select wrappers consistent without focusing the label', () => {
+    document.body.innerHTML = [
+      '<label class="field"><span class="field-label">Status</span><select id="anchored-select"><option value="">Bitte auswählen</option></select></label>',
+      '<div class="coverage-bridge-only" id="insurance-bridge-bridgeOnly" tabindex="-1">Gruppe</div>',
+    ].join('')
+    const select = document.getElementById('anchored-select')!
+    expect(scrollAnchorForTarget(select)).toBe(select.closest('.field'))
+    const block = document.getElementById('insurance-bridge-bridgeOnly')!
+    expect(scrollAnchorForTarget(block)).toBe(block)
+    const spy = vi.mocked(Element.prototype.scrollIntoView)
+    spy.mockClear()
+    const result = revealAndFocusTarget('anchored-select')
+    expect(result.status).toBe('found')
+    expect(document.activeElement).toBe(select)
+    expect(spy).toHaveBeenCalled()
   })
 })
 

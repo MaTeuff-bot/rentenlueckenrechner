@@ -7,9 +7,11 @@ async function waitSettledFocus(page: Page, targetId: string) {
       const bar = document.querySelector('.input-tabs') as HTMLElement | null;
       const target = document.getElementById(id) as HTMLElement | null;
       if (!bar || !target || document.activeElement !== target) return false;
+      const anchor = (target.closest('.field') ?? target) as HTMLElement;
       const barRect = bar.getBoundingClientRect();
       const rect = target.getBoundingClientRect();
-      const key = `${barRect.bottom.toFixed(1)}|${rect.top.toFixed(1)}|${rect.bottom.toFixed(1)}`;
+      const anchorRect = anchor.getBoundingClientRect();
+      const key = `${barRect.bottom.toFixed(1)}|${rect.top.toFixed(1)}|${rect.bottom.toFixed(1)}|${anchorRect.top.toFixed(1)}|${anchorRect.bottom.toFixed(1)}`;
       const store = window as unknown as { __settlePrev?: string; __settleCount?: number };
       if (store.__settlePrev === key) {
         store.__settleCount = (store.__settleCount ?? 0) + 1;
@@ -52,14 +54,18 @@ async function stickyGeometry(page: Page, targetId: string) {
   return page.evaluate((id) => {
     const bar = document.querySelector('.input-tabs') as HTMLElement;
     const target = document.getElementById(id) as HTMLElement;
+    const anchor = (target.closest('.field') ?? target) as HTMLElement;
     const barRect = bar.getBoundingClientRect();
     const rect = target.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
     const clearance = getComputedStyle(document.documentElement).getPropertyValue('--input-tabs-clearance').trim();
     return {
       barBottom: barRect.bottom,
       barHeight: barRect.height,
       targetTop: rect.top,
       targetBottom: rect.bottom,
+      anchorTop: anchorRect.top,
+      anchorBottom: anchorRect.bottom,
       viewportHeight: window.innerHeight,
       clearance,
       focused: document.activeElement?.id ?? '',
@@ -75,6 +81,8 @@ test('settled sticky clearance keeps the explicit target fully visible (desktop)
   expect(geom.focused).toBe('cash-planning-rate');
   expect(geom.targetTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
   expect(geom.targetBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
+  expect(geom.anchorTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
+  expect(geom.anchorBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
   expect(geom.clearance).not.toBe('');
   const barHeight = await page.locator('.input-tabs').evaluate((el) => el.getBoundingClientRect().height);
   const clearancePx = Number.parseFloat(geom.clearance);
@@ -95,16 +103,21 @@ test('ordinary tab switch starts the panel below the bar with settled geometry (
     const bar = document.querySelector('.input-tabs') as HTMLElement;
     const panel = document.getElementById('input-tabpanel-annahmen') as HTMLElement;
     const firstSection = panel.querySelector('.flow-section') as HTMLElement;
+    const heading = firstSection.querySelector('header, h3') as HTMLElement | null;
     return {
       barBottom: bar.getBoundingClientRect().bottom,
       panelTop: panel.getBoundingClientRect().top,
       sectionTop: firstSection.getBoundingClientRect().top,
+      headingTop: heading ? heading.getBoundingClientRect().top : firstSection.getBoundingClientRect().top,
+      headingBottom: heading ? heading.getBoundingClientRect().bottom : firstSection.getBoundingClientRect().bottom,
       viewportHeight: window.innerHeight,
     };
   });
   expect(geom.panelTop).toBeGreaterThanOrEqual(geom.barBottom - 4);
   expect(geom.sectionTop).toBeGreaterThanOrEqual(geom.barBottom - 4);
   expect(geom.sectionTop).toBeLessThanOrEqual(geom.viewportHeight);
+  expect(geom.headingTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
+  expect(geom.headingBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
   await page.screenshot({ path: testInfo.outputPath('repair-ordinary-panel-start.png') });
 });
 
@@ -123,10 +136,16 @@ test('missing Offen and invalid Prüfen stay distinguished on real inputs (deskt
   await page.locator('.validation-summary a[href="#cash-planning-rate"]').first().click();
   await waitSettledFocus(page, 'cash-planning-rate');
   expect(await page.evaluate(() => document.activeElement?.id ?? '')).toBe('cash-planning-rate');
+  const offenGeom = await stickyGeometry(page, 'cash-planning-rate');
+  expect(offenGeom.anchorTop).toBeGreaterThanOrEqual(offenGeom.barBottom + 8 - 1);
+  expect(offenGeom.anchorBottom).toBeLessThanOrEqual(offenGeom.viewportHeight + 1);
   await page.getByRole('tab', { name: /Pers.nlicher Plan/ }).click();
   await pruefenLink.click();
   await waitSettledFocus(page, 'retirementAge');
   expect(await page.evaluate(() => document.activeElement?.id ?? '')).toBe('retirementAge');
+  const pruefenGeom = await stickyGeometry(page, 'retirementAge');
+  expect(pruefenGeom.anchorTop).toBeGreaterThanOrEqual(pruefenGeom.barBottom + 8 - 1);
+  expect(pruefenGeom.anchorBottom).toBeLessThanOrEqual(pruefenGeom.viewportHeight + 1);
   await page.screenshot({ path: testInfo.outputPath('repair-missing-invalid.png') });
 });
 
@@ -157,6 +176,8 @@ test('cross-tab estimator disclosure and conditional bridgeOnly reveal from fres
   const bridgeGeom = await stickyGeometry(page, 'insurance-bridge-bridgeOnly');
   expect(bridgeGeom.targetTop).toBeGreaterThanOrEqual(bridgeGeom.barBottom + 8 - 1);
   expect(bridgeGeom.targetBottom).toBeLessThanOrEqual(bridgeGeom.viewportHeight + 1);
+  expect(bridgeGeom.anchorTop).toBeGreaterThanOrEqual(bridgeGeom.barBottom + 8 - 1);
+  expect(bridgeGeom.anchorBottom).toBeLessThanOrEqual(bridgeGeom.viewportHeight + 1);
   await page.screenshot({ path: testInfo.outputPath('repair-bridge-reveal.png') });
   await page.getByRole('tab', { name: /Versicherung/ }).click();
   await page.locator('#insurance-block-4-jump-to-vermoegen').click();
@@ -175,6 +196,8 @@ test('cross-tab estimator disclosure and conditional bridgeOnly reveal from fres
   const estimatorGeom = await stickyGeometry(page, estimatorId);
   expect(estimatorGeom.targetTop).toBeGreaterThanOrEqual(estimatorGeom.barBottom + 8 - 1);
   expect(estimatorGeom.targetBottom).toBeLessThanOrEqual(estimatorGeom.viewportHeight + 1);
+  expect(estimatorGeom.anchorTop).toBeGreaterThanOrEqual(estimatorGeom.barBottom + 8 - 1);
+  expect(estimatorGeom.anchorBottom).toBeLessThanOrEqual(estimatorGeom.viewportHeight + 1);
   await page.screenshot({ path: testInfo.outputPath('repair-estimator-reveal.png') });
 });
 
@@ -219,6 +242,8 @@ test('next skips a removed stale target and focuses the current actionable issue
     await waitSettledFocus(page, focused);
     const geom = await stickyGeometry(page, focused);
     expect(geom.targetTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
+    expect(geom.anchorTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
+    expect(geom.anchorBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
   } else {
     await expect(page.locator('.navigation-status')).toContainText(/nicht verfügbar/);
   }
@@ -244,6 +269,8 @@ test('reduced motion records automatic scroll behavior with settled geometry (de
   const geom = await stickyGeometry(page, 'cash-planning-rate');
   expect(geom.targetTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
   expect(geom.targetBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
+  expect(geom.anchorTop).toBeGreaterThanOrEqual(geom.barBottom + 8 - 1);
+  expect(geom.anchorBottom).toBeLessThanOrEqual(geom.viewportHeight + 1);
   await page.screenshot({ path: testInfo.outputPath('repair-reduced-motion.png') });
 });
 

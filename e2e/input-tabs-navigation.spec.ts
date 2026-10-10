@@ -1,5 +1,30 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { expectForecast, freshLoad, setupFundOnlyBridge } from './fixtures';
+
+async function waitSettledFocus(page: Page, targetId: string) {
+  await page.waitForFunction(
+    (id) => {
+      const bar = document.querySelector('.input-tabs') as HTMLElement | null;
+      const target = document.getElementById(id) as HTMLElement | null;
+      if (!bar || !target || document.activeElement !== target) return false;
+      const anchor = (target.closest('.field') ?? target) as HTMLElement;
+      const barRect = bar.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const key = `${barRect.bottom.toFixed(1)}|${rect.top.toFixed(1)}|${rect.bottom.toFixed(1)}|${anchorRect.top.toFixed(1)}|${anchorRect.bottom.toFixed(1)}`;
+      const store = window as unknown as { __settlePrev?: string; __settleCount?: number };
+      if (store.__settlePrev === key) {
+        store.__settleCount = (store.__settleCount ?? 0) + 1;
+        return (store.__settleCount ?? 0) >= 3;
+      }
+      store.__settlePrev = key;
+      store.__settleCount = 0;
+      return false;
+    },
+    targetId,
+    { polling: 100, timeout: 8000 },
+  );
+}
 
 test('ordinary tab switch keeps focus on the tab and starts the panel without focusing inputs', async ({ page }, testInfo) => {
   await freshLoad(page);
@@ -66,15 +91,25 @@ test('sticky tab bar stays visible and never covers the focused target', async (
   expect(position).toBe('sticky');
   await page.locator('.validation-summary a[href="#cash-planning-rate"]').first().click();
   await expect(page.locator('#cash-planning-rate')).toBeFocused();
+  await waitSettledFocus(page, 'cash-planning-rate');
   const overlap = await page.evaluate(() => {
     const bar = document.querySelector('.input-tabs') as HTMLElement;
     const target = document.getElementById('cash-planning-rate') as HTMLElement;
-    if (!bar || !target) return { covered: true, barBottom: 0, targetTop: 0 };
+    if (!bar || !target) return { covered: true, anchorCovered: true, barBottom: 0, targetTop: 0, anchorTop: 0 };
+    const anchor = (target.closest('.field') ?? target) as HTMLElement;
     const barRect = bar.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
-    return { covered: targetRect.top < barRect.bottom - 1, barBottom: barRect.bottom, targetTop: targetRect.top };
+    const anchorRect = anchor.getBoundingClientRect();
+    return {
+      covered: targetRect.top < barRect.bottom - 1,
+      anchorCovered: anchorRect.top < barRect.bottom + 8 - 1,
+      barBottom: barRect.bottom,
+      targetTop: targetRect.top,
+      anchorTop: anchorRect.top,
+    };
   });
   expect(overlap.covered).toBe(false);
+  expect(overlap.anchorCovered).toBe(false);
   const barVisible = await page.locator('.input-tabs').evaluate((el) => {
     const rect = el.getBoundingClientRect();
     return rect.top <= 1 && rect.bottom > rect.top;

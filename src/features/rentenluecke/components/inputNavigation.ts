@@ -160,11 +160,23 @@ function focusWithoutScroll(target: Element): void {
   }
 }
 
-function scrollTargetIntoView(target: Element): void {
+export function scrollAnchorForTarget(target: Element): Element {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
+    const field = target.closest('.field')
+    if (field) return field
+  }
+  return target
+}
+
+function scrollAnchorIntoView(anchor: Element): void {
   try {
-    target.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: scrollBehavior() })
+    anchor.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: scrollBehavior() })
   } catch {
-    target.scrollIntoView?.()
+    anchor.scrollIntoView?.()
   }
 }
 
@@ -175,6 +187,10 @@ function scrollTargetIntoView(target: Element): void {
  * unfocusable targets never steal focus or scroll. The legacy fallback
  * parameter is intentionally ignored so stale links cannot masquerade as
  * successful navigation by focusing an unrelated section anchor.
+ * Form controls scroll via their labelled `.field` wrapper so the visible
+ * label clears the sticky bar together with the control; the real control is
+ * focused with preventScroll first (unfocusable targets never scroll) and only
+ * then is the contextual anchor scrolled. Block and fieldset targets scroll directly.
  */
 export function revealAndFocusTarget(id: string, _fallback?: string): RevealResult {
   void _fallback
@@ -187,7 +203,7 @@ export function revealAndFocusTarget(id: string, _fallback?: string): RevealResu
   if (typeof document !== 'undefined' && document.activeElement !== primary) {
     return { status: 'unactionable', targetId: primary.id || id, fallbackUsed: false }
   }
-  scrollTargetIntoView(primary)
+  scrollAnchorIntoView(scrollAnchorForTarget(primary))
   return { status: 'found', targetId: primary.id || id, fallbackUsed: false }
 }
 

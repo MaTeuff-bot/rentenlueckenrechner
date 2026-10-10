@@ -401,7 +401,7 @@ export function InputPanel({
             onClick={() => selectTab(tab.id)}
             onKeyDown={event => handleTabKeyDown(event, tab.id)}
           >
-            <span className="tab-title">{tab.label} <span className="section-status">{tabStatus(tab.id)}</span></span>
+            <span className="tab-title"><span className="tab-label">{tab.label}</span> <span className="section-status">{tabStatus(tab.id)}</span></span>
             <span className="tab-summary">{tabSummary(tab.id)}</span>
           </button>
         ))}
