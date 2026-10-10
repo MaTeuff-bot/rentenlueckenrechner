@@ -18,8 +18,8 @@ export function SimulationsAssumptions({ simulations, onChange }: {
           {isNonStandard ? <option value={simulations}>{simulations.toLocaleString('de-DE')}</option> : null}
         </select>
       </div>
-      <p>Mehr Verläufe machen die Bandbreiten (P10/P50/P90) und die Überlebenswahrscheinlichkeit stabiler, kosten aber Rechenzeit. Weniger Verläufe liefern schnellere, aber unruhigere Schätzungen: Insbesondere die P10-Schwelle wird bei kleinen Anzahlen ungenauer. Standard sind 1.000 Verläufe.</p>
-      <p>Die Auswahl betrifft nur die Bandbreiten und Wahrscheinlichkeiten im Ergebnis. Der Referenzpfad (Planwert) und die benötigte Kapitalsuche sind davon unabhängig.</p>
+      <p>Mehr Verläufe machen die Bandbreiten (P10/P50/P90) und die Aufbrauchwahrscheinlichkeit stabiler, kosten aber Rechenzeit. Weniger Verläufe liefern schnellere, aber unruhigere Schätzungen: Insbesondere die P10-Schwelle wird bei kleinen Anzahlen ungenauer. Standard sind 1.000 Verläufe.</p>
+      <p>Die Auswahl betrifft nur die Bandbreiten und Wahrscheinlichkeiten im Ergebnis. Der Referenzpfad (Planwert) ist davon unabhängig. Die Sterbetafel-Überlebenswahrscheinlichkeit ist davon unabhängig.</p>
     </fieldset>
   )
 }

@@ -121,7 +121,7 @@ export function CashPlanningRateAssumptions({
           />
           <p>
             Ein gemeinsamer konstanter nominaler Planungszins für alle Jahre, Pfade und Bankeinlagen
-            (Referenzpfad, Bootstrap-Pfade und Kapitalsuche rechnen mit demselben Satz; mehrere Bankeinlagen
+            (Referenzpfad und Bootstrap-Pfade rechnen mit demselben Satz; mehrere Bankeinlagen
             teilen sich diesen einen Satz).
           </p>
           <p>

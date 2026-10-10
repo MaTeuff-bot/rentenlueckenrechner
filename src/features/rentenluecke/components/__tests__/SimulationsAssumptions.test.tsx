@@ -24,6 +24,8 @@ describe('SimulationsAssumptions', () => {
   it('explains the tradeoff and the reference-path independence', () => {
     render(<SimulationsAssumptions simulations={1000} onChange={() => {}} />)
     expect(screen.getByText(/insbesondere die P10-Schwelle wird bei kleinen Anzahlen ungenauer/i)).toBeInTheDocument()
-    expect(screen.getByText(/Referenzpfad \(Planwert\) und die benötigte Kapitalsuche sind davon unabhängig/i)).toBeInTheDocument()
+    expect(screen.getByText(/Aufbrauchwahrscheinlichkeit stabiler/i)).toBeInTheDocument()
+    expect(screen.getByText(/Referenzpfad \(Planwert\) ist davon unabhängig/i)).toBeInTheDocument()
+    expect(screen.getByText(/Sterbetafel-Überlebenswahrscheinlichkeit ist davon unabhängig/i)).toBeInTheDocument()
   })
 })
