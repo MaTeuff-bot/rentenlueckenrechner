@@ -2,6 +2,7 @@ import type { ScenarioIssue } from '../../model/scenarioIssues'
 import { BridgeCoverageChecklist, InsuranceCoverageChecklist } from './InsuranceCoverageChecklist'
 import { applyCoverage, commonExceptions, copyCompatibleCoverage, defaultCoverageAnswers, type InsuranceCoverageAnswers } from '../../model/insuranceCoverage'
 import { focusField } from '../inputNavigation'
+import type { InputTabId } from '../sectionsRegistry'
 import { ChildrenSection } from './ChildrenSection'
 import type { ChildrenAnswer } from '../../model/childrenAnswer'
 import { OptionalNumber } from './OptionalNumber'
@@ -12,12 +13,14 @@ import { controllingPensionStream, insurancePhaseRanges, phaseManualReasons, pha
 import { hasLegacyManualCapitalEstimate, readMandatoryCapitalNotice, dismissMandatoryCapitalNotice } from '../../hooks/scenarioState/persistence'
 
 export { OptionalNumber }
-export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {}, onJumpToEstimator, estimatorReadiness }: {
+export function RetirementInsuranceSection({ insurance, input, onChange, coverage, onCoverageChange, issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange = () => {}, onJumpToEstimator, onRequestField, onRequestIssue, estimatorReadiness }: {
   issues?: ScenarioIssue[]
   coverage?: InsuranceCoverageAnswers; onCoverageChange?: (answers: InsuranceCoverageAnswers) => void
   childrenAnswer?: ChildrenAnswer; onChildrenChange?: (answer: ChildrenAnswer) => void
   insurance: RetirementInsurance; input: RentenlueckeInput; onChange: (insurance: RetirementInsurance) => void
   onJumpToEstimator?: (fieldId: string) => void
+  onRequestField?: (tab: InputTabId, fieldId: string, fallback?: string) => void
+  onRequestIssue?: (issue: ScenarioIssue) => void
   estimatorReadiness?: PortfolioEstimatorReadiness
 }) {
   const [localCoverage, setLocalCoverage] = useState(defaultCoverageAnswers)
@@ -58,7 +61,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
     <section className="insurance-block" aria-labelledby="insurance-block-1-heading">
       <h3 id="insurance-block-1-heading">1. Phasen und Status <span className="section-status">{block1Status}</span></h3>
       <p>{block1Summary}</p>
-      <p>{statutory ? 'Rentenbeginn' : 'Versicherungsübergang'} laut Zeitplan: {Number.isFinite(i.pensionAge) ? `Alter ${i.pensionAge}` : 'noch offen'}. <button type="button" className="secondary-button" onClick={() => focusField(timelineTarget)}>Zeitplan ergänzen / korrigieren</button></p>
+      <p>{statutory ? 'Rentenbeginn' : 'Versicherungsübergang'} laut Zeitplan: {Number.isFinite(i.pensionAge) ? `Alter ${i.pensionAge}` : 'noch offen'}. <button type="button" className="secondary-button" onClick={() => { if (onRequestField) onRequestField('plan', timelineTarget); else focusField(timelineTarget) }}>Zeitplan ergänzen / korrigieren</button></p>
       {!ranges.length && <p>Keine anwendbare Versicherungsphase. Bitte Arbeitsende, Übergang und Planungshorizont im Zeitplan prüfen.</p>}
       {ranges.map(({ phase, start, end }) => {
         const p = i[phase], label = labelFor(phase)
@@ -75,7 +78,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
           </select></label>{phase === 'pension' && <p className="field-help">KVdR: Deine Angabe – wird angenommen, nicht geprüft.</p>}
           {p.status === 'unknown' && <p>Für diese Planung nehmen wir freiwillige GKV an. Das ist kein garantierter Höchstbeitrag. Die App prüft keine Versicherungsberechtigung.</p>}
           {forcedReasons.length > 0 && <div className="source-warning"><p>{forcedReasons.join('; ')}. Die ganze Phase benötigt eigene Beiträge.</p>
-            {offending.map(stream => <p key={stream.id}>{stream.name} ab Alter {stream.startAge}: <button type="button" className="secondary-button" onClick={() => focusField(`retirement-income-kind-${stream.id}`)}>Einkommen bearbeiten</button></p>)}
+            {offending.map(stream => <p key={stream.id}>{stream.name} ab Alter {stream.startAge}: <button type="button" className="secondary-button" onClick={() => { const target = `retirement-income-kind-${stream.id}`; if (onRequestField) onRequestField('plan', target); else focusField(target) }}>Einkommen bearbeiten</button></p>)}
             <button type="button" className="secondary-button" onClick={() => focusField(`insurance-${phase}-kvMonthlyToday`)}>Eigene Beiträge eingeben</button>
           </div>}
           {phase === 'bridge'
@@ -85,7 +88,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
             {ranges.length === 2 && <button type="button" className="secondary-button" disabled={answers[other].common.kind === 'missing'} onClick={() => { const result = copyCompatibleCoverage(answers, other); changeCoverage(result.answers); setCopyMessage(result.message) }}>Angaben aus der anderen Phase übernehmen – {label}</button>}
           </>}
           <p data-testid={`insurance-${phase}-summary`}>{reasons.length ? `Eigene Beiträge · KV ${p.kvMonthlyToday ?? 'offen'} / PV ${p.pvMonthlyToday ?? 'offen'} €/Monat heute` : `${p.status === 'kvdr' ? 'KVdR' : p.status === 'unknown' ? 'Unbekannt · freiwillige GKV angenommen' : p.status === 'voluntary' ? 'Freiwillige GKV' : 'Status offen'} · automatisch`}</p>
-          {phaseIssues.length > 0 && <ul>{phaseIssues.map(issue => <li key={issue.code}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); focusField(issue.fieldId) }}>{issue.message}</a></li>)}</ul>}
+          {phaseIssues.length > 0 && <ul>{phaseIssues.map(issue => <li key={issue.code}><a href={`#${issue.fieldId}`} onClick={event => { event.preventDefault(); if (onRequestIssue) onRequestIssue(issue); else focusField(issue.fieldId) }}>{issue.message}</a></li>)}</ul>}
         </fieldset>
       })}
       {copyMessage && <p role="status">{copyMessage}</p>}
@@ -100,7 +103,7 @@ export function RetirementInsuranceSection({ insurance, input, onChange, coverag
       {i.rates && Object.values(i.rates).some(value => value !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter „Erweitert“ prüfen oder auf Standards zurücksetzen.</p>}
     </section>}
     {ranges.length > 0 && <section className="insurance-block" aria-labelledby="insurance-block-3-heading">
-      <h3 id="insurance-block-3-heading">3. Beiträge je Phase <span className="section-status">{block3Status}</span></h3>
+      <h3 id="insurance-block-3-heading" tabIndex={-1}>3. Beiträge je Phase <span className="section-status">{block3Status}</span></h3>
       <p>{block3Summary}</p>
       {ranges.map(({ phase }) => {
         const p = i[phase], label = labelFor(phase)

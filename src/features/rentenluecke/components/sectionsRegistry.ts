@@ -86,6 +86,14 @@ export function tabForSection(section: FlowSection): InputTabId | null {
   return null
 }
 
+export function issuesForTab(tabId: InputTabId, issues: readonly ScenarioIssue[]): ScenarioIssue[] {
+  return issues.filter((issue) => tabForSection(issue.section) === tabId)
+}
+
+export function nextOpenPoint(tabId: InputTabId, issues: readonly ScenarioIssue[]): ScenarioIssue | null {
+  return issuesForTab(tabId, issues)[0] ?? null
+}
+
 export function tabStatus(tabId: InputTabId, issues: readonly ScenarioIssue[]): string {
   const tabSections = INPUT_TABS.find((tab) => tab.id === tabId)?.sections ?? []
   const relevant = issues.filter((issue) => tabSections.includes(issue.section))

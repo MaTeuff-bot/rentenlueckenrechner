@@ -3,11 +3,11 @@ import { needsDetailedPortfolio } from '../model/capitalIncome/setup'
 import type { PortfolioEstimatorReadiness, PortfolioEstimatorSettings } from '../model/capitalIncome/portfolioEstimator'
 import { portfolioEstimatorReadiness } from '../model/capitalIncome/portfolioEstimator'
 import { CapitalEstimatorSetup } from './InputPanel/CapitalEstimatorSetup'
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import {
   INPUT_TABS,
+  issuesForTab,
   resolveSectionRequest,
-  sectionAnchorField,
   sectionLabel,
   sectionSummary,
   tabForSection,
@@ -20,7 +20,7 @@ import {
 import { TimelineSection } from './InputPanel/TimelineSection'
 import { InsuranceRateAssumptions } from './InputPanel/InsuranceRateAssumptions'
 import { AssumptionsPanel } from './AssumptionsPanel'
-import { focusField } from './inputNavigation'
+import { installStickyTabsClearance, isActionableTarget, needsCoverageExpansion, requestCoverageExpansion, revealAndFocusTarget, scrollPanelToStart } from './inputNavigation'
 import { sectionStatus, type ScenarioIssue, type FlowSection } from '../model/scenarioIssues'
 import type { ChildrenAnswer } from '../model/childrenAnswer'
 import { createDefaultRetirementInsurance, type RetirementInsurance } from '../model/retirementInsurance'
@@ -106,6 +106,36 @@ type InputPanelProps = {
 
 
 
+function TabOpenPoints({ tabId, issues, onIssueClick, onNext }: {
+  tabId: InputTabId
+  issues: readonly ScenarioIssue[]
+  onIssueClick: (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => void
+  onNext: (tabId: InputTabId) => void
+}) {
+  const tabIssues = issuesForTab(tabId, issues)
+  const tab = INPUT_TABS.find(entry => entry.id === tabId)
+  if (tabIssues.length === 0) {
+    return <p className="tab-open-points-empty">Vollständig – keine offenen Punkte in {tab?.label ?? tabId}.</p>
+  }
+  return (
+    <div className="tab-open-points" aria-label={`Offene Punkte – ${tab?.label ?? tabId}`}>
+      <ul>
+        {tabIssues.map((issue, index) => (
+          <li key={`${issue.code}-${tabId}-${index}`} id={`flow-issue-${tabId}-${index}`}>
+            <a href={`#${issue.fieldId}`} onClick={event => onIssueClick(event, issue)}>
+              {issue.kind === 'missing' ? 'Offen' : 'Prüfen'}: {issue.message}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="secondary-button" onClick={() => onNext(tabId)}>
+        Nächster offener Punkt
+      </button>
+    </div>
+  )
+}
+
+
 export function InputPanel({
   insuranceCoverageAnswers, onInsuranceCoverageChange,
   issues = [], childrenAnswer = { kind: 'missing' }, onChildrenChange, onTransitionChange = () => {},
@@ -151,6 +181,14 @@ export function InputPanel({
   sectionRequest = null,
 }: InputPanelProps) {
   const [activeTab, setActiveTab] = useState<InputTabId>('plan')
+  const [navStatus, setNavStatus] = useState<string | null>(null)
+  const [navRequest, setNavRequest] = useState<{ tab: InputTabId | null; queue: string[]; index: number; token: number } | null>(null)
+  const navTokenRef = useRef(0)
+  const navRequestRef = useRef<{ tab: InputTabId | null; queue: string[]; index: number; token: number } | null>(null)
+  const initialTabRef = useRef(true)
+  const retryTimerRef = useRef<number | null>(null)
+  const latestSectionNonceRef = useRef<number | null>(null)
+  const tabsBarRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const originals = issues.map((issue, index) => {
       const field = document.getElementById(issue.fieldId)
@@ -168,14 +206,80 @@ export function InputPanel({
       }
     })
   }, [issues])
+  const applyRevealResult = useCallback((fieldId: string, result: { status: string; fallbackUsed: boolean }) => {
+    if (result.status === 'found') {
+      setNavStatus(null)
+    } else if (result.status === 'unactionable') {
+      setNavStatus(`Hinweis: Das Ziel „${fieldId}“ ist derzeit nicht bedienbar (ausgeblendet oder deaktiviert).`)
+    } else {
+      setNavStatus(`Hinweis: Das Ziel „${fieldId}“ ist derzeit nicht verfügbar.`)
+    }
+  }, [])
+  const clearPendingRetry = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+  }, [])
+  const requestSingleNavigation = useCallback((tab: InputTabId | null, fieldId: string) => {
+    const token = navTokenRef.current + 1
+    navTokenRef.current = token
+    clearPendingRetry()
+    requestCoverageExpansion(fieldId)
+    const request = { tab, queue: [fieldId], index: 0, token }
+    navRequestRef.current = request
+    setNavRequest(request)
+    if (tab) setActiveTab(tab)
+  }, [clearPendingRetry])
+  useEffect(() => {
+    if (!navRequest) return
+    if (navRequest.token !== navTokenRef.current) return
+    if (navRequest.tab && navRequest.tab !== activeTab) return
+    const fieldId = navRequest.queue[navRequest.index]
+    if (!fieldId) return
+    const result = revealAndFocusTarget(fieldId)
+    if (result.status === 'found' || result.status === 'unactionable') {
+      clearPendingRetry()
+      applyRevealResult(fieldId, result)
+      return
+    }
+    if (needsCoverageExpansion(fieldId) && retryTimerRef.current === null) {
+      retryTimerRef.current = window.setTimeout(() => {
+        retryTimerRef.current = null
+        if (navTokenRef.current !== navRequest.token) return
+        if (navRequestRef.current?.token !== navRequest.token) return
+        const retryResult = revealAndFocusTarget(fieldId)
+        applyRevealResult(fieldId, retryResult)
+      }, 60)
+      return
+    }
+    clearPendingRetry()
+    applyRevealResult(fieldId, result)
+  }, [navRequest, activeTab, applyRevealResult, clearPendingRetry])
+  useEffect(() => {
+    if (initialTabRef.current) {
+      initialTabRef.current = false
+      return
+    }
+    const pending = navRequestRef.current
+    if (pending && pending.token === navTokenRef.current && pending.tab === activeTab) return
+    scrollPanelToStart(activeTab)
+  }, [activeTab])
   useEffect(() => {
     if (!sectionRequest) return
+    if (latestSectionNonceRef.current === sectionRequest.nonce) return
+    latestSectionNonceRef.current = sectionRequest.nonce
     const { tab, fieldId } = resolveSectionRequest(sectionRequest)
-    if (tab) setActiveTab(tab)
-    const fallback = sectionAnchorField(sectionRequest.section)
-    focusField(fieldId, fallback)
-    if (tab) window.setTimeout(() => focusField(fieldId, fallback), 0)
-  }, [sectionRequest])
+    requestSingleNavigation(tab, fieldId)
+  }, [sectionRequest, requestSingleNavigation])
+  useEffect(() => {
+    const bar = tabsBarRef.current ?? document.querySelector('.input-tabs')
+    if (!(bar instanceof HTMLElement)) return
+    return installStickyTabsClearance(bar)
+  }, [])
+  useEffect(() => () => {
+    if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current)
+  }, [])
   const portfolioComponents = createPortfolioComponentsFromBuckets(portfolioBuckets)
   const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
   const inflationOptions = getInflationSourceOptions(input.annualInflationRate)
@@ -216,24 +320,62 @@ export function InputPanel({
   const tabSummary = (tabId: InputTabId): string => getTabSummary(tabId, summaryContext)
   const needsAutomaticEstimator = needsDetailedPortfolio(input)
   const portfolioReadiness = portfolioReadinessProp ?? portfolioEstimatorReadiness(portfolioEstimatorSettings, portfolioBuckets, calculatePortfolioBucketTotal(portfolioBuckets))
-  const jumpToEstimatorField = (fieldId: string) => {
-    setActiveTab('vermoegen')
-    focusField(fieldId, 'estimator-fundAcquisitionCost')
-    window.setTimeout(() => focusField(fieldId, 'estimator-fundAcquisitionCost'), 0)
-  }
-  const jumpToInsuranceBlock = () => {
-    setActiveTab('versicherung')
-    focusField('insurance-block-3-heading')
-    window.setTimeout(() => focusField('insurance-block-3-heading'), 0)
-  }
-  const handleIssueClick = (event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
+  const chooseNextActionable = useCallback((tabId: InputTabId, tabIssues: readonly ScenarioIssue[]): ScenarioIssue | null => {
+    for (const issue of tabIssues) {
+      const element = document.getElementById(issue.fieldId)
+      if (element) {
+        if (isActionableTarget(element)) return issue
+        continue
+      }
+      if (needsCoverageExpansion(issue.fieldId)) return issue
+    }
+    return null
+  }, [])
+  const jumpToEstimatorField = useCallback((fieldId: string) => {
+    requestSingleNavigation('vermoegen', fieldId)
+  }, [requestSingleNavigation])
+  const jumpToInsuranceBlock = useCallback(() => {
+    requestSingleNavigation('versicherung', 'insurance-block-3-heading')
+  }, [requestSingleNavigation])
+  const requestFieldCrossTab = useCallback((tab: InputTabId, fieldId: string) => {
+    requestSingleNavigation(tab, fieldId)
+  }, [requestSingleNavigation])
+  const handleIssueClick = useCallback((event: MouseEvent<HTMLAnchorElement>, issue: ScenarioIssue) => {
     event.preventDefault()
     const tab = tabForSection(issue.section)
-    if (tab) setActiveTab(tab)
-    const fallback = sectionAnchorField(issue.section)
-    focusField(issue.fieldId, fallback)
-    if (tab) window.setTimeout(() => focusField(issue.fieldId, fallback), 0)
-  }
+    requestSingleNavigation(tab, issue.fieldId)
+  }, [requestSingleNavigation])
+  const handleNextOpenPoint = useCallback((tabId: InputTabId) => {
+    const tabIssues = issuesForTab(tabId, issues)
+    if (tabIssues.length === 0) return
+    const chosen = chooseNextActionable(tabId, tabIssues) ?? tabIssues[0]!
+    const tab = tabForSection(chosen.section)
+    requestSingleNavigation(tab, chosen.fieldId)
+  }, [issues, requestSingleNavigation, chooseNextActionable])
+  const selectTab = useCallback((tabId: InputTabId) => {
+    navTokenRef.current += 1
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+    navRequestRef.current = null
+    setNavRequest(null)
+    setNavStatus(null)
+    setActiveTab(tabId)
+  }, [])
+  const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tabId: InputTabId) => {
+    const order = INPUT_TABS.map(tab => tab.id)
+    const current = order.indexOf(tabId)
+    let next: InputTabId | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = order[(current + 1) % order.length]!
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = order[(current - 1 + order.length) % order.length]!
+    else if (event.key === 'Home') next = order[0]!
+    else if (event.key === 'End') next = order[order.length - 1]!
+    if (!next) return
+    event.preventDefault()
+    selectTab(next)
+    document.getElementById(`input-tab-${next}`)?.focus()
+  }, [selectTab])
 
   return (
     <section className="panel input-panel" aria-labelledby="inputs-title">
@@ -247,7 +389,7 @@ export function InputPanel({
         </button>
       </div>
 
-      <div className="input-tabs" role="tablist" aria-label="Eingabebereiche">
+      <div className="input-tabs" role="tablist" aria-label="Eingabebereiche" ref={tabsBarRef}>
         {INPUT_TABS.map(tab => (
           <button
             key={tab.id}
@@ -256,18 +398,21 @@ export function InputPanel({
             id={`input-tab-${tab.id}`}
             aria-selected={activeTab === tab.id}
             aria-controls={`input-tabpanel-${tab.id}`}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => selectTab(tab.id)}
+            onKeyDown={event => handleTabKeyDown(event, tab.id)}
           >
-            <span className="tab-title">{tab.label} <span className="section-status">{tabStatus(tab.id)}</span></span>
+            <span className="tab-title"><span className="tab-label">{tab.label}</span> <span className="section-status">{tabStatus(tab.id)}</span></span>
             <span className="tab-summary">{tabSummary(tab.id)}</span>
           </button>
         ))}
       </div>
+      {navStatus ? <p className="navigation-status" role="status">{navStatus}</p> : null}
       {issues.length > 0 && <div className="validation-summary" role="status"><p>Bitte ergänze offene Angaben oder prüfe markierte Werte.</p><ul>{issues.map((issue, index) => <li key={`${issue.code}-${index}`} id={`flow-issue-${index}`}><a href={`#${issue.fieldId}`} onClick={event => handleIssueClick(event, issue)}>{issue.kind === 'missing' ? 'Offen' : 'Prüfen'}: {issue.message}</a></li>)}</ul></div>}
       {usesJstSource && <p className="source-warning">JST-Quellen: nur nicht kommerzielle Nutzung.</p>}
       {input.retirementInsurance?.rates && Object.values(input.retirementInsurance.rates).some(v => v !== undefined) && <p className="source-warning">Eigene gesetzliche Satzannahmen sind aktiv. Unter den Rechenannahmen prüfen.</p>}
       <div className="input-grid">
         <div role="tabpanel" id="input-tabpanel-plan" aria-labelledby="input-tab-plan" className="input-tabpanel" hidden={activeTab !== 'plan'}>
+          <TabOpenPoints tabId="plan" issues={issues} onIssueClick={handleIssueClick} onNext={handleNextOpenPoint} />
           <section id="zeitplan" className="flow-section" tabIndex={-1}>{heading('zeitplan')}
             <TimelineSection input={{ ...input, retirementIncomeStreams }} errors={errors} onChange={onChange} onTransitionChange={onTransitionChange} onLifeTableSexChange={onLifeTableSexChange} />
           </section>
@@ -284,6 +429,7 @@ export function InputPanel({
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-vermoegen" aria-labelledby="input-tab-vermoegen" className="input-tabpanel" hidden={activeTab !== 'vermoegen'}>
+          <TabOpenPoints tabId="vermoegen" issues={issues} onIssueClick={handleIssueClick} onNext={handleNextOpenPoint} />
           <section id="vermoegen" className="flow-section" tabIndex={-1}>{heading('vermoegen')}
             <SavingsSection input={input} errors={errors} onChange={onChange} />
           <PortfolioBucketSection
@@ -314,11 +460,13 @@ export function InputPanel({
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-versicherung" aria-labelledby="input-tab-versicherung" className="input-tabpanel" hidden={activeTab !== 'versicherung'}>
+          <TabOpenPoints tabId="versicherung" issues={issues} onIssueClick={handleIssueClick} onNext={handleNextOpenPoint} />
           <section id="versicherung" className="flow-section" tabIndex={-1}>{heading('versicherung')}
-            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} onJumpToEstimator={jumpToEstimatorField} estimatorReadiness={portfolioReadiness} />
+            <RetirementInsuranceSection issues={issues} coverage={insuranceCoverageAnswers} onCoverageChange={onInsuranceCoverageChange} input={input} insurance={input.retirementInsurance ?? createDefaultRetirementInsurance()} onChange={onRetirementInsuranceChange} childrenAnswer={childrenAnswer} onChildrenChange={onChildrenChange} onJumpToEstimator={jumpToEstimatorField} onRequestField={requestFieldCrossTab} onRequestIssue={issue => { const tab = tabForSection(issue.section); requestSingleNavigation(tab, issue.fieldId) }} estimatorReadiness={portfolioReadiness} />
           </section>
         </div>
         <div role="tabpanel" id="input-tabpanel-annahmen" aria-labelledby="input-tab-annahmen" className="input-tabpanel" hidden={activeTab !== 'annahmen'}>
+          <TabOpenPoints tabId="annahmen" issues={issues} onIssueClick={handleIssueClick} onNext={handleNextOpenPoint} />
           <section id="annahmen" className="flow-section" tabIndex={-1}>
             <header><h3>Rechenannahmen <span className="section-status">{sectionStatus(issues, 'annahmen')}</span></h3><p>{validYearLabel}</p></header>
           <InflationSourceSection

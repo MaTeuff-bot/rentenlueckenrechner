@@ -1,5 +1,6 @@
 import { bridgeExceptions, commonExceptions, toggleCoverage, type BridgeInsuranceException, type CommonInsuranceException, type CoverageAnswer } from '../../model/insuranceCoverage'
 import { useEffect, useState } from 'react'
+import { COVERAGE_EXPAND_EVENT } from '../inputNavigation'
 export type CoverageManualOption = {
   id: string
   phaseLabel: string
@@ -14,6 +15,15 @@ export function InsuranceCoverageChecklist<E extends string>({ id, title, answer
   const hasExceptions = answer.kind === 'exceptions'
   const [showExceptions, setShowExceptions] = useState(hasExceptions)
   useEffect(() => { setShowExceptions(hasExceptions) }, [hasExceptions])
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      if (typeof detail !== 'string') return
+      if (detail === id || detail.startsWith(`${id}-`)) setShowExceptions(true)
+    }
+    window.addEventListener(COVERAGE_EXPAND_EVENT, handler)
+    return () => window.removeEventListener(COVERAGE_EXPAND_EVENT, handler)
+  }, [id])
   const manualActive = manualOption ? manualOption.active || manualOption.forced : false
   const chooseMode = (mode: 'standard' | 'exceptions' | 'unsure' | 'manual') => {
     if (mode === 'manual') {
@@ -56,6 +66,15 @@ export function BridgeCoverageChecklist({ common, bridgeOnly, onChange, manualOp
   const hasExceptions = common.kind === 'exceptions' || bridgeOnly.kind === 'exceptions'
   const [showExceptions, setShowExceptions] = useState(hasExceptions)
   useEffect(() => { setShowExceptions(hasExceptions) }, [hasExceptions])
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      if (typeof detail !== 'string') return
+      if (detail === 'insurance-bridge-circumstances' || detail.startsWith('insurance-bridge-circumstances-') || detail === 'insurance-bridge-bridgeOnly' || detail.startsWith('insurance-bridge-bridgeOnly-')) setShowExceptions(true)
+    }
+    window.addEventListener(COVERAGE_EXPAND_EVENT, handler)
+    return () => window.removeEventListener(COVERAGE_EXPAND_EVENT, handler)
+  }, [])
   const manualActive = manualOption ? manualOption.active || manualOption.forced : false
   const chooseMode = (mode: 'standard' | 'exceptions' | 'unsure' | 'manual') => {
     if (mode === 'manual') {
