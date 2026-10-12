@@ -11,8 +11,24 @@ updates:
     groups:
       production-dependencies:
         dependency-type: "production"
+      # First-match wins: TypeScript majors route here and stay isolated
+      # while the compiler major is held pending compatible tooling.
+      typescript-major:
+        patterns:
+          - "typescript"
+        update-types:
+          - "major"
+      # TypeScript minor/patch updates remain eligible in a separate group.
+      typescript-compatible:
+        patterns:
+          - "typescript"
+        update-types:
+          - "minor"
+          - "patch"
       development-dependencies:
         dependency-type: "development"
+        exclude-patterns:
+          - "typescript"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
