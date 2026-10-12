@@ -26,8 +26,8 @@ const REL = 1e-6
 
 declare module 'vitest' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface Assertion<T> {
-    toBeMoneyClose(expected: number): void
+  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> {
+    toBeMoneyClose(expected: number): R
   }
 }
 
