@@ -73,6 +73,24 @@ const assessmentSchema = z.object({ bankInterest: money, receivedVorabpauschale:
     expenseAllowance: money.default(51),
     provenDeductibleAnnualExpenses: money.optional() })
 
+function assessCapitalIncomeValidated(input: {
+  bankInterest: number; receivedVorabpauschale: number; adjustedFundSaleGain: number
+  openingSimulatedLoss: number; expenseAllowance: number; provenDeductibleAnnualExpenses?: number
+}) {
+  if (!signed.safeParse(input.adjustedFundSaleGain).success) {
+    assessmentSchema.parse(input)
+  }
+  const fundIncomeAfterExemption = signed.parse(input.receivedVorabpauschale + input.adjustedFundSaleGain) * 0.7
+  const netCapitalIncome = signed.parse(input.bankInterest + fundIncomeAfterExemption)
+  const afterLoss = signed.parse(netCapitalIncome - input.openingSimulatedLoss)
+  const expenseAllowance = Math.max(input.expenseAllowance, input.provenDeductibleAnnualExpenses ?? 0)
+  return {
+    fundIncomeAfterExemption, netCapitalIncome, expenseAllowance,
+    annualAssessment: money.parse(Math.max(0, afterLoss - expenseAllowance)),
+    closingSimulatedLoss: money.parse(Math.max(0, -afterLoss)),
+  }
+}
+
 /** Expenses do not create a loss pot. No saver allowance, stock-loss pot, external
  * income, cross-person offsets, tax assessment, or broker certification handling.
  */
@@ -81,15 +99,36 @@ export function assessCapitalIncome(input: {
   openingSimulatedLoss: number; expenseAllowance?: number; provenDeductibleAnnualExpenses?: number
 }) {
   const p = assessmentSchema.parse(input)
-  const fundIncomeAfterExemption = signed.parse(p.receivedVorabpauschale + p.adjustedFundSaleGain) * 0.7
-  const netCapitalIncome = signed.parse(p.bankInterest + fundIncomeAfterExemption)
-  const afterLoss = signed.parse(netCapitalIncome - p.openingSimulatedLoss)
-  const expenseAllowance = Math.max(p.expenseAllowance, p.provenDeductibleAnnualExpenses ?? 0)
-  return {
-    fundIncomeAfterExemption, netCapitalIncome, expenseAllowance,
-    annualAssessment: money.parse(Math.max(0, afterLoss - expenseAllowance)),
-    closingSimulatedLoss: money.parse(Math.max(0, -afterLoss)),
-  }
+  return assessCapitalIncomeValidated({
+    bankInterest: p.bankInterest,
+    receivedVorabpauschale: p.receivedVorabpauschale,
+    adjustedFundSaleGain: p.adjustedFundSaleGain,
+    openingSimulatedLoss: p.openingSimulatedLoss,
+    expenseAllowance: p.expenseAllowance,
+    provenDeductibleAnnualExpenses: p.provenDeductibleAnnualExpenses,
+  })
+}
+
+function withdrawProportionallyValidated(validatedState: EstimatorState, requested: number) {
+  money.parse(requested)
+  const total = money.parse(validatedState.buckets.reduce((sum, b) => sum + b.value, 0))
+  const paid = Math.min(total, requested)
+  const fraction = total > 0 ? paid / total : 0
+  const fundValue = validatedState.buckets.filter(b => b.eligibility === 'accumulating-equity-fund')
+    .reduce((sum, b) => sum + b.value, 0)
+  const fundFraction = fundValue > 0 ? fraction : 0
+  const fundProceeds = fundValue * fundFraction
+  const costReleased = validatedState.fundAcquisitionCost * fundFraction
+  const adjustmentReleased = validatedState.assessedVorabpauschalen * fundFraction
+  const closing = stateSchema.parse({ ...validatedState,
+    buckets: validatedState.buckets.map(b => ({ ...b, value: b.value * (1 - fraction) })),
+    fundAcquisitionCost: validatedState.fundAcquisitionCost * (1 - fundFraction),
+    assessedVorabpauschalen: validatedState.assessedVorabpauschalen * (1 - fundFraction),
+    pendingVorabpauschale: validatedState.pendingVorabpauschale * (1 - fundFraction),
+  })
+  return { state: closing, paid, shortfall: requested - paid, fraction, fundProceeds,
+    bankPrincipalWithdrawn: paid - fundProceeds, costReleased, adjustmentReleased,
+    adjustedFundSaleGain: signed.parse(fundProceeds - costReleased - adjustmentReleased) }
 }
 
 /** One immutable trial sale. Bank withdrawals return principal, including previously
@@ -97,25 +136,7 @@ export function assessCapitalIncome(input: {
  */
 export function withdrawProportionally(state: EstimatorState, requested: number) {
   const s = stateSchema.parse(state)
-  money.parse(requested)
-  const total = money.parse(s.buckets.reduce((sum, b) => sum + b.value, 0))
-  const paid = Math.min(total, requested)
-  const fraction = total > 0 ? paid / total : 0
-  const fundValue = s.buckets.filter(b => b.eligibility === 'accumulating-equity-fund')
-    .reduce((sum, b) => sum + b.value, 0)
-  const fundFraction = fundValue > 0 ? fraction : 0
-  const fundProceeds = fundValue * fundFraction
-  const costReleased = s.fundAcquisitionCost * fundFraction
-  const adjustmentReleased = s.assessedVorabpauschalen * fundFraction
-  const closing = stateSchema.parse({ ...s,
-    buckets: s.buckets.map(b => ({ ...b, value: b.value * (1 - fraction) })),
-    fundAcquisitionCost: s.fundAcquisitionCost * (1 - fundFraction),
-    assessedVorabpauschalen: s.assessedVorabpauschalen * (1 - fundFraction),
-    pendingVorabpauschale: s.pendingVorabpauschale * (1 - fundFraction),
-  })
-  return { state: closing, paid, shortfall: requested - paid, fraction, fundProceeds,
-    bankPrincipalWithdrawn: paid - fundProceeds, costReleased, adjustmentReleased,
-    adjustedFundSaleGain: signed.parse(fundProceeds - costReleased - adjustmentReleased) }
+  return withdrawProportionallyValidated(s, requested)
 }
 
 const yearSchema = z.object({
@@ -288,7 +309,7 @@ export function simulateEstimatorYear(
   const isZeroNavAllocationError = (error: unknown): boolean =>
     error instanceof Error && error.message.includes('zero NAV')
   const assessmentForSale = (sale: ReturnType<typeof withdrawProportionally>, movement = maintainAllocation(sale, 0)) =>
-    assessCapitalIncome({ bankInterest, receivedVorabpauschale,
+    assessCapitalIncomeValidated({ bankInterest, receivedVorabpauschale,
       adjustedFundSaleGain: sale.adjustedFundSaleGain + movement.adjustedFundSaleGain, openingSimulatedLoss: opening.simulatedLossCarryforward,
       expenseAllowance: p.expenseAllowance,
       provenDeductibleAnnualExpenses: p.provenDeductibleAnnualExpenses })
@@ -299,7 +320,7 @@ export function simulateEstimatorYear(
   // committed settlement below rejects an actual impossible purchase.
   const safeEnvelope = (requested: number): void => {
     try {
-      assessmentForSale(withdrawProportionally(beforeSale, requested))
+      assessmentForSale(withdrawProportionallyValidated(beforeSale, requested))
     } catch (error) {
       if (!isZeroNavAllocationError(error)) throw error
     }
@@ -315,7 +336,7 @@ export function simulateEstimatorYear(
   const trial = (y: number) => {
     const paid = Math.min(available, Math.max(0, y))
     const deposit = Math.max(0, -y)
-    const sale = withdrawProportionally(beforeSale, paid)
+    const sale = withdrawProportionallyValidated(beforeSale, paid)
     const movement = maintainAllocation(sale, deposit)
     const assessment = assessmentForSale(sale, movement)
     const insurance = burdenSchema.parse(insuranceForAnnualAssessment(assessment.annualAssessment))
