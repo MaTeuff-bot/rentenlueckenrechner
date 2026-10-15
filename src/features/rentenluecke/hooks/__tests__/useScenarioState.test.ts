@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_INPUT } from '../../model/defaults'
 import { DEFAULT_HISTORICAL_RETURN_SERIES_IDS, SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
 import { calculateAllocationFromBuckets, calculatePortfolioBucketTotal } from '../../model/portfolioBuckets'
 import { calculatePortfolioExpectedReturn, DEFAULT_ASSET_ALLOCATION } from '../../model/stochasticReturns'
 import { useScenarioState } from '../useScenarioState'
+import { createInlineScenarioWorker } from '../../workers/__tests__/inlineScenarioWorker'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { createDefaultState, createSyntheticHistoricalState } from '../scenarioState/defaults'
 import { parsePersistedScenarioState, serializeScenarioState } from '../scenarioState/persistence'
@@ -151,7 +152,7 @@ describe('useScenarioState', () => {
     expect(result.current.allocation.fixed).toBeCloseTo(0.8)
   })
 
-  it('updates output and supports adding/removing retirement income streams', () => {
+  it('updates output and supports adding/removing retirement income streams', async () => {
     const state = createDefaultState()
     state.childrenAnswer = { kind: 'none' }
     state.insuranceCoverageAnswers = completedCoverage()
@@ -161,12 +162,15 @@ describe('useScenarioState', () => {
     state.portfolioBuckets = [{ id: 'fund', name: 'Fonds', value: 100000, returnSeriesId: SYNTHETIC_RETURN_SERIES_IDS.equity, holding: 'accumulating-equity-fund' }]
     state.portfolioEstimatorSettings = { fundAcquisitionCost: 0, projectedBasisRate: 0.032, scopeConfirmed: true, lossScopeConfirmed: true }
     localStorage.setItem('rentenlueckenrechner.scenario.v15', serializeScenarioState(state))
-    const { result } = renderHook(() => useScenarioState())
+    const { result } = renderHook(() => useScenarioState({ createWorker: createInlineScenarioWorker, debounceMs: 1 }))
+    await waitFor(() => expect(result.current.result).not.toBeNull())
     act(() => result.current.updateRetirementInsurance({ ...result.current.input.retirementInsurance!, pension: { manual: true, kvMonthlyToday: 0, pvMonthlyToday: 0 } }))
+    await waitFor(() => expect(result.current.result).not.toBeNull())
     const pension = result.current.retirementIncomeStreams[0]
     const gapBefore = result.current.result!.retirementRows[0].gapWithdrawal
 
     act(() => result.current.updateRetirementIncomeStream(pension.id, { effectiveDeductionRate: 0.2 }))
+    await waitFor(() => expect(result.current.result).not.toBeNull())
     // The 20 % haircut lands in other deductions; automatic voluntary KV/PV now
     // additionally assess the modeled capital base, so the honest identity keeps
     // every deduction explicit instead of assuming contributions away.

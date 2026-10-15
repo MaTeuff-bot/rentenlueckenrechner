@@ -8,6 +8,7 @@ import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
 import { createDefaultState, createSyntheticHistoricalState } from '../../hooks/scenarioState/defaults'
 import { serializeScenarioState, STORAGE_KEY } from '../../hooks/scenarioState/persistence'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
+import { installInlineScenarioWorker } from '../../workers/__tests__/inlineScenarioWorker'
 
 vi.mock('recharts', () => {
   const Container = ({ children }: PropsWithChildren) => <div>{children}</div>
@@ -28,12 +29,18 @@ vi.mock('recharts', () => {
   }
 })
 
+let restoreInlineWorker: (() => void) | null = null
+
 afterEach(() => {
+  restoreInlineWorker?.()
+  restoreInlineWorker = null
   localStorage.clear()
 })
 
 beforeEach(() => {
   localStorage.clear()
+  restoreInlineWorker?.()
+  restoreInlineWorker = installInlineScenarioWorker()
   const state = createDefaultState()
   state.insuranceCoverageAnswers = completedCoverage()
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
@@ -48,9 +55,10 @@ beforeEach(() => {
 })
 
 describe('results-to-inputs linking', () => {
-  it('routes median-capital, work-end and spending results to their owning inputs', () => {
+  it('routes median-capital, work-end and spending results to their owning inputs', async () => {
     render(<RentenlueckeCalculator />)
 
+    await screen.findByText(/Median-Kapital zum Rentenbeginn/)
     const savingsLink = screen.getByRole('link', { name: 'Sparrate anpassen: Vermögen bearbeiten' })
     expect(savingsLink).toHaveAttribute('href', '#monthlyContributionToday')
     fireEvent.click(savingsLink)
@@ -71,9 +79,10 @@ describe('results-to-inputs linking', () => {
     expect(document.activeElement).toBe(document.getElementById('monthlyDesiredSpendingToday'))
   })
 
-  it('routes timeline and capital-trajectory results to Zeitplan and Vermögen', () => {
+  it('routes timeline and capital-trajectory results to Zeitplan and Vermögen', async () => {
     render(<RentenlueckeCalculator />)
 
+    await screen.findByText(/Median-Kapital zum Rentenbeginn/)
     const savingsLink = screen.getByRole('link', { name: 'Sparrate anpassen: Vermögen bearbeiten' })
     expect(savingsLink).toHaveAttribute('href', '#monthlyContributionToday')
     fireEvent.click(savingsLink)

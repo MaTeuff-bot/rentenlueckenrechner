@@ -5,12 +5,10 @@ import { scenarioIssues } from '../model/scenarioIssues'
 import { childrenEngineFields, type ChildrenAnswer } from '../model/childrenAnswer'
 import { timelineBoundary, transitionAfterStreamsChange } from '../model/scenarioTimeline'
 import { clearHiddenInvalidInsuranceValues, insuranceSetupIssues, type RetirementInsurance } from '../model/retirementInsurance'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type SetStateAction } from 'react'
 import {
   findInflationSourceOption,
   getValidHistoricalYears,
-  runHistoricalBootstrapSimulation,
-  simulateHistoricalBootstrapReferenceScenario,
 } from '../model/historicalReturns'
 import { CASH_PLANNING_RATE_PROPOSAL, CASH_REAL_RATE_PROPOSAL } from '../model/historicalReturns/constants'
 import { getFieldErrors, rentenlueckeInputSchema, type InputFieldName } from '../model/inputSchema'
@@ -32,6 +30,8 @@ import {
 } from '../model/stochasticReturns'
 import { createDefaultState, withDeterministicPortfolioReturn } from './scenarioState/defaults'
 import { dismissTagesgeldPlanningRateNotice, loadInitialState, serializeScenarioState, STORAGE_KEY } from './scenarioState/persistence'
+import type { ScenarioState } from './scenarioState/types'
+import { useScenarioComputation, type ScenarioWorkerFactory } from './useScenarioComputation'
 import { adoptPlanningRateForBankBuckets, cashPlanningRateIssue, getConfirmedCashMode, getConfirmedCashPlanningRate, getConfirmedCashRealRate, getEffectiveCashMode, isConfirmedCashPlanningRate, isConfirmedCashRealRate, resolveBucketSourceForHoldingChange } from '../model/cashPlanningRate'
 import type { RetirementIncomeStream } from '../model/types'
 
@@ -40,7 +40,15 @@ export { parsePersistedScenarioState } from './scenarioState/persistence'
 let nextPortfolioBucketId = 1
 let nextRetirementIncomeStreamId = 1
 
-export function useScenarioState() {
+function isIdentityUpdate(updater: (current: ScenarioState) => ScenarioState, current: ScenarioState): boolean {
+  try {
+    return updater(current) === current
+  } catch {
+    return false
+  }
+}
+
+export function useScenarioState(options?: { createWorker?: ScenarioWorkerFactory; debounceMs?: number }) {
   const [state, setState] = useState(loadInitialState)
   const { portfolioBuckets, retirementIncomeStreams, historical } = state
   const allocation = useMemo(() => calculateAllocationFromBuckets(portfolioBuckets), [portfolioBuckets])
@@ -117,31 +125,47 @@ export function useScenarioState() {
     const inflationSource = findInflationSourceOption(historical.inflationSourceId, input.annualInflationRate)
     return inflationSource ? getValidHistoricalYears(historicalSettings.portfolioComponents, inflationSource) : []
   }, [historical.inflationSourceId, historicalSettings.portfolioComponents, input.annualInflationRate])
-  const calculation = useMemo(() => {
-    if (!isValid || !parsedInput.success) return { result: null, stochasticSummary: null, calculationError: null }
-    try {
-      const result = simulateHistoricalBootstrapReferenceScenario(parsedInput.data, historicalSettings)
-      return { result, stochasticSummary: runHistoricalBootstrapSimulation(parsedInput.data, historicalSettings), calculationError: null }
-    } catch (error) {
-      return { result: null, stochasticSummary: null, calculationError: `Berechnung unvollständig: ${error instanceof Error ? error.message : String(error)} Detaillierte Kapitalbasis im Vermögen prüfen.` }
+  const computationSnapshot = isValid && parsedInput.success
+    ? { input: parsedInput.data, settings: historicalSettings }
+    : null
+  const computation = useScenarioComputation(computationSnapshot, options)
+  const { result, stochasticSummary, calculationError } = computation.output
+    ?? { result: null, stochasticSummary: null, calculationError: null }
+  const workerError = computation.workerError
+  const isComputing = isValid && !workerError && computation.output === null
+  const setScenarioState = (action: SetStateAction<ScenarioState>) => {
+    // Cancellation stays immediate in the mutation path, but a true no-op
+    // (the updater keeps the identical state reference, so React would bail
+    // out without rendering) must neither terminate in-flight work nor strand
+    // the boundary with a bumped generation and no render to schedule the
+    // replacement job. The preview evaluation is side-effect-free for these
+    // updaters (React already invokes them more than once); the original
+    // action still reaches setState untouched so queued updates keep chaining.
+    if (typeof action === 'function') {
+      const updater = action as (current: ScenarioState) => ScenarioState
+      if (isIdentityUpdate(updater, state)) {
+        setState(action)
+        return
+      }
     }
-  }, [historicalSettings, isValid, parsedInput])
-  const { result, stochasticSummary, calculationError } = calculation
+    computation.invalidate()
+    setState(action)
+  }
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
   }, [state])
 
-  const updateInsuranceCoverage = (insuranceCoverageAnswers: InsuranceCoverageAnswers) => setState(current => ({ ...current, insuranceCoverageAnswers }))
-  const updateChildrenAnswer = (childrenAnswer: ChildrenAnswer) => setState(current => ({ ...current, childrenAnswer }))
-  const updateInsuranceTransition = (explicitInsuranceTransition: number | undefined) => setState(current => ({ ...current, explicitInsuranceTransition }))
+  const updateInsuranceCoverage = (insuranceCoverageAnswers: InsuranceCoverageAnswers) => setScenarioState(current => ({ ...current, insuranceCoverageAnswers }))
+  const updateChildrenAnswer = (childrenAnswer: ChildrenAnswer) => setScenarioState(current => ({ ...current, childrenAnswer }))
+  const updateInsuranceTransition = (explicitInsuranceTransition: number | undefined) => setScenarioState(current => ({ ...current, explicitInsuranceTransition }))
 
   const updateLifeTableSex = (lifeTableSex: LifeTableSex) => {
-    setState((current) => ({ ...current, input: { ...current.input, lifeTableSex } }))
+    setScenarioState((current) => ({ ...current, input: { ...current.input, lifeTableSex } }))
   }
 
   const updateField = (field: InputFieldName, value: number) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       input: { ...current.input, [field]: value },
       portfolioBuckets: field === 'currentCapital'
@@ -151,7 +175,7 @@ export function useScenarioState() {
   }
 
   const updateRetirementInsurance = (retirementInsurance: RetirementInsurance) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const copy = { ...retirementInsurance } as Record<string, unknown>
       delete copy.capitalEstimator
       return { ...current, input: { ...current.input, retirementInsurance: copy as unknown as RetirementInsurance } }
@@ -159,7 +183,7 @@ export function useScenarioState() {
   }
 
   const updatePortfolioEstimatorSettings = (portfolioEstimator: PortfolioEstimatorSettings | undefined) => {
-    setState((current) => ({ ...current, portfolioEstimatorSettings: portfolioEstimator }))
+    setScenarioState((current) => ({ ...current, portfolioEstimatorSettings: portfolioEstimator }))
   }
 
   // One-time allocation at Arbeitsende: explicit prefill creates an editable
@@ -167,10 +191,10 @@ export function useScenarioState() {
   // reset removes the draft entirely (absent means disabled); the enabled flag
   // only engages when accepted and free of dangling destinations.
   const prefillAllocationAtRetirement = () => {
-    setState((current) => ({ ...current, allocationAtRetirement: prefillAllocationDraft(current.portfolioBuckets) }))
+    setScenarioState((current) => ({ ...current, allocationAtRetirement: prefillAllocationDraft(current.portfolioBuckets) }))
   }
   const updateAllocationFixedTarget = (bucketId: string, amountToday: number) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       const exists = draft.fixedTargets.some(t => t.bucketId === bucketId)
@@ -181,7 +205,7 @@ export function useScenarioState() {
     })
   }
   const updateAllocationRemainderWeight = (bucketId: string, weight: number) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       return { ...current,
@@ -189,7 +213,7 @@ export function useScenarioState() {
     })
   }
   const removeAllocationTarget = (bucketId: string) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       const remainderWeights = { ...draft.remainderWeights }
@@ -205,7 +229,7 @@ export function useScenarioState() {
   // explicit re-accept. Removing only the fixed amount keeps the remainder
   // weight (unlike removeAllocationTarget, which repairs dangling ids fully).
   const moveAllocationFixedTarget = (bucketId: string, direction: -1 | 1) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       const index = draft.fixedTargets.findIndex(target => target.bucketId === bucketId)
@@ -219,7 +243,7 @@ export function useScenarioState() {
     })
   }
   const removeAllocationFixedTarget = (bucketId: string) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       if (!draft.fixedTargets.some(target => target.bucketId === bucketId)) return current
@@ -230,7 +254,7 @@ export function useScenarioState() {
     })
   }
   const acceptAllocationAtRetirement = () => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       if (!validateAllocationDraft(current.portfolioBuckets, draft).clean) return current
@@ -238,10 +262,10 @@ export function useScenarioState() {
     })
   }
   const resetAllocationAtRetirement = () => {
-    setState((current) => ({ ...current, allocationAtRetirement: undefined }))
+    setScenarioState((current) => ({ ...current, allocationAtRetirement: undefined }))
   }
   const setAllocationAtRetirementEnabled = (enabled: boolean) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const draft = current.allocationAtRetirement
       if (!draft) return current
       if (enabled && (!draft.accepted || !validateAllocationDraft(current.portfolioBuckets, draft).clean)) return current
@@ -250,7 +274,7 @@ export function useScenarioState() {
   }
 
   const updatePortfolioBucket = (id: string, patch: Partial<Omit<PortfolioBucket, 'id'>>) => {
-    setState((current) => {
+    setScenarioState((current) => {
       const confirmedMode = getConfirmedCashMode(current.historical)
       const confirmedRate = getConfirmedCashPlanningRate(current.historical) ?? getConfirmedCashRealRate(current.historical)
       const nextBuckets = current.portfolioBuckets.map((bucket) => {
@@ -284,7 +308,7 @@ export function useScenarioState() {
   }
 
   const addPortfolioBucket = () => {
-    setState((current) => {
+    setScenarioState((current) => {
       let id: string
       do {
         id = `portfolio-${Date.now()}-${nextPortfolioBucketId++}`
@@ -329,7 +353,7 @@ export function useScenarioState() {
   }
 
   const removePortfolioBucket = (id: string) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       portfolioBuckets: current.portfolioBuckets.filter((bucket) => bucket.id !== id),
       // Deleted destinations stay preserved as dangling choices and revoke
@@ -341,14 +365,14 @@ export function useScenarioState() {
   }
 
   const updateRetirementIncomeStream = (id: string, patch: Partial<Omit<RetirementIncomeStream, 'id'>>) => {
-    setState(current => {
+    setScenarioState(current => {
       const next = current.retirementIncomeStreams.map(stream => stream.id === id ? { ...stream, ...patch } : stream)
       return { ...current, retirementIncomeStreams: next, explicitInsuranceTransition: transitionAfterStreamsChange(current.retirementIncomeStreams, next, current.explicitInsuranceTransition) }
     })
   }
 
   const addRetirementIncomeStream = () => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       retirementIncomeStreams: [...current.retirementIncomeStreams, {
         id: `retirement-income-${Date.now()}-${nextRetirementIncomeStreamId++}`,
@@ -366,42 +390,42 @@ export function useScenarioState() {
   }
 
   const removeRetirementIncomeStream = (id: string) => {
-    setState(current => {
+    setScenarioState(current => {
       const next = current.retirementIncomeStreams.filter(stream => stream.id !== id)
       return { ...current, retirementIncomeStreams: next, explicitInsuranceTransition: transitionAfterStreamsChange(current.retirementIncomeStreams, next, current.explicitInsuranceTransition) }
     })
   }
 
   const updateInflationSource = (sourceId: string) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       historical: { ...current.historical, inflationSourceId: sourceId },
     }))
   }
 
   const updateSimulations = (simulations: number) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       historical: { ...current.historical, simulations },
     }))
   }
 
   const updateCashPlanningRate = (cashPlanningRate: number | undefined) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       historical: { ...current.historical, cashPlanningRate },
     }))
   }
 
   const updateCashRealRate = (cashRealRate: number | undefined) => {
-    setState((current) => ({
+    setScenarioState((current) => ({
       ...current,
       historical: { ...current.historical, cashRealRate },
     }))
   }
 
   const updateCashMode = (cashMode: string) => {
-    setState((current) => {
+    setScenarioState((current) => {
       if (current.historical.cashMode === cashMode) return current
       return {
         ...current,
@@ -412,10 +436,15 @@ export function useScenarioState() {
 
   const updateCashPlanningRateConfirmed = (cashPlanningRateConfirmed: boolean) => {
     if (!cashPlanningRateConfirmed) {
-      setState((current) => ({
-        ...current,
-        historical: { ...current.historical, cashPlanningRateConfirmed: false },
-      }))
+      // Unconfirming an already unconfirmed rate changes no calculation input
+      // (every confirmed-rate consumer treats undefined and false identically):
+      // keep the identical state reference so the mutation path above treats
+      // it as a no-op and published results stay visible with no new job.
+      setScenarioState((current) => (
+        !current.historical.cashPlanningRateConfirmed
+          ? current
+          : { ...current, historical: { ...current.historical, cashPlanningRateConfirmed: false } }
+      ))
       return
     }
     // Explicit confirmation adopts the displayed proposal when the field was
@@ -424,7 +453,7 @@ export function useScenarioState() {
     // for all declared ordinary-bank-deposit buckets. An invalid effective
     // rate must not persist confirmation: the user corrects the rate and
     // confirms explicitly again. Undefined still accepts the proposal.
-    setState((current) => {
+    setScenarioState((current) => {
       const mode = getEffectiveCashMode(current.historical)
       if (mode === undefined) {
         return {
@@ -475,7 +504,7 @@ export function useScenarioState() {
 
   const reset = () => {
     const nextState = createDefaultState()
-    setState(nextState)
+    setScenarioState(nextState)
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(nextState))
   }
 
@@ -492,6 +521,9 @@ export function useScenarioState() {
     insuranceIssues,
     issues,
     calculationError,
+    workerError,
+    isComputing,
+    retryComputation: computation.retryComputation,
     allocation,
     portfolioBuckets,
     retirementIncomeStreams,

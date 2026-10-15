@@ -67,6 +67,26 @@ Journeys (all on Chromium unless noted):
    clears to prefill and restores drift. No storage
    seeding, no engine injection.
 
+9. `e2e/worker-responsiveness.spec.ts` — responsive Hintergrundberechnung mit echtem
+   Worker und Standard-N1000: sofortiges Verstecken veralteter Ergebnisse plus
+   `Prognose wird berechnet …` während Debounce/Rechnung (per engem
+   Single-Shot-Sampling innerhalb des 150-ms-Fensters, ohne Auto-Wait),
+   Latest-wins nach schnellen Edits, Tab/Antwort-Messung getrennt von
+   Gesamtlatenz (Roh-Timings mit Art-Kennzeichnung in
+   `test-results/worker-timings-*.json`). Eine testseitige native
+   Worker-Hülle zählt Konstruktion/Post/Abschluss/Terminierung bei echter
+   Berechnung (kein Produktions-Global): Edits/Tabwechsel/Invalidierungen
+   laufen erst nach beobachtetem Post mit noch aktivem Job; gerenderte Zahlen
+   werden an die zuletzt abgeschlossene Anfrage gebunden (Anfrage-Snapshot,
+   Jahres-Tabellen-Grenzjahr). Abgedeckt sind außerdem Invalid-Abbruch eines
+   laufenden Workers (numerisch und Bereitschaft) ohne spätere Wiederherstellung,
+   injizierte Konstruktions-, Post- und Fehler-Ereignis-Ausfälle mit
+   `Erneut berechnen` auf dem jeweils neuesten Snapshot, kontrolliert
+   eingespielte veraltete Transporte (stille Verwerfung), ein über die Zeit
+   abgetasteter atomarer Publikationsstrom sowie Reload-Parität und
+   Auftrags-Zähler für reine Anzeige-Umschalter. Keine Zwischenspeicherung:
+   jede Änderung rechnet nach dem Debounce echt neu.
+
 Shared helpers live in `e2e/fixtures.ts` with explicit readiness answers
 derived from `model/capitalIncome/setup.ts`,
 `model/capitalIncome/portfolioEstimator.ts`, `model/retirementInsurance.ts`,
