@@ -8,6 +8,13 @@ demselben Simulationsergebnis ab und berechnen keine eigene Geschäftslogik.
 
 - `src/features/rentenluecke/model/` — Framework-freie Rechenengine: Validierung, Normalisierung, deterministische Jahressimulation (Ledger), stochastische Renditen. Kein React, kein DOM, keine UI-Importe.
 - `src/features/rentenluecke/hooks/` — React-Zustandsorchestrierung: Szenariozustand, Modellaufrufe, lokale Browserpersistenz. Keine Finanzformeln.
+  `useScenarioComputation.ts` bündelt die Worker-Grenze: Generationszähler, 150-ms-Debounce (nur Startverzögerung),
+  sofortige synchrone Invalidierung/Terminierung bei jeder berechnungsrelevanten Mutation, atomare Publikation
+  und Transport-/Domänenfehlertrennung. `useScenarioState.ts` leitet alle Mutationen über diese eine Grenze.
+- `src/features/rentenluecke/workers/` — Hintergrundberechnung: `scenarioWorker.ts` ruft ausschließlich bestehende
+  `model/historicalReturns`-APIs mit reinen Daten-DTOs (`scenarioWorkerTypes.ts`, structured-clone-fähig, keine
+  Callbacks); keine eigene Mathematik, kein synchroner Fallback. Domänenfehler kehren als vollständiger
+  Null-Snapshot mit der bestehenden deutschen Diagnostik zurück, Transportfehler getrennt mit Wiederholung.
 - `src/features/rentenluecke/components/` — React-Darstellung: Eingaben, Kennzahlen, Recharts-Diagramm, Jahrestabelle sowie UI-Formatierung (`format.ts`). Keine Finanzformeln. Die Eingaben sind in vier Tabs gruppiert (lokaler State, kein Router); die Vermögens-Ansicht trennt presentational „Was ich besitze“/„Wie ich anlegen will“.
 - `src/features/rentenluecke/charting/` — Reine Ableitung von Diagramm-/Anzeigezeilen und Risiko-Chips aus Simulationsergebnissen (mit Mortalitäts-Overlay). Kein React.
 - `src/features/rentenluecke/mortality/` — Destatis-Sterbetafel und Überlebenswahrscheinlichkeiten; erzeugt aus GENESIS-Datensatz `12621-0001` via `scripts/generateDestatisLifeTable.mjs`.

@@ -32,6 +32,8 @@ export function RentenlueckeCalculator() {
     updateChildrenAnswer,
     updateInsuranceTransition,
     calculationError,
+    workerError,
+    retryComputation,
     allocation,
     portfolioBuckets,
     portfolioEstimatorSettings,
@@ -145,12 +147,26 @@ export function RentenlueckeCalculator() {
 
         <section id="ergebnis" tabIndex={-1} className="results-section" aria-labelledby="results-title">
         <h2 id="results-title">Ergebnis</h2>
-        {!isValid || !result || !stochasticSummary ? (
+        {!isValid ? (
           <section className="panel invalid-panel" role="status">
             {calculationError ?? cashPlanningError ?? portfolioBucketError ?? allocationError ??
               'Deine Prognose ist noch offen. Ergänze die verlinkten Angaben; danach erscheinen Ergebnisse, Diagramm und Tabelle.'}
             <p><a href="#inputs-title">Zu den offenen Angaben</a></p>
           </section>
+        ) : workerError ? (
+          <section className="panel invalid-panel" role="alert">
+            {workerError}{' '}
+            <button type="button" className="secondary-button" onClick={retryComputation}>Erneut berechnen</button>
+          </section>
+        ) : !result || !stochasticSummary ? (
+          calculationError ? (
+            <section className="panel invalid-panel" role="status">
+              {calculationError}
+              <p><a href="#inputs-title">Zu den offenen Angaben</a></p>
+            </section>
+          ) : (
+            <section className="panel" role="status">Prognose wird berechnet …</section>
+          )
         ) : (
           <>
             <SummaryCards result={result} stochasticSummary={stochasticSummary} onRequestSection={handleRequestSection} />

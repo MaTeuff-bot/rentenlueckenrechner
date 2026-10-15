@@ -1,12 +1,13 @@
 import { applyCoverage } from '../../model/insuranceCoverage'
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
 import { createDefaultState, createSyntheticHistoricalState } from '../scenarioState/defaults'
 import { loadInitialState, parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY, RESET_NOTICE_KEY, MANDATORY_CAPITAL_NOTICE_KEY } from '../scenarioState/persistence'
 import { useScenarioState } from '../useScenarioState'
+import { createInlineScenarioWorker } from '../../workers/__tests__/inlineScenarioWorker'
 
 beforeEach(() => localStorage.clear())
 
@@ -188,7 +189,7 @@ it('resets a fully populated previous-version scenario, not just its insurance f
   expect(localStorage.getItem('foreign')).toBe('keep')
 })
 
-it('ignores legacy per-phase capital estimates, retains portfolio settings and an honest notice across reload', () => {
+it('ignores legacy per-phase capital estimates, retains portfolio settings and an honest notice across reload', async () => {
   const state = createDefaultState()
   state.portfolioEstimatorSettings = { fundAcquisitionCost: 45678, projectedBasisRate: .032, scopeConfirmed: true, lossScopeConfirmed: true }
   state.input = { ...state.input, currentAge: 67, retirementAge: 67, planningAge: 68, retirementInsurance: automaticInsurance({
@@ -207,30 +208,31 @@ it('ignores legacy per-phase capital estimates, retains portfolio settings and a
   raw.input.retirementInsurance.pension.capitalMonthlyToday = 123
   expect(localStorage.getItem(MANDATORY_CAPITAL_NOTICE_KEY)).toBeNull()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw))
-  const first = renderHook(useScenarioState)
+  const first = renderHook(() => useScenarioState({ createWorker: createInlineScenarioWorker, debounceMs: 1 }))
   // Tolerated on load, never reinterpreted as a tax/income fact or eligibility.
   expect(first.result.current.input.retirementInsurance!.pension.capitalMonthlyToday).toBe(123)
   expect(localStorage.getItem(MANDATORY_CAPITAL_NOTICE_KEY)).toBe('pending')
   expect(localStorage.getItem(RESET_NOTICE_KEY)).toBeNull()
   expect(first.result.current.portfolioEstimatorSettings?.fundAcquisitionCost).toBe(45678)
   expect(first.result.current.portfolioEstimatorReadiness.ready).toBe(true)
+  await waitFor(() => expect(first.result.current.result).not.toBeNull())
   const original = first.result.current.result
-  expect(original).not.toBeNull()
   // Dropping the tolerated legacy fields changes nothing: the engine never read them.
   const pension = first.result.current.input.retirementInsurance!.pension
   act(() => first.result.current.updateRetirementInsurance({ ...first.result.current.input.retirementInsurance!,
     pension: { status: pension.status, circumstances: pension.circumstances, drvSubsidy: pension.drvSubsidy, kvMonthlyToday: pension.kvMonthlyToday, pvMonthlyToday: pension.pvMonthlyToday } }))
-  expect(first.result.current.result).toEqual(original)
+  await waitFor(() => expect(first.result.current.result).toEqual(original))
   expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).input.retirementInsurance.pension).not.toHaveProperty('capitalMonthlyToday')
   // Whole-phase manual totals still work independently of the retired estimate.
   // Single-year pension horizon keeps the bootstrap cheap; the manual pension phase starts at 67.
   const pensionRow = () => first.result.current.result!.retirementRows.find(row => row.ageStart === 67)!
   expect(pensionRow().healthInsurance).toBeGreaterThan(0)
   act(() => first.result.current.updateRetirementInsurance({ ...first.result.current.input.retirementInsurance!, pension: { ...first.result.current.input.retirementInsurance!.pension, manual: true } }))
+  await waitFor(() => expect(first.result.current.result).not.toBeNull())
   expect(pensionRow().healthInsurance).toBe(0)
   expect(pensionRow().careInsurance).toBe(0)
   first.unmount()
-  const restored = renderHook(useScenarioState)
+  const restored = renderHook(() => useScenarioState({ createWorker: createInlineScenarioWorker, debounceMs: 1 }))
   const retained = restored.result.current.input.retirementInsurance!
   expect(retained.pension).toMatchObject({ manual: true, drvSubsidy: 'confirmed', kvMonthlyToday: 0, pvMonthlyToday: 0 })
   expect(retained.pension).not.toHaveProperty('capitalMonthlyToday')
@@ -238,8 +240,9 @@ it('ignores legacy per-phase capital estimates, retains portfolio settings and a
   expect(restored.result.current.portfolioEstimatorReadiness.ready).toBe(true)
   expect(localStorage.getItem(MANDATORY_CAPITAL_NOTICE_KEY)).toBe('pending')
   expect(retained.insurerAdditionalRate).toBe(.029)
+  await waitFor(() => expect(restored.result.current.result).not.toBeNull())
   act(() => restored.result.current.updateRetirementInsurance({ ...retained, pension: { ...retained.pension, manual: false } }))
-  expect(restored.result.current.result).toEqual(original)
+  await waitFor(() => expect(restored.result.current.result).toEqual(original))
   expect(restored.result.current.result!.retirementRows.find(row => row.ageStart === 67)!.healthInsurance).toBeGreaterThan(0)
   expect(parsePersistedScenarioState(localStorage.getItem(STORAGE_KEY)).input.retirementInsurance!.pension.manual).toBe(false)
   // Reopening automatic coverage cannot infer a previously missing answer or consume retained totals.

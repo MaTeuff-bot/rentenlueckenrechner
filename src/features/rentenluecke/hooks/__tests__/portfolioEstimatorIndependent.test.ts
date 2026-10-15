@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { automaticInsurance, completedCoverage } from '../../model/__tests__/insuranceFixtures'
 import { SYNTHETIC_RETURN_SERIES_IDS } from '../../model/historicalReturns'
@@ -7,6 +7,7 @@ import { createDefaultState, createSyntheticHistoricalState } from '../scenarioS
 import { parsePersistedScenarioState, serializeScenarioState, STORAGE_KEY } from '../scenarioState/persistence'
 import { portfolioEstimatorReadiness } from '../../model/capitalIncome/portfolioEstimator'
 import { useScenarioState } from '../useScenarioState'
+import { createInlineScenarioWorker } from '../../workers/__tests__/inlineScenarioWorker'
 
 beforeEach(() => {
   localStorage.clear()
@@ -68,15 +69,15 @@ describe('independent portfolio estimator (PR F)', () => {
     expect(result.current.result).toBeNull()
   })
 
-  it('completed portfolio setup forecasts all-manual whole-phase totals without auto-only answers', () => {
+  it('completed portfolio setup forecasts all-manual whole-phase totals without auto-only answers', async () => {
     const state = validManualState()
     completeFundOnlyPortfolio(state)
     localStorage.setItem(STORAGE_KEY, serializeScenarioState(state))
-    const { result } = renderHook(useScenarioState)
+    const { result } = renderHook(() => useScenarioState({ createWorker: createInlineScenarioWorker, debounceMs: 1 }))
     expect(result.current.portfolioEstimatorReadiness.ready).toBe(true)
     expect(result.current.isValid).toBe(true)
+    await waitFor(() => expect(result.current.result).not.toBeNull())
     expect(result.current.calculationError).toBeNull()
-    expect(result.current.result).not.toBeNull()
   }, 60_000)
 
   it('required incomplete setup blocks with a Vermögen link', () => {

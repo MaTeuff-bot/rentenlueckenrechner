@@ -9,6 +9,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RentenlueckeCalculator } from '../RentenlueckeCalculator'
+import { installInlineScenarioWorker } from '../../workers/__tests__/inlineScenarioWorker'
 
 vi.mock('recharts', () => {
   const Container = ({ children }: PropsWithChildren) => <div>{children}</div>
@@ -30,12 +31,18 @@ vi.mock('recharts', () => {
   }
 })
 
+let restoreInlineWorker: (() => void) | null = null
+
 afterEach(() => {
+  restoreInlineWorker?.()
+  restoreInlineWorker = null
   localStorage.clear()
 })
 
 beforeEach(() => {
   localStorage.clear()
+  restoreInlineWorker?.()
+  restoreInlineWorker = installInlineScenarioWorker()
   const state = createDefaultState()
   state.insuranceCoverageAnswers = completedCoverage()
   state.childrenAnswer = { kind: 'children', rows: [{ id: 'older', year: 1980 }] }
@@ -61,6 +68,7 @@ describe('RentenlueckeCalculator', () => {
   it('renders core results after completed setup', async () => {
     render(<RentenlueckeCalculator />)
 
+    await screen.findByText(/Median-Kapital zum Rentenbeginn/)
     expect(screen.getByRole('heading', { name: /^Ergebnis/ })).toBeInTheDocument()
     expect(screen.getAllByText(/Median-Kapital zum Rentenbeginn/)).not.toHaveLength(0)
     expect(screen.getByText(/P50 ist ein Stichtagswert je Alter/)).toBeInTheDocument()
@@ -79,9 +87,10 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getByText(/Sozialversicherungsberatung und kein Beitragsbescheid/)).toBeInTheDocument()
   })
 
-  it('shows auditable gross-to-net retirement cashflows in the yearly table', () => {
+  it('shows auditable gross-to-net retirement cashflows in the yearly table', async () => {
     render(<RentenlueckeCalculator />)
 
+    await screen.findByText(/Median-Kapital zum Rentenbeginn/)
     fireEvent.click(screen.getByText('Jährliche Abrechnung anzeigen'))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Details anzeigen' }))
 
@@ -149,9 +158,10 @@ describe('RentenlueckeCalculator', () => {
     expect(screen.getAllByLabelText('Name von Gesetzliche Rente')).toHaveLength(1)
   })
 
-  it('shows truthful tax disclosures without the stale investment-tax disclaimer', () => {
+  it('shows truthful tax disclosures without the stale investment-tax disclaimer', async () => {
     render(<RentenlueckeCalculator />)
 
+    await screen.findByText(/Median-Kapital zum Rentenbeginn/)
     expect(screen.getByText(/Kapitalertragsteuer und GRV-Rentensteuer werden als Planungsnäherung/)).toBeInTheDocument()
     expect(screen.queryByText(/Investmentsteuern werden nicht/)).not.toBeInTheDocument()
     expect(screen.queryByText('Hinweise zu Ausschlüssen und Annahmen')).not.toBeInTheDocument()
